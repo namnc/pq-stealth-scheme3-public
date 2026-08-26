@@ -1,0 +1,120 @@
+{
+  "section": "\u00a75",
+  "wave": 1,
+  "vectors": {
+    "V6-01": {
+      "claim": "keygen_seed(schemeId, rung, j) with j = 0 on the normal path",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. This document's own implementation produces these bytes and an independent blinded re-derivation from the prose alone agreed on them, and neither is an outside party -- the constant is still a proposal",
+      "given": {
+        "keygen_master": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "rungs": [
+          {
+            "schemeId": 2,
+            "rung": "schemeId 2 (direct KEM)",
+            "L": 96
+          },
+          {
+            "schemeId": 3,
+            "rung": "schemeId 3 (direct KEM, hybrid)",
+            "L": 128
+          }
+        ]
+      },
+      "expect": {
+        "seed_schemeId_2": "0b696cffccb35f947f0a245c65c563ceeefc415406534ca37da186bcca9ea1fbfd491387b7599e89f6d34cda416fc5378734521ced761fecea8e44b0bd7f585766ce9eaf5eb476f87034f1edc214b73578dde25b26457ebc3308adddabf9c23d",
+        "seed_schemeId_3": "42bd3c7fd29ccc42e9f8a655995fbfd4699b7f53daf62c9142f591908ccbb03da9c53cfc18d95955ed3222013bce036a8e6d2fe790d614f3ab86b8cb187c4b89447412f0c3d2978d6b1c1b1830907c82c214f889af40478f2b84efe79e9d15e1a4cb056acf428e47138a6520c4494ec7b3c244082e7d31f44ad1f24327a2fd6c"
+      },
+      "wrong": {
+        "fixed_L_32": "0b696cffccb35f947f0a245c65c563ceeefc415406534ca37da186bcca9ea1fb",
+        "length_is_the_only_signal": "the value above is the RIGHT seed's first 32 bytes -- HKDF-Expand is counter-based, so a short L is a prefix and not a different string. This error is caught by the seed-length check and by nothing else",
+        "rung_name_omitted": "005e8c19ecb81e79d6ec2aa462411502f50ddd67f6f6959052e3ac3401e3d8f30152d1f09f669a92d07494269843c1359d70ad9ca32a85c0bfb2cf1c9602f92653deac9a25b9c639a8ab5bf00918c8e824a14b2462525cf0c130ba7bb0aa140a",
+        "shortened_rung_name": "6ad22ee3213dcb10b39c779fa24b046ff5f75e8692602bae70013ff7b89476c2752640137807c875979462359873439a0863828b60f234328f404f02cbc3ccfaf2ad9f4525957399272dc0e9908ab189b375edac21b4055d4165e99492a83d50",
+        "note": "a fixed L = 32; a supplied salt; omitting the scheme name, which collides two schemes sharing a schemeId"
+      }
+    },
+    "V6-02": {
+      "claim": "two schemes' keys from one master are independent",
+      "provisional": true,
+      "given": {
+        "seeds": "the two of V6-01"
+      },
+      "expect": {
+        "longest_shared_run_bytes": 0,
+        "assertion": "no run of 8 bytes or more appears in both"
+      },
+      "wrong": {
+        "note": "deriving one from the other, or reusing one keygen seed under two schemeIds"
+      }
+    },
+    "V6-03": {
+      "claim": "an ephemeral_seed that is not a valid scalar advances the index",
+      "provisional": true,
+      "not_generatable": "A rejection cannot be reached by choosing inputs -- it needs a seed injected past the derivation, which is a harness hook and not a fixture. The plan records V1-08 as deliberately absent for the same reason and says so in terms."
+    },
+    "V6-04": {
+      "claim": "a rejected keygen seed advances the index of that (schemeId, rung) pair and no other, and does not change keygen_master",
+      "provisional": true,
+      "partially_generatable": "A rejection cannot be reached by choosing inputs -- it needs a seed injected past the derivation, which is a harness hook and not a fixture. The plan records V1-08 as deliberately absent for the same reason and says so in terms. What IS pinned below is the consequence rather than the trigger, and it is the half a fresh-master rule gets wrong.",
+      "given": {
+        "keygen_master": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "rung_a": "schemeId 2 (direct KEM)",
+        "rung_b": "schemeId 3 (direct KEM, hybrid)"
+      },
+      "expect": {
+        "rung_a_index_0": "0b696cffccb35f947f0a245c65c563ceeefc415406534ca37da186bcca9ea1fbfd491387b7599e89f6d34cda416fc5378734521ced761fecea8e44b0bd7f585766ce9eaf5eb476f87034f1edc214b73578dde25b26457ebc3308adddabf9c23d",
+        "rung_a_index_1": "3f0a4062a1e8ccf1fa6350cacf744d3e64f788b596b6c9dd427011778bfa2333687f0894a55bd6f7a3740e0a44cb25689c1911beba5bc1ee705b0ee578435e2dc30dc71a4af4635316177d648cc5d8d2bd29206645d2aca2ca668b3469baea06",
+        "rung_b_index_0": "42bd3c7fd29ccc42e9f8a655995fbfd4699b7f53daf62c9142f591908ccbb03da9c53cfc18d95955ed3222013bce036a8e6d2fe790d614f3ab86b8cb187c4b89447412f0c3d2978d6b1c1b1830907c82c214f889af40478f2b84efe79e9d15e1a4cb056acf428e47138a6520c4494ec7b3c244082e7d31f44ad1f24327a2fd6c",
+        "assertion": "rung_a's index-1 seed differs from its index-0 seed, and rung_b's index-0 seed is unchanged by either"
+      },
+      "wrong": {
+        "note": "drawing a fresh keygen_master, which changes a funded scheme's keys"
+      }
+    },
+    "V6-05": {
+      "claim": "announce_seed's field order is exactly DS || master || i || schemeId || |rung| || rung || |kem_id| || kem_id, and kem_id is length-prefixed",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. This document's own implementation produces these bytes and an independent blinded re-derivation from the prose alone agreed on them, and neither is an outside party -- the constant is still a proposal",
+      "given": {
+        "master": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "kem_id": "000000000000000a4d4c2d4b454d2d373638",
+        "kem_id_length": 18,
+        "draws": [
+          {
+            "schemeId": 2,
+            "rung": "schemeId 2 (direct KEM)",
+            "i": 0,
+            "n": 32
+          },
+          {
+            "schemeId": 2,
+            "rung": "schemeId 2 (direct KEM)",
+            "i": 1,
+            "n": 32
+          },
+          {
+            "schemeId": 3,
+            "rung": "schemeId 3 (direct KEM, hybrid)",
+            "i": 0,
+            "n": 64
+          }
+        ]
+      },
+      "expect": {
+        "schemeId_2_i0": "e5764131fba56a8f9c468cb223447a3a82aa712d6307ec1bdc43ec8d521e8d83",
+        "schemeId_2_i1": "41dc0bdd28960bc71f01faf1fce12cb3299f01dbb3be8f5da2d99bdcfc79a3df",
+        "schemeId_3_i0": "69749ba9431b43fb3b501df75a572033fe667334d99507e15bdd410da704a83219c89823544fb1e7f7896471dde6ba00dd508f8dfe22d79be7559b95d05c6a61",
+        "schemeId_3_split": {
+          "ephemeral_seed": "69749ba9431b43fb3b501df75a572033fe667334d99507e15bdd410da704a832",
+          "encap_seed": "19c89823544fb1e7f7896471dde6ba00dd508f8dfe22d79be7559b95d05c6a61"
+        },
+        "indices_give_different_seeds": true
+      },
+      "wrong": {
+        "index_appended_last": "c16df0c3b3391be833173fe20b7aab90665a5d9ba2c3f4f15b2e59b624035c1c",
+        "kem_id_omitted": "716f8342d3a140d3cf5c00047b5ee19460728a55b9d537a6e7d2ef8489ca706d",
+        "note": "the two transpositions this row exists to forbid. Each yields a well-formed seed of the right length that no conforming implementation reproduces, so a sender using one draws a different ephemeral key and a different KEM message from the same master and index"
+      }
+    }
+  }
+}

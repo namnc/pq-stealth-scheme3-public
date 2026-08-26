@@ -1,0 +1,25 @@
+[package]
+name = "pqsa-core"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+
+[dependencies]
+hkdf.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+
+# Wave 1 is IMPLEMENTED, so the workspace's `unused_variables = "allow"` -- which exists only
+# to make `todo!()` stubs writable -- is turned back on here. A crate with real bodies has no
+# business tolerating an unused parameter. Cargo will not let a crate ADD to
+# `workspace.lints`, so the whole table is restated rather than inherited.
+[lints.rust]
+missing_docs = "deny"
+unused_variables = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"

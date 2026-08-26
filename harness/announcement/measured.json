@@ -1,0 +1,497 @@
+{
+  "harness": "announcement",
+  "what": "total transaction gas for one ERC-5564 announce(), by scheme; the schemeId 6 rows are nonconforming wire-shape probes (schemeId 2 stand-in address, see the stand-in note on STEALTH)",
+  "hardfork": "prague",
+  "intrinsic_gas": 21000,
+  "self_check": "pass",
+  "cases": [
+    {
+      "name": "classical (ERC-5564 schemeId 1)",
+      "schemeId": 1,
+      "epk_bytes": 33,
+      "metadata_bytes": 1,
+      "payload_bytes": 34,
+      "nonzero": {
+        "calldata_bytes": 292,
+        "zero_bytes": 229,
+        "nonzero_bytes": 63,
+        "tokens": 481,
+        "total_gas": 28067,
+        "floor_gas": 25810,
+        "floor_binds": false,
+        "execution_gas": 5143
+      },
+      "zero": {
+        "calldata_bytes": 292,
+        "zero_bytes": 263,
+        "nonzero_bytes": 29,
+        "tokens": 379,
+        "total_gas": 27659,
+        "floor_gas": 24790,
+        "floor_binds": false,
+        "execution_gas": 5143
+      }
+    },
+    {
+      "name": "schemeId 2 announcement",
+      "schemeId": 2,
+      "epk_bytes": 1088,
+      "metadata_bytes": 8,
+      "payload_bytes": 1096,
+      "nonzero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 189,
+        "nonzero_bytes": 1127,
+        "tokens": 4697,
+        "total_gas": 67970,
+        "floor_gas": 67970,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 1285,
+        "nonzero_bytes": 31,
+        "tokens": 1409,
+        "total_gas": 40367,
+        "floor_gas": 35090,
+        "floor_binds": false,
+        "execution_gas": 13731
+      }
+    },
+    {
+      "name": "schemeId 3 announcement",
+      "schemeId": 3,
+      "epk_bytes": 33,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1129,
+      "nonzero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 221,
+        "nonzero_bytes": 1159,
+        "tokens": 4857,
+        "total_gas": 69570,
+        "floor_gas": 69570,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 1350,
+        "nonzero_bytes": 30,
+        "tokens": 1470,
+        "total_gas": 41149,
+        "floor_gas": 35700,
+        "floor_binds": false,
+        "execution_gas": 14269
+      }
+    },
+    {
+      "name": "schemeId 4 first contact",
+      "schemeId": 4,
+      "epk_bytes": 0,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1096,
+      "nonzero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 191,
+        "nonzero_bytes": 1125,
+        "tokens": 4691,
+        "total_gas": 67910,
+        "floor_gas": 67910,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 1287,
+        "nonzero_bytes": 29,
+        "tokens": 1403,
+        "total_gas": 40343,
+        "floor_gas": 35030,
+        "floor_binds": false,
+        "execution_gas": 13731
+      }
+    },
+    {
+      "name": "schemeId 5 first contact",
+      "schemeId": 5,
+      "epk_bytes": 33,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1129,
+      "nonzero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 221,
+        "nonzero_bytes": 1159,
+        "tokens": 4857,
+        "total_gas": 69570,
+        "floor_gas": 69570,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 1350,
+        "nonzero_bytes": 30,
+        "tokens": 1470,
+        "total_gas": 41149,
+        "floor_gas": 35700,
+        "floor_binds": false,
+        "execution_gas": 14269
+      }
+    },
+    {
+      "name": "memo (schemeIds 4, 5)",
+      "schemeId": 4,
+      "epk_bytes": 0,
+      "metadata_bytes": 8,
+      "payload_bytes": 8,
+      "nonzero": {
+        "calldata_bytes": 228,
+        "zero_bytes": 192,
+        "nonzero_bytes": 36,
+        "tokens": 336,
+        "total_gas": 26951,
+        "floor_gas": 24360,
+        "floor_binds": false,
+        "execution_gas": 4607
+      },
+      "zero": {
+        "calldata_bytes": 228,
+        "zero_bytes": 200,
+        "nonzero_bytes": 28,
+        "tokens": 312,
+        "total_gas": 26855,
+        "floor_gas": 24120,
+        "floor_binds": false,
+        "execution_gas": 4607
+      }
+    },
+    {
+      "name": "schemeId 6 announcement, category 2",
+      "schemeId": 6,
+      "epk_bytes": 1280,
+      "metadata_bytes": 1096,
+      "payload_bytes": 2376,
+      "nonzero": {
+        "calldata_bytes": 2596,
+        "zero_bytes": 189,
+        "nonzero_bytes": 2407,
+        "tokens": 9817,
+        "total_gas": 119170,
+        "floor_gas": 119170,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 2596,
+        "zero_bytes": 2565,
+        "nonzero_bytes": 31,
+        "tokens": 2689,
+        "total_gas": 56245,
+        "floor_gas": 47890,
+        "floor_binds": false,
+        "execution_gas": 24489
+      }
+    },
+    {
+      "name": "schemeId 6 announcement, category 3",
+      "schemeId": 6,
+      "epk_bytes": 1920,
+      "metadata_bytes": 1096,
+      "payload_bytes": 3016,
+      "nonzero": {
+        "calldata_bytes": 3236,
+        "zero_bytes": 188,
+        "nonzero_bytes": 3048,
+        "tokens": 12380,
+        "total_gas": 144800,
+        "floor_gas": 144800,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 3236,
+        "zero_bytes": 3204,
+        "nonzero_bytes": 32,
+        "tokens": 3332,
+        "total_gas": 64205,
+        "floor_gas": 54320,
+        "floor_binds": false,
+        "execution_gas": 29877
+      }
+    },
+    {
+      "name": "schemeId 6 announcement, category 5",
+      "schemeId": 6,
+      "epk_bytes": 2560,
+      "metadata_bytes": 1096,
+      "payload_bytes": 3656,
+      "nonzero": {
+        "calldata_bytes": 3876,
+        "zero_bytes": 189,
+        "nonzero_bytes": 3687,
+        "tokens": 14937,
+        "total_gas": 170370,
+        "floor_gas": 170370,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 3876,
+        "zero_bytes": 3845,
+        "nonzero_bytes": 31,
+        "tokens": 3969,
+        "total_gas": 72148,
+        "floor_gas": 60690,
+        "floor_binds": false,
+        "execution_gas": 35272
+      }
+    }
+  ],
+  "cases_by_name": {
+    "classical (ERC-5564 schemeId 1)": {
+      "name": "classical (ERC-5564 schemeId 1)",
+      "schemeId": 1,
+      "epk_bytes": 33,
+      "metadata_bytes": 1,
+      "payload_bytes": 34,
+      "nonzero": {
+        "calldata_bytes": 292,
+        "zero_bytes": 229,
+        "nonzero_bytes": 63,
+        "tokens": 481,
+        "total_gas": 28067,
+        "floor_gas": 25810,
+        "floor_binds": false,
+        "execution_gas": 5143
+      },
+      "zero": {
+        "calldata_bytes": 292,
+        "zero_bytes": 263,
+        "nonzero_bytes": 29,
+        "tokens": 379,
+        "total_gas": 27659,
+        "floor_gas": 24790,
+        "floor_binds": false,
+        "execution_gas": 5143
+      }
+    },
+    "schemeId 2 announcement": {
+      "name": "schemeId 2 announcement",
+      "schemeId": 2,
+      "epk_bytes": 1088,
+      "metadata_bytes": 8,
+      "payload_bytes": 1096,
+      "nonzero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 189,
+        "nonzero_bytes": 1127,
+        "tokens": 4697,
+        "total_gas": 67970,
+        "floor_gas": 67970,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 1285,
+        "nonzero_bytes": 31,
+        "tokens": 1409,
+        "total_gas": 40367,
+        "floor_gas": 35090,
+        "floor_binds": false,
+        "execution_gas": 13731
+      }
+    },
+    "schemeId 3 announcement": {
+      "name": "schemeId 3 announcement",
+      "schemeId": 3,
+      "epk_bytes": 33,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1129,
+      "nonzero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 221,
+        "nonzero_bytes": 1159,
+        "tokens": 4857,
+        "total_gas": 69570,
+        "floor_gas": 69570,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 1350,
+        "nonzero_bytes": 30,
+        "tokens": 1470,
+        "total_gas": 41149,
+        "floor_gas": 35700,
+        "floor_binds": false,
+        "execution_gas": 14269
+      }
+    },
+    "schemeId 4 first contact": {
+      "name": "schemeId 4 first contact",
+      "schemeId": 4,
+      "epk_bytes": 0,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1096,
+      "nonzero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 191,
+        "nonzero_bytes": 1125,
+        "tokens": 4691,
+        "total_gas": 67910,
+        "floor_gas": 67910,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1316,
+        "zero_bytes": 1287,
+        "nonzero_bytes": 29,
+        "tokens": 1403,
+        "total_gas": 40343,
+        "floor_gas": 35030,
+        "floor_binds": false,
+        "execution_gas": 13731
+      }
+    },
+    "schemeId 5 first contact": {
+      "name": "schemeId 5 first contact",
+      "schemeId": 5,
+      "epk_bytes": 33,
+      "metadata_bytes": 1096,
+      "payload_bytes": 1129,
+      "nonzero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 221,
+        "nonzero_bytes": 1159,
+        "tokens": 4857,
+        "total_gas": 69570,
+        "floor_gas": 69570,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 1350,
+        "nonzero_bytes": 30,
+        "tokens": 1470,
+        "total_gas": 41149,
+        "floor_gas": 35700,
+        "floor_binds": false,
+        "execution_gas": 14269
+      }
+    },
+    "memo (schemeIds 4, 5)": {
+      "name": "memo (schemeIds 4, 5)",
+      "schemeId": 4,
+      "epk_bytes": 0,
+      "metadata_bytes": 8,
+      "payload_bytes": 8,
+      "nonzero": {
+        "calldata_bytes": 228,
+        "zero_bytes": 192,
+        "nonzero_bytes": 36,
+        "tokens": 336,
+        "total_gas": 26951,
+        "floor_gas": 24360,
+        "floor_binds": false,
+        "execution_gas": 4607
+      },
+      "zero": {
+        "calldata_bytes": 228,
+        "zero_bytes": 200,
+        "nonzero_bytes": 28,
+        "tokens": 312,
+        "total_gas": 26855,
+        "floor_gas": 24120,
+        "floor_binds": false,
+        "execution_gas": 4607
+      }
+    },
+    "schemeId 6 announcement, category 2": {
+      "name": "schemeId 6 announcement, category 2",
+      "schemeId": 6,
+      "epk_bytes": 1280,
+      "metadata_bytes": 1096,
+      "payload_bytes": 2376,
+      "nonzero": {
+        "calldata_bytes": 2596,
+        "zero_bytes": 189,
+        "nonzero_bytes": 2407,
+        "tokens": 9817,
+        "total_gas": 119170,
+        "floor_gas": 119170,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 2596,
+        "zero_bytes": 2565,
+        "nonzero_bytes": 31,
+        "tokens": 2689,
+        "total_gas": 56245,
+        "floor_gas": 47890,
+        "floor_binds": false,
+        "execution_gas": 24489
+      }
+    },
+    "schemeId 6 announcement, category 3": {
+      "name": "schemeId 6 announcement, category 3",
+      "schemeId": 6,
+      "epk_bytes": 1920,
+      "metadata_bytes": 1096,
+      "payload_bytes": 3016,
+      "nonzero": {
+        "calldata_bytes": 3236,
+        "zero_bytes": 188,
+        "nonzero_bytes": 3048,
+        "tokens": 12380,
+        "total_gas": 144800,
+        "floor_gas": 144800,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 3236,
+        "zero_bytes": 3204,
+        "nonzero_bytes": 32,
+        "tokens": 3332,
+        "total_gas": 64205,
+        "floor_gas": 54320,
+        "floor_binds": false,
+        "execution_gas": 29877
+      }
+    },
+    "schemeId 6 announcement, category 5": {
+      "name": "schemeId 6 announcement, category 5",
+      "schemeId": 6,
+      "epk_bytes": 2560,
+      "metadata_bytes": 1096,
+      "payload_bytes": 3656,
+      "nonzero": {
+        "calldata_bytes": 3876,
+        "zero_bytes": 189,
+        "nonzero_bytes": 3687,
+        "tokens": 14937,
+        "total_gas": 170370,
+        "floor_gas": 170370,
+        "floor_binds": true,
+        "execution_gas": null
+      },
+      "zero": {
+        "calldata_bytes": 3876,
+        "zero_bytes": 3845,
+        "nonzero_bytes": 31,
+        "tokens": 3969,
+        "total_gas": 72148,
+        "floor_gas": 60690,
+        "floor_binds": false,
+        "execution_gas": 35272
+      }
+    }
+  }
+}

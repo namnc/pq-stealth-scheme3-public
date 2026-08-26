@@ -1,0 +1,55 @@
+{
+  "_what": "sha256 per emitted file. the conformance runner verifies these where a tree carries one, and `gen_vectors.py --check` re-derives every rebuildable row from the specification either way -- fixture/manifest CONSISTENCY, not adversarial integrity: this manifest lives in the same tree as the fixtures, so an editor who changes a fixture can rehash it here in the same commit. What it catches is the accidental or incomplete edit. Protection against deliberate oracle replacement comes from provenance -- the committed generator, the blinded re-derivation, the NIST-oracled rows.",
+  "tier1_source": {
+    "ML-KEM-keyGen-FIPS203": {
+      "url": "https://raw.githubusercontent.com/usnistgov/ACVP-Server/master/gen-val/json-files/ML-KEM-keyGen-FIPS203/internalProjection.json",
+      "sha256_of_upstream_file": "d7a62a2c3476957f56dd8d24f9004ea6776ccfe995ffe71a65bb9506dc9c7b1b",
+      "bytes": 558841,
+      "fetched": "2026-08-21"
+    },
+    "ML-KEM-encapDecap-FIPS203": {
+      "url": "https://raw.githubusercontent.com/usnistgov/ACVP-Server/master/gen-val/json-files/ML-KEM-encapDecap-FIPS203/internalProjection.json",
+      "sha256_of_upstream_file": "a556952ce869bb89c3a3196a701dad89647c193a34c86eafb61a9d710d5b810f",
+      "bytes": 1465634,
+      "fetched": "2026-08-21"
+    }
+  },
+  "files": {
+    "section-1.json": {
+      "sha256": "3cf31c4b14316ae676354766ff74d56addd30acea85e4402c1f9aabbc8a39538",
+      "rows_in_plan": 7,
+      "rows_present": 7
+    },
+    "section-2.json": {
+      "sha256": "c69339bd60522976901f9aaedfb9e70a8f07625916905cb5550fafab061af30e",
+      "rows_in_plan": 13,
+      "rows_present": 13
+    },
+    "section-2_9.json": {
+      "sha256": "c042e32e8e432991628c408b809e1fa8353a62524ff95b2cccc721e206f7e0ef",
+      "rows_in_plan": 12,
+      "rows_present": 12
+    },
+    "section-3.json": {
+      "sha256": "c4472b6ac1000c11cb8e63a4509d9a8069374f87946a106dac9160b8f50bcd86",
+      "rows_in_plan": 8,
+      "rows_present": 8
+    },
+    "section-3_12.json": {
+      "sha256": "1ee21f10096f81c447589511ec4827620a731cb993e631c0755a1ae1988b6bc6",
+      "rows_in_plan": 24,
+      "rows_present": 17,
+      "rows_withdrawn_or_reserved": 7
+    },
+    "section-4.json": {
+      "sha256": "bc69ea79754beb8eb378033e2890601d325b96fa72ff982cfc647ff7be1dfedb",
+      "rows_in_plan": 13,
+      "rows_present": 13
+    },
+    "section-5.json": {
+      "sha256": "f600298f4c017c3bb8867bf4434b95a0a5c4465d9be55e1b3836bfb342326fa1",
+      "rows_in_plan": 5,
+      "rows_present": 5
+    }
+  }
+}

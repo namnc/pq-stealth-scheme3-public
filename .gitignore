@@ -1,0 +1,22 @@
+# Build output. `Cargo.lock` IS tracked: the gas receipts cite a resolved dependency
+# set, and the workspace builds with --locked.
+/target/
+
+# Foundry, which both gas harnesses invoke. Unanchored and with the `-*` variants,
+# because an alternative profile writes to a differently-named directory and an
+# anchored rule would not match it.
+out/
+out-*/
+cache/
+cache-*/
+
+# Python bytecode embeds absolute paths.
+__pycache__/
+*.pyc
+
+# A payment fixture holds REAL private keys, derived from the fixed demonstration
+# seed by whichever emitter produced it. Never commit one, under any name.
+payment.json
+*.payment.json
+
+.DS_Store

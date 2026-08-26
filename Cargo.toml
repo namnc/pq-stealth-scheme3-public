@@ -1,0 +1,108 @@
+# The reference implementation's workspace.
+#
+# **This workspace is a trimmed export.** It carries 4 crate(s) --
+# `core`, `ec`, `kem`, `per-payment` -- and no others: the closure of what the specification in this tree
+# describes. The full reference implementation carries more, and a reader
+# holding only this tree should not infer their contents from anything here.
+#
+# **Eight external crates**, each the obvious choice rather than a survey result. The four
+# cryptographic ones:
+#
+#   * `k256`      secp256k1. The one the upstream reference uses, which matters because the
+#                 SEC1 `0x05` compact-tag hazard -- stated in §2.2, with its rationale in §3
+#                 where a tree carries that section -- is a property of THIS stack; a
+#                 different curve library would not reproduce the defect it warns about.
+#   * `ml-kem`    ML-KEM-768, and §1 requires the DERANDOMISED internal entry points, so a
+#                 library exposing only `Encaps`/`KeyGen` would not do.
+#   * `sha2`      SHA-256, for the offset, the view tag and the payment secret.
+#   * `sha3`      SHA3-256 for the combiner, and Keccak-256 for the address. Both live here,
+#                 and the difference between them is ONE PADDING BYTE -- which is why §1 names
+#                 keccak256 and SHA3-256 separately and why a vector pins them apart.
+#
+# And the four others: `hkdf` (§5's `keygen_seed` -- RustCrypto's rather than a second
+# hand-rolled copy, so V6-01/V6-04 are a genuine cross-implementation check; see the note in
+# `[workspace.dependencies]`), and `hex`, `serde`, `serde_json`, which move fixture bytes in
+# and out of the conformance JSON and touch no cryptography. **Those three are declared for
+# the crates that read fixtures**, so a workspace trimmed to crates that do not read them
+# resolves without them and they are absent from its lock file -- declared here, unused
+# there, which is the correct outcome rather than a stale declaration.
+#
+# **None is formally verified**, and the specification's trustlessness argument asks for that
+# eventually; this is the honest state and not the end state.
+#
+# **Step A still came first.** The conformance vectors were generated, reviewed and committed
+# before any of these bodies existed, so the implementation is checked against a fixture set
+# that did not come from it.
+
+# **`opt-level = 2` at PROFILE level, which the test targets inherit.** A
+# `[profile.dev.package.<name>]` override is not a substitute for it: package-scoped settings reach
+# part of a workspace test run -- one package, a dependency glob, or several of them together --
+# and the profile-level setting is what reaches all of it.
+#
+# It is a wall-clock choice and not a correctness one. `debug-assertions` and `overflow-checks`
+# stay ON, every test runs at its committed sample count, and the pinned transcripts compare a
+# canonical form of test output that carries no timings. The price is slower incremental
+# rebuilds and worse debugger stepping.
+[profile.dev]
+opt-level = 2
+
+[workspace]
+resolver = "3"
+# The members below are the whole workspace. Cargo loads EVERY member manifest
+# before building anything, so a members list naming a directory this tree does
+# not contain would make the whole workspace fail to load -- not one crate, all
+# of them.
+members = [
+    "crates/core",
+    "crates/kem",
+    "crates/ec",
+    "crates/per-payment",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# Pinned to the versions the upstream reference uses, so a divergence between the two
+# implementations cannot be a dependency-version difference.
+k256 = { version = "0.13", default-features = false, features = ["ecdh", "arithmetic"] }
+ml-kem = { version = "0.3.2", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false }
+sha3 = { version = "0.10", default-features = false }
+# §5's `keygen_seed`. Already in the lock file as a transitive dependency, so promoting it to a
+# direct one adds no new code to the build -- it makes a function the specification requires
+# available to the crates instead of only to the Python that generates the fixtures.
+#
+# RustCrypto's rather than hand-rolled, and the reason is evidence rather than caution: HKDF is
+# twenty lines over HMAC and hand-rolling it would be safe enough, but `tools/vecprim.py` ALREADY
+# hand-rolls it. Two hand-rolled copies by one author agreeing proves nothing; a hand-rolled one
+# agreeing with RustCrypto's is a genuine cross-implementation check, which is what V6-01 and
+# V6-04 need to be worth executing.
+hkdf = { version = "0.12", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+
+pqsa-core = { path = "crates/core" }
+pqsa-kem = { path = "crates/kem" }
+pqsa-ec = { path = "crates/ec" }
+pqsa-per-payment = { path = "crates/per-payment" }
+
+[workspace.lints.rust]
+# An undocumented public item fails the build. The whole point of this workspace at this
+# stage is the documentation, so the documentation is not optional.
+missing_docs = "deny"
+# A `todo!()` body makes every parameter unused, so the workspace default cannot be `deny`
+# without blocking a crate that is still a skeleton. Every IMPLEMENTED crate overrides this
+# to `deny` in its own manifest, which is the granularity that lets an implemented crate be
+# strict while a skeleton is still allowed to exist. Every crate in this workspace overrides
+# it today; the allowance is what keeps the next skeleton cheap, not a concession any current
+# crate relies on.
+unused_variables = "allow"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"

@@ -1,0 +1,21 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+solc_version = "0.8.28"
+optimizer = true
+optimizer_runs = 200
+
+# One contract, no libraries, no tests.
+#
+# This directory exists for exactly one reason: `harness/announcement/measure.py` measures
+# announcement cost as REAL standalone transactions against the real ERC-5564 interface, and
+# that needs the announcer's bytecode. Measuring against a bespoke contract would measure the
+# bespoke contract.
+#
+# There is deliberately no Foundry test here. The upstream repository has one that re-derives
+# the committed receipts from the EIP-7623 rule, and it belongs beside the measurement rather
+# than in this tree: a `gasleft()` measurement taken inside a test frame is the defect the
+# harness's own docstring is about -- a test contract reaches the announcer with `CALL` and pays
+# EIP-2929 cold access, which a standalone transaction does not, and that error was ~2.1x on
+# execution gas and landed entirely on the denominator of every published ratio.

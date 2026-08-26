@@ -1,0 +1,24 @@
+{
+ "harness": "payment",
+ "what": "gas for a whole stealth payment: announce, fund the derived address, then spend from it with the derived key",
+ "hardfork": "prague",
+ "intrinsic_gas": 21000,
+ "input_seed": "the demonstration seed, salt 0",
+ "self_check": "pass",
+ "cases": [
+  {
+   "scheme_id": 2,
+   "announce_gas": 67940,
+   "fund_gas": 21000,
+   "spend_gas": 21000,
+   "total_gas": 109940
+  },
+  {
+   "scheme_id": 3,
+   "announce_gas": 69510,
+   "fund_gas": 21000,
+   "spend_gas": 21000,
+   "total_gas": 111510
+  }
+ ]
+}

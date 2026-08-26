@@ -1,0 +1,313 @@
+{
+  "section": "\u00a74",
+  "wave": 3,
+  "vectors": {
+    "V6-06": {
+      "claim": "the keygen seed is dsa_seed(32) || kem_seed(64) = 96 B, and any other length MUST be rejected",
+      "provisional": true,
+      "given": {
+        "lengths": [
+          95,
+          96,
+          97
+        ]
+      },
+      "expect": {
+        "rejected": [
+          95,
+          97
+        ],
+        "accepted": [
+          96
+        ],
+        "accepted_note": "acceptance is observable as no error; the derived keys' bytes are V6-17's slot"
+      },
+      "wrong": {
+        "note": "accepting either neighbour; or the 192-byte rho || mkgen_seed || kem_seed form, which carries a deployment constant in a per-recipient seed and a Kyber layout this specification discards"
+      }
+    },
+    "V6-07": {
+      "claim": "a keygen where any 32-byte window of kem_seed equals dsa_seed MUST be rejected -- the delegated object is 64 B, so 33 windows",
+      "provisional": true,
+      "given": {
+        "dsa_seed": "4242424242424242424242424242424242424242424242424242424242424242",
+        "kem_seeds_by_offset": {
+          "0": "4242424242424242424242424242424242424242424242424242424242424242acc643a5feda414991c9f2cae0e828f5a337efd870b13f3f1a3dd48525047575",
+          "16": "c0d20fe1055606993f6854e027a35e50424242424242424242424242424242424242424242424242424242424242424256d0fcbb16e75a783c8b48cb3f71dabb",
+          "32": "982143452cea8b994327e1245c6e45e5b50a68504efd2a9915363ec7a0df161e4242424242424242424242424242424242424242424242424242424242424242"
+        },
+        "clean_control": "10bc539f48b8f1a9b42d3aeacca31903756e2f1ca0e35d9350d8dac783ae270ba7a016abb819aec4f564468b710de7cfce66cbde91627f8602a9a2df37c68aff"
+      },
+      "expect": {
+        "planted_rejected": [
+          0,
+          16,
+          32
+        ],
+        "control_accepted": true
+      },
+      "wrong": {
+        "note": "scanning 65 offsets -- \u00a72.9's geometry, for a 96-byte delegated object this rung does not have; or checking the two aligned halves only, which misses offset 16"
+      }
+    },
+    "V6-08": {
+      "claim": "rho' || rhoprime || key = SHAKE256(dsa_seed, 128) at offsets 0, 32, 96; rho' MUST be squeezed and discarded",
+      "provisional": true,
+      "given": {
+        "dsa_seed": "0cb0db089e0ee45203ec8c1ae64474d62b246f1c0886f173ff08b9ecf4866436"
+      },
+      "expect": {
+        "stream_128": "989c055d25299844fad75d195d02192c60146d1a8c22f1082223dc980b0462a396818dffa6ce3282a70450cdfbefc82904930648b9d7fabdb92b204fefbdde243e3e57f0f3cd182412fcf628f23923b1ce78ad3d68306d3ba5c3ab85fcb22f65010fbc7d98edc88ecbe493d20da594a874d609cf210191f18db3879e7ece6a1b",
+        "rho_discarded": "989c055d25299844fad75d195d02192c60146d1a8c22f1082223dc980b0462a3",
+        "rho_prime": "96818dffa6ce3282a70450cdfbefc82904930648b9d7fabdb92b204fefbdde243e3e57f0f3cd182412fcf628f23923b1ce78ad3d68306d3ba5c3ab85fcb22f65",
+        "key": "010fbc7d98edc88ecbe493d20da594a874d609cf210191f18db3879e7ece6a1b"
+      },
+      "wrong": {
+        "rhoprime_read_from_offset_0": "989c055d25299844fad75d195d02192c60146d1a8c22f1082223dc980b0462a396818dffa6ce3282a70450cdfbefc82904930648b9d7fabdb92b204fefbdde24",
+        "key_read_from_offset_64": "3e3e57f0f3cd182412fcf628f23923b1ce78ad3d68306d3ba5c3ab85fcb22f65",
+        "note": "expanding 96 bytes and reading rhoprime || key from offset 0 -- a different masking vector, and signatures that verify under nothing. The values are the right stream's bytes 0..64 and 64..96: the mistake is the offset, not the stream"
+      }
+    },
+    "V6-09": {
+      "claim": "CRS_V1 = keccak256 of the literal below; a decoder reconstructs pk_ds = CRS_V1 || t1, and rho is not on the wire",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. These bytes are computed from the specification prose by this generator, and the rung implementation in this repository -- written after the fixtures were committed, agreeing but not blinded -- executes the generatable rows; the blinded re-derivation has not run over this wave. An ACVP-accepted ML-KEM backs the rows that carry KEM output. Two internal witnesses, neither an outside party: the constant is still a proposal",
+      "given": {
+        "literal": "pq-stealth/crs/v1"
+      },
+      "expect": {
+        "crs_v1": "6966d888bd72e4b67813ae60f31e592e8ca761dc6331a5142d44ebab3cdccb72"
+      },
+      "wrong": {
+        "nist_sha3_256": "a94cdc36627f22d933206ecb5adfca031c3c2009c485e02a7b1d7538a2d47b4f",
+        "shake256_32": "88158643ec6381f29c5903267e174c8644d56f3935c8e8f35d8aa501b5be7c5f",
+        "note": "NIST-padded SHA3 or SHAKE of the same literal -- each a plausible 32 bytes no Ethereum node reproduces"
+      }
+    },
+    "V6-10": {
+      "claim": "decoding MUST reject any length that is not the one its category names, and a decoder MUST accept all three",
+      "provisional": true,
+      "given": {
+        "lengths_offered": [
+          1217,
+          1250,
+          2464,
+          3104,
+          3744,
+          4127,
+          4128,
+          4129,
+          4160,
+          5599,
+          5600,
+          5601,
+          5632,
+          7071,
+          7072,
+          7073,
+          7104
+        ]
+      },
+      "expect": {
+        "accepted_by_category": {
+          "2": 4128,
+          "3": 5600,
+          "5": 7072
+        },
+        "rejected": [
+          1217,
+          1250,
+          2464,
+          3104,
+          3744,
+          4127,
+          4129,
+          4160,
+          5599,
+          5601,
+          5632,
+          7071,
+          7073,
+          7104
+        ]
+      },
+      "wrong": {
+        "note": "accepting the t1 || ek totals, which omit t0 and make every payment unfindable; or a rho-carrying form 32 B longer; or another scheme's meta-address length"
+      }
+    },
+    "V6-11": {
+      "claim": "the meta-address is t1 || t0 || ek: t0 MUST be published, and the field boundaries are k*320 and k*320 + k*416",
+      "provisional": true,
+      "given": {
+        "k_by_category": {
+          "2": 4,
+          "3": 6,
+          "5": 8
+        }
+      },
+      "expect": {
+        "2": {
+          "t1_end": 1280,
+          "t0_end": 2944,
+          "ek_bytes": 1184,
+          "total": 4128
+        },
+        "3": {
+          "t1_end": 1920,
+          "t0_end": 4416,
+          "ek_bytes": 1184,
+          "total": 5600
+        },
+        "5": {
+          "t1_end": 2560,
+          "t0_end": 5888,
+          "ek_bytes": 1184,
+          "total": 7072
+        }
+      },
+      "wrong": {
+        "note": "omitting t0 -- OPKGen and Track form t' from full-precision t, so a sender holding t1 alone pays an address nobody can find"
+      }
+    },
+    "V6-12": {
+      "claim": "the announcement is t1_ot in ephemeralPubKey (k*320 B) and view_tag || ct in metadata (1096 B), and MUST NOT carry rho",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. These bytes are computed from the specification prose by this generator, and the rung implementation in this repository -- written after the fixtures were committed, agreeing but not blinded -- executes the generatable rows; the blinded re-derivation has not run over this wave. An ACVP-accepted ML-KEM backs the rows that carry KEM output. Two internal witnesses, neither an outside party: the constant is still a proposal",
+      "given": {
+        "metadata_layout": "view_tag(8) || ct(1088)"
+      },
+      "expect": {
+        "2": {
+          "ephemeralPubKey_bytes": 1280,
+          "metadata_bytes": 1096,
+          "payload_bytes": 2376
+        },
+        "3": {
+          "ephemeralPubKey_bytes": 1920,
+          "metadata_bytes": 1096,
+          "payload_bytes": 3016
+        },
+        "5": {
+          "ephemeralPubKey_bytes": 2560,
+          "metadata_bytes": 1096,
+          "payload_bytes": 3656
+        }
+      },
+      "wrong": {
+        "reference_layout_bytes": {
+          "2": 2400,
+          "3": 3040,
+          "5": 3680
+        },
+        "note": "the reference's opk_ds || ct, with rho on the wire and no view tag -- 24 B larger per category, and its first 32 bytes are a recipient tag a memcmp links with no key material"
+      }
+    },
+    "V6-13": {
+      "claim": "view_tag = SHA256 of the view-tag domain separator || ss, first 8 bytes, and it sits FIRST in metadata",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. These bytes are computed from the specification prose by this generator, and the rung implementation in this repository -- written after the fixtures were committed, agreeing but not blinded -- executes the generatable rows; the blinded re-derivation has not run over this wave. An ACVP-accepted ML-KEM backs the rows that carry KEM output. Two internal witnesses, neither an outside party: the constant is still a proposal",
+      "given": {
+        "ss": "01cdc877c09435414efdaa69ef6ab90e302b1c905b669fd58d10b8fefa81b845",
+        "ds": "pq-stealth/view-tag/v1"
+      },
+      "expect": {
+        "view_tag": "99da0a647bc59f3d",
+        "position": "metadata[0..8]"
+      },
+      "wrong": {
+        "one_byte_tag": "99",
+        "shake_tag": "5030b25b30c51700",
+        "note": "the pre-widening one-byte width, which leaves the most expensive per-announcement work in the ladder running on one foreign announcement in 256; or SHAKE256 in place of SHA256"
+      }
+    },
+    "V6-14": {
+      "claim": "the sender chain is deterministic from encap_seed: (ct, ss) = ML-KEM-768.Encaps(ek, encap_seed), view_tag from ss",
+      "provisional": true,
+      "given": {
+        "kem_seed_dz": "61e06070fe7a838ebcacf3fc67f224bd67c12c1b58812981eaa17565cf3d177040ac415bb80e50924b0e6ded1e9ae842642ad329aa17cdab1002119cc8512913",
+        "ek": "30f157362b5bfa9c2d2490bb6fd9466e4a3ac1458fc6ac0b3640325787650ea662a2a522f254996fe138244b20bddc9c623b9f3276574c4c16e11782b64c1844810fd9da3e6b5ccb85f3218fe100d0e15037d424685b0733891b787660f46492384015838aac1eeac62dca21d2276f006318c2870d44068fe9f5a2ef90c28dfc70091c11f3141727e5637279290d8b713ff157bcc6bebdf22dd4bb612ddbc1fe3468f0992a105812e8d2b81dc101f80a2f239097c8d769f843163ac2a47dc257a0157c1a25ae0fd1b669b8af44e14ad55845bcf619cc6304280750c1364dd910a11b76c85f49c23f66645dd56081d36c6b0526f603c387c449f1d517ac121e7be458ca43be7c04a627c8520a376758312605e456c9c71d65763a6b779503a0c0a6a82e80c49168f8238d02458486305703236126998a9086571cad17304f72147bc42526a5bc8886a3a74be0c8eff07efda19ea79a54452405b550a2fb55aeea54963aa156ecc29ead563e3a69272930ad4799bd42aa6ee1c96afd89b5b13bcc1e0a1fb56a4722253dbdc6bf6deacaead34254da41bbc9ac2b079b5b5b9da7704fe78952f0f5a053c7894c9697a4958b6aa1768191aa7c97a387fabfc0d853b5a74290f91496d80a2611093ed83ea4894871695dcca6704965b710904a98501e4795cfd746191fe0460cd0ba4dfaab10866056f37145f8cd5f4379a6548b574b2b0817b936ac176bf45bc39c7efce56250344754892b97c35922b26ae86219feb601c64ccbb2102f102b0fa60505b8092730942ac9b2ab3900cbe78b9ea6e24cf0805ee813bddf7c373684281c73524bd12ce325aa0257b4f8fa03f3339073562bc35a6d65420f6498c484e0521f69c4ff460d7110b918f3adffe167c4778c6f241da863422eb35e4f8626d4a16148a375aca800ca6a8e5c8b5d61533b7d249a709a1b349599a22b06cb02919c21b6f9e68160542a8a11817a0a8423939d047c4da6115de64433c699800b00a170abc49048b1c1e458c22677985867341306d362c261b7724d143aac6803171cbdb2a8af3dc2a28259a46c9cb8115b7d91849ae9891c196c1f5962b21ac78f2f12c0a48855c1eaca6d5a0b1cd28aa89c5b98d6c98de55f6fd6c8cc2181340a06a6d326ad39a6f7f8106d62b61861c5bb73c83e20a361e022011b3282275a91b54b348c0282237a18817e9dc66dd5475482c80f92a9484b9b194e50ab383bbbe297a883d1ccd2b3005ba45dbea2a325853c941b3def6cc2316116ac785ba6b71fc386607965b93a607631a3b4955913ae508b1a531de36660d1d861c530833754bd37119edbf4944886ad1f6c68051602abf96dd5c07a05b5844f80649a8780562b5d2df91abdd85a0dc352ccac13be20afb9a3b23ea689dd564b0e8aa5ebdba4bd574ca039ae64e3a573475b6cbb9e5952c85127c5960b91763cb2e3a9515ecc59f52158814702d1c27be590935e8332614487f1d06571736fef208d9e48ccda2a522b056b1946727cb24e3f9a2d6ba6b31c75236c928dd098a884d0683f8ab79843a77fc3a1ed2a321cc652b6b7863dd46e6c62804b937a999c50cb793ead36b28af12834a1c1ce60c97aa3cb832833077b03a9fdfd154fb05cfb30d383ad76529826c297ac8187674b7dbbf8d9b21c1f4d5f",
+        "encap_seed": "866d0f14f7b225888ed68495ecd0c443d33afb92a015cd367c1fdd5cca558ffd"
+      },
+      "expect": {
+        "ct": "87a5619610fd3347762f6379d9d0a96fbd4a95433f60fca89beec8efb4c7e99c4ae6a2409248b1dff0401ab3bf142e4bc865d8d03cda63dff206938d4ea471205b1ebe7ca783a23a1e282e90b60365ac870845ecb97d06fad7aa12bf77f4d3c4e605bee020c4bde97bd37b1085a4e032fc21910156a17a4789d068be0fda723fade846a8f1c371a036d28b1502d59c43907ef05915bf888b07046188044c0903c21932acf2d234d370a0d84dd509c9b44748c01db9ce11bbc3d55b5a007ce9ec86928aa379573c279c949943b3600bd46dca364f5e780fb610c641094fddfd8dc9ff58f028a0149ab9f27b375f9c75e8c3713bbe64f70e93083f0f1bff6e38cf82dcd79bddb1976d4161b1877ae9c2b96aa4c4c3576b589a913a4af320001e49d8c8e7976ca7fa8618b1d091c672d77b55fbc8623de22248b1bf1fdcf7a131d28f5dfa17799cafed07cc98b8dc4937bb5b36899e69a1e4ef2fd529ab605c7764944bd81bb85727a1edeb5d7130a19eb706ff3da7f4e9e32b92462a07e9366bc5d67d692e6325e0ac083a42457bf74f49cd0d39d8ca1739831d1b29a2c9eff60c22c4deefa48c9cdc4d500e0d05e066dc19478e55db1e82f2ac2ecfb82e10be3d28a943b5f996b09f70770845c81eba2cd3f60362c47d45053594e4602cb430affbe0fe37c3ef9abead8fc50527d381c85e0b4251f5e4ddb5c41efc9290a2493e4229ade84f1738610575b45b7f33b008398dc60003932b7acf3a75559cb7c37e27eb999141b7080c4e91a2b7d379cef03d295882fe52bb537a02115e5fb3c27dd988c63f7c07c2ba0a4ed046094eab7274bfc018e363bd9ee4e46f431d6706ad0f840a6f9806c40ecef2ac03ef3dd9b2cad1c9394077bfee5d4e2785f082b55e1982c00fd4cb6e07cbbf1512fc7a281f7f292d7f050d7ae0d67c162777af02d06fff11e565e97aefcfb552f11f18058d788ed808323ef6eca0786da132d98b84af7d2decc5fc41f120d88723f86f2c668eb4f3f4b4144f79d51b40da484abbedd8542ada691504efe5253c8220d3bb7220b059c0699da70f2a87a43bbf809d9e5087ebfc1ee156178352a4d9f41f7e9b379b346c2222b581d82bc7d1dca0b54a61d7d485711d21e5e3ce4c1d9386bd6939be824447fb28a5bec07d7d0d0b8494568df614dba250e1b177f746b59a265449cc4ea1eac1ed8f52bca13013b096023665960e6d2d1191522a3e5b4e600c35c782583e2d9fafbdbd8ab80f8e4bbb1695097b24cf8d0f42a45e01094c4af679500ed9a7f531c7b194a41435dc943a8b98f0f569c524d0c239f53eb53be2007679e9007830717c19cb5078d05bb8fdcabcccf09920cc4af27cf368ad77d2b5643316ae45ad1e2e20de8ad758c3c1214022eebd9c5c737085885efa192d4f0de4976b1cb8d6f4e1301b6fad652427263e8d9f235c784639a988261ae165d7cf07f8291172292d5e851b440a14ce2d0f024336735b8f993bddbd8ee6ac0415b5dedf59df6e69a9521c102d65515839c0e5",
+        "ct_bytes": 1088,
+        "ss": "f026fb5eea00ece26ddad9719a3bcfac172a41f80273b2d5c4cfdc6ed7005d94",
+        "view_tag": "8ae79f835c934165"
+      },
+      "wrong": {
+        "note": "drawing fresh randomness instead of the derandomised form, which makes announcements irreproducible from the seed record and unauditable against \u00a75's stream"
+      }
+    },
+    "V6-15": {
+      "claim": "the announce seed is drawn per \u00a75 under each of schemeId 6's three canonical rung names, and distinct indices give distinct seeds",
+      "provisional": true,
+      "provisional_because": "NO OUTSIDE implementation has adopted it. These bytes are computed from the specification prose by this generator, and the rung implementation in this repository -- written after the fixtures were committed, agreeing but not blinded -- executes the generatable rows; the blinded re-derivation has not run over this wave. An ACVP-accepted ML-KEM backs the rows that carry KEM output. Two internal witnesses, neither an outside party: the constant is still a proposal",
+      "given": {
+        "master": "6f124f5f3280d4eedd13f09e679df491e3e3f3d8462435125201721a448028e3",
+        "rungs": [
+          "schemeId 6 (Spirit, level 2)",
+          "schemeId 6 (Spirit, level 3)",
+          "schemeId 6 (Spirit, level 5)"
+        ],
+        "indices": [
+          0,
+          1
+        ]
+      },
+      "expect": {
+        "level_2_i0": "274068c2b55c1bdf910eb87eddb9fe9efd30e987a82a759bfc1f66a573477cea",
+        "level_2_i1": "af76f4cfc9a1bcb8c022c279ffac800dc6eb34ca663c912e45619ae2f5836639",
+        "level_3_i0": "45b86bdcdbfcc340cfdbe23ae6e238762eca26a6a0eb6380a14eabe0365c437b",
+        "level_3_i1": "172e2d17b3d977951e2220e601448e65af59d5f2fd1436a82c6ff376f5f5c253",
+        "level_5_i0": "023a6e0f78c0410d42afe0d585f48ccecdf95583b83dc2b998aa3f5010952bc4",
+        "level_5_i1": "cd33bac1cdd1e62cb6322379ec7b749105c0c8e52f4e38ae4c7b73e78329c3a5",
+        "six_distinct": true
+      },
+      "wrong": {
+        "levelless_rung_name_i0": "a76b430c2b6ac8f2cca8efe5318ed5d746354c293b0ed37a0ad8e92d5760fcad",
+        "note": "one level-less rung name shared by the three levels, which collapses their seed streams into one -- \u00a75 requires independence per (schemeId, rung) pair, and the schemeId alone does not separate them because all three levels share it"
+      }
+    },
+    "V6-16": {
+      "claim": "the \u00a74.5 skip ladder: wrong metadata length, wrong-category ephemeralPubKey length, view-tag mismatch -- each is a skip, and every negative outcome MUST be a skip, never an error",
+      "provisional": true,
+      "given": {
+        "case_a_metadata_bytes": 1095,
+        "case_b": {
+          "our_category": 2,
+          "ephemeralPubKey_bytes": 1920
+        },
+        "case_c": {
+          "our_kem_seed_dz": "49743ff0a675cc64630ad87fefdf3ed41b0886eab5de12e350714dc39446f1b13a8b0b658b41adf7a1d4ee7889286a98d094765e0bc4f2b1d526b26d203bf1d3",
+          "foreign_kem_seed_dz": "9f48d3295881e6ed2bc4c8b4eeb9ab568556dc1f80ab62ba5f3eecc12dc94577451307100c3f0a458ea20e8311e36192543311868d56944175ca78de0ee19833",
+          "foreign_ek": "8b8c736b22311b670b03f75d71685fb3535561c49d35f57e80d5c23aa758285c5f58b60355f86baa98b6e9147c1313be95d68fcb7aaa9a21297196af4a3b1d64caab5f3c41e7c37ecf016a4519b4c211b1f351c528948973ea8e0758abc6521079fb3e74fc4406369f4a10c3fad1628078626b984abc9b3018c47c1b86c8cf027e7199c440f77238da739b472a812521f673088d3c557961b9a00b1bf0050cdc517c37c38bd177c5eee6459dea6e8d6077d20810ce2a9efa39197709660c7cb625630fd7c751fadcb96ed4c8bfea1e7818a9c969cc8082a3d95b818588317fa235c3042fa3eb608eb00e914627c1141d6489bbfe9503df93b08b952d231ca72cc7adaea896b25b83f28759ed2954d870aae850b9d09192f01784f1150204f9b8e4865c5f33146bfbae9950c68017c3a6679ae675a3904c3f382709cec2abeb5927d360341575c8b4312ad8a2477895570dba1ef4a184a98888834a17c0e53c1de3973ea6551431348427b346aaa221234b16481c8380b0643cce64b08721e9a017a998b430abeb077082bac4dd066ceaccb348d91564da9116183fef3b7e20e4842dcc0d70486dab41782e884a9d291a40f61d8589bbf2471990551b2b5259d8dbc2532691b82771ba49c9411b1cbfc84a14f387f9dbb0f14c229541692a79cc5eb3c2f4b02a8d0a6bc5b62ea4c742b6335ecb042446bb1fdd43b6b9acaa7071a9c6c62b740324ec568c7edaac2ac3a08004b0c65764ce784e16a79c98142ad2b7507339ca1957c437a422fe4c1f98070488c9c0d25a41cdf4045e35c69bc8816100caaa3087c9e2c1b7e11e1d5c0789462014e4348625689af77616964abfacba44b2564b38c53d30b61c8765b9867d82a45aa47a73e4c47a64773aaaab6288a2a4c02648e5833337c667a01955dfa70dc9a15682f22380ec150ff9c56c4a864e931cf95cb6483b60ede379ab2383874b9170c811df71362119c29fe542f3464bd7547e3828c52764c3f0d836af07004f71404804353a35338d5028dad114e64c46a134934b0c468caa26b4f09fbc0664b2761a64804fd148b92ab419bd9492d5c465ab17a85c7bb3276298884572f6659f931baee2dc24edab603ea0321a4b222f9170034b6afbb802f81348a9e72391763d34a24fed20697d8c07d0572ef0f581817a752767b41ad0b992777a4e5027314c98174c65a55b1da8d8a8cf59015b022ea2c97dac10a6a523ca6d5b6322f8618c6a12aaf29575e7c8b6b174daf87adb656b85506b002292a99cc07caa5424eb3c0fcb692816260ce3436fe357e44416b2c040d23450b01838df1a24ee4252f701c7e906979621794fa9602bf2571d5333cf224799b72125f301cef625b2b5a25e6108eb284aac579247549367942262973d07160df4ea99945c97023c01ac57cb8b93b176a32963c288e3aa613d202c31a27ecdea4bcad61578515130430b6a6b5a9d54b47eaac26493b66ab347d8b12b57098800367f47d3ad2d99c4b89b1f6ed1b41643cf7dc29c3b314152a8b46237c814f17007629e7bdb9bfb20a90a7101fa54a708c9864b32cba60bcee4d2457480684b2ba954b2aa4b291a395a4557d4336639729ebc1eb21c8e8616c4d4de1f251c3ad262b0c8a18f1544e10afb86312e3e2ccc92fb52e5b4c050323f",
+          "encap_seed": "232845af33bf5b68b837a227950e1387b1a2c1365f3e5b8c78a0e1f068f6338e",
+          "ephemeralPubKey": "267230ff6d395c68b76841ddf2374476a3c4660b7c9a502a8e41045cd7020206d30d7f63b330896dff263873bb537e3ffd57637a50e24802f15c3875be9d0663114758615260e134ae223285aff6fecb12f514903f5d456a49d9ec6765c364981b4c6569f56b03f847280e0474a4bd431943e00eedfab7eb57abb18fe34b013fe25e8ee21fbfec9adcf480cae0c21cf6bb97b200633d3ce7d9aa4f439b8414093ce5795274086044ce63c163f716605eeaf8ffc2f86287ff0b7fe2ec35486a3b7c1ae938f03b7a0f7d87599ac40f3b5cb17921496f7691d313701d414127cf3fb8f8f4aa5114589339354897d766e0442c337637c9772ed7533784e7368dcfc2d4da92f53e8f3fab73681984a00e76503188fb1ec8a7a16f6c3d88d044cef266e627ba135810571d07f1dd9e9886b561121be4cd46a85c5fce89854c1159e466e4324571d0c07794d7238d3e13e77d782d03e4f55bdaf9ca42033c76d39cecd5d577b790cee59decc8fdbed084031828d78f4058226b2a87ee903a695f0388ad69bc856365f0e10639170a5661e55d6db12032f061231369af5f71cce2a9e2d0cf6c8855cff4876814a76f181c8a24ee19c29f4e865e61124651f1e1a5a27d10b7c3428cccf49ae79dac37f2d80aa2e0beb23c4f010c75d110a8c75c3924a1662f4c839b6c84f1404f1f163942bd735f9a2ca033ce62df40918b5e46c822146dc6a009613d9d07703513df5772cf84f98117c80a1799946b3b0cfcc796afc17b9eb39f5e050fd1c267228d0e889b84e24f2b56c896575a8a6528062256ad4d2eecdcc0f97285d494ab14d441bd7722eea035582b8b0665ba481671f72aca748f08525a7fb86ee504f8d2ee7584c9739498d9e7e0198ce91ec5bfda5528f91bd4ad23de768e4bd87354634230bb751b5e8e2fbe35b725ea549b32ed1f907c350dac054a365e37b146f7977533149dfee4824eef6904db912e69d3a0bf1a46443024f82403738712077dfd1c090afc280049dc4fdc8ab02ea014bf729ea882088e66b281da199f7243d578ce3ea8e95b065576d745732ad38f426b0767821d26da6dd686e4b6d3130dc507d8ec6f4a613902e128ab04ae8688ed708534bd07ab68a29aef819bad539b17f31790dc987d05bf67b903a54551bdc008df21d638c3a81182e783afcbd448fa45007973774d64dbd9f9c440ab6566d1e329af711069e078d3b1ae7b0a2b04661c6d5aa60749d8fb5a774ffe41adb60b2249099297bdad7441f34ee01d3832ae6a03b6d6650d394ad7e8aa714a455da5de4b446dc7e0ea7f0448541ff980c75de4b5c34a83de93b1b8c540f79a4492c650e94dc267391b0397492df8fd0b4347bea1b390a4b8def7fe3ee53c148ff5e80ebb4f529a3b2293e6819ea431ac6afaff1a2e72d15c8cfb25059aec8dcf58dcd3463d2f6f6c4a5a4be67347bf5a93a54e262053221e2b7af4994ea8f5fc005b3c84201a726baadc0838d20762a5d40d7572e844fb91ee0186073b3a8729692ff638c54eb5dbc04c0ae444ef47c5875680da7986c3e1654fe7a67f473e37b4c864ce754829d3096a15976577239d50c2702f61c9053b5d0195f66eb5fe5146bb8d6d94f48e2e70f18854a1841c573eb482e4d56c349740b9d0a866a9739b154c6478d5e64f792f2db1d09e717177db269d42bdbb31df97a32dd3715f7823330872e71da6d6649f214bc9bc7de6dc9984380ec5316970e4c828b198deda7966a7e5c893587d38678da2161aa47afcd1c16654a0b3235b7ad13da54820f0bf47667d6ae3c82b9576",
+          "ephemeralPubKey_note": "arbitrary bytes, deliberately: the skip fires at the tag, before anything reads t1_ot",
+          "metadata": "0b29bb710ff967de1d63c6ebc98e1ea94dbbd4147476aca809d7a90573f1a37ec6db770b38dbb5f036ffc914e0a5ed62c77c600d490b69d04200da06697c2692643437c708a530f9a86b127857a65760b48b7993b1371643eee979007125088aa50488df045bbb82606fbc298e13f1d9c13188fe2ff8589323fcc254dca5f26c9695098e84b12c9bf5e07a1693129acdca5f5288ee545a682bbd9a4f95e0dfa431f463200b701e2c1eece146fa78f5c9ba3023abde8e44d933931039659347c65a949815b82c5a1b987f8681a49dff23f3f947fa3f0ee1d0a3f4d1530852da3a6c4a2716fd1be6268b9f3e77d616e7c61a4e7dbd3848235c4933230b10c1a72925dbc074bc793b03165270b19db1a076d88511f16809bb28e17f1dcf2d74ce321c42e2095c649ac166cff4843125b56a1247be6d8861feab2bdecb42e81dcab0fdb300c758a451b020ec091ffae10f89c804ccb3c03fdee0e7e39b281e2dff09d54912f6ab6c7c89e393b94a8fb3313d535e97cffa99679bc967b60e8453441745bd34d200469b801694e810df07d8a7d6ab57e0fdc34e62d3b62df9065465e1cd9009d591246a92d7b48ff3b0cfd32afc2ca2a1bae9a6b9d17a511e702befc87f1c8030f72f418b1b5b3f9d31710d85c703d467de6f2a96b2d5d7085effebdc4ba469469c4f86602646aa301ccc629f27e9a967e1b7096ab0aa701af753370f9004bb1f9fcd07923ddac38e8d0946e061fffc70b241b19e8041b04402c1a877a6e244f4431b3f2ff143c0d0e960758e96004f072f69becb2f754ed1b28846c9b7e85fc69e07c250119f216ba6635fb1635d23553f1fe2f5d339467fe840ef0a6015b275f883435e49915c0e8ce33964aaa48dee0de8ffbc86f817525a4e519307a4d3f668f85374c2a3b68a0595c8be672a6e8109881c8059e3debb913f37a7f268f7801e23a4861aafcac57939fd4b78f1aff5aff663b3a2edeabf175d607bd67168f1c12f059b00a603b21210dc3cb1e8bc98aa7834f421abab0b86a534cf607e359d8f45684d66b3f65e660ee7c2f4362a437ed9f8e7561392f743dde0996fc78870745e44d38b9aec0a500d32a0a5c859ca69867d8be3217cdaf8b4e4fa736c2095282541877e30729c6bb3aa907195456d0e17896c3925e365e0c8da6854dd1b6d1ed4610b622f0bf3ecaa84ee2e58add1682e379049019fa6c5d1a8ae5a8506c523431069b73028e89341c29a8830202e0714ce0ded9123317ad3d6c91cbfe57ccbdd073573d2c2b1b848a5cdec5aeddc66d5890b92cf57acf180ad95f8bcfa5ac40f9a4728f2ebdac1e8f55c83574fd285a062358511a0da1d7d20f775ccf041d5d65866b491c61ef35aee10f9d39058e76ee7b55b78c242b6b912aefa2ba47a17c3848e856e4393a99814d6f0e5c53b1666022cc9859f0e219b236949cd6ba1bbef5e46aba481d2a0d7a8cc9605ce907a6a6bcc93de115a10b726ba01e43070d919fa26145c20e42eb0de2f033ee3363aae7d45ad1c8fa696bd38ac4e6bddba15d6b8fa"
+        }
+      },
+      "expect": {
+        "case_a": "not ours, skip -- fires on metadata length, before decapsulation",
+        "case_b": "not ours, skip -- fires on the category length check, before decapsulation",
+        "case_c_derived_ss": "e5ee67b712d8c696a1dc44ce394549a7b57d23008b26d6f70b1a25ae923dad00",
+        "case_c_derived_view_tag": "233a846bd6e11660",
+        "case_c": "not ours, skip -- decapsulation does NOT fail, the tag comparison does",
+        "errors_raised": 0
+      },
+      "wrong": {
+        "note": "an error on any of the three -- announce() is permissionless, so an error path is a denial of service a stranger can trigger; or running Track at the wrong category, which the ladder's second line exists to prevent"
+      }
+    },
+    "V6-17": {
+      "claim": "the meta-address a conforming keygen derives from an accepted 96-byte seed, in bytes",
+      "provisional": true,
+      "not_generatable": "the expected bytes need ExpandA, the NTT and Power2Round derived from the specification prose independently of any implementation, and this generator has none of them. Filling the expectation from the implementation under test would make the suite a regression harness for one codebase; filling it from the Spirit parity KATs would pin the authors' C, whose build is non-conforming by construction. Specified, ungenerated, reason stated."
+    },
+    "V6-18": {
+      "claim": "a conforming announcement for a known key is retained -- Decaps, tag match, Track true",
+      "provisional": true,
+      "not_generatable": "the expected bytes need ExpandA, the NTT and Power2Round derived from the specification prose independently of any implementation, and this generator has none of them. Filling the expectation from the implementation under test would make the suite a regression harness for one codebase; filling it from the Spirit parity KATs would pin the authors' C, whose build is non-conforming by construction. Specified, ungenerated, reason stated."
+    }
+  }
+}

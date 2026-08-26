@@ -1,0 +1,19 @@
+CC0 1.0 Universal
+
+The specification text in this repository — the documents under `spec/` — is
+dedicated to the public domain under the Creative Commons CC0 1.0 Universal Public
+Domain Dedication.
+
+Full text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Why this file exists separately from `LICENSE`:
+
+  - EIP-1 requires ERC content to be placed under CC0-1.0 — an Apache-2.0 `## Copyright`
+    section would make the document unsubmittable as written. The Ethereum Foundation's own
+    specification repositories use the same convention — `ethereum/consensus-specs` is
+    CC0-1.0.
+  - `LICENSE` (Apache-2.0) covers the **code and tooling**, and is inherited
+    byte-identically from `pq-stealth-addresses` and `spirit-poc`. It is unchanged.
+
+A standard nobody is free to copy is not a standard; a cryptographic implementation with no
+patent grant and no warranty disclaimer is a different kind of object. Hence two files.

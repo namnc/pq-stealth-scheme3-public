@@ -1,0 +1,66 @@
+{
+  "harness": "registration",
+  "what": "first-time ERC-6538 registerKeys cost per schemeId, measured as real transactions against the CANONICAL registry's deployed runtime bytecode (mainnet 0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538, installed with anvil_setCode), one fresh registrant per row",
+  "hardfork": "prague",
+  "registry_bytecode_sha256": "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b82f",
+  "registry_bytecode_source": "eth_getCode 0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538 latest (mainnet, block 25832859)",
+  "self_check": "pass",
+  "cases": [
+    {
+      "name": "classical (ERC-5564 schemeId 1) registration",
+      "schemeId": 1,
+      "meta_address_bytes": 66,
+      "calldata_bytes": 196,
+      "total_gas": 115310
+    },
+    {
+      "name": "schemeId 2 registration",
+      "schemeId": 2,
+      "meta_address_bytes": 1217,
+      "calldata_bytes": 1348,
+      "total_gas": 941838
+    },
+    {
+      "name": "schemeId 3 registration",
+      "schemeId": 3,
+      "meta_address_bytes": 1250,
+      "calldata_bytes": 1380,
+      "total_gas": 964809
+    },
+    {
+      "name": "schemeId 4 registration",
+      "schemeId": 4,
+      "meta_address_bytes": 1217,
+      "calldata_bytes": 1348,
+      "total_gas": 941838
+    },
+    {
+      "name": "schemeId 5 registration",
+      "schemeId": 5,
+      "meta_address_bytes": 1250,
+      "calldata_bytes": 1380,
+      "total_gas": 964809
+    },
+    {
+      "name": "schemeId 6, category 2 registration",
+      "schemeId": 6,
+      "meta_address_bytes": 4128,
+      "calldata_bytes": 4228,
+      "total_gas": 3008595
+    },
+    {
+      "name": "schemeId 6, category 3 registration",
+      "schemeId": 6,
+      "meta_address_bytes": 5600,
+      "calldata_bytes": 5700,
+      "total_gas": 4064737
+    },
+    {
+      "name": "schemeId 6, category 5 registration",
+      "schemeId": 6,
+      "meta_address_bytes": 7072,
+      "calldata_bytes": 7172,
+      "total_gas": 5120888
+    }
+  ]
+}
