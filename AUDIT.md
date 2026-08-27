@@ -80,14 +80,23 @@ counted:
   `tools/vecprim.py`, and `k256` in Rust. HKDF likewise: the fixtures' generator hand-rolls it
   and the crates use RustCrypto's, so agreement between them is a cross-implementation check
   rather than one author agreeing with themselves.
-- **A blinded independent re-derivation.** A second implementer computed rows from the
+- **A ledger of blinded independent re-derivation — and read what it is carefully.**
+  `vectors/rederivation.json` is a record that a second implementer computed rows from the
   specification prose alone, with no access to the expected values and no elliptic-curve
-  library. `vectors/rederivation.json` records exactly which rows that witnessed, in three
-  lists: those whose **bytes** agreed, those confirmed only at the level of the **outcome**, and
-  those not generatable at all. **None disagreed.** Those lists cut across the specification's
-  sections and coincide with no section's row list, so read the file rather than any total
-  quoted about it — including one quoted here, which is why none is. A row in none of the three
-  has no witness outside this project.
+  library. It sorts the rows into three lists: those whose **bytes** agreed, those confirmed
+  only at the level of the **outcome**, and those not generatable at all, and it records that
+  none disagreed. Those lists cut across the specification's sections and coincide with no
+  section's row list, so read the file rather than any total quoted about it — including one
+  quoted here, which is why none is. A row in none of the three has no witness outside this
+  project.
+
+  **What this tree does not let you check is the circumstance.** The blinded inputs, the
+  implementer's transcript, and the comparison procedure are not here, and the ledger asserts
+  the independence rather than evidencing it. So this is the strongest claim in this section
+  and the one whose support is weakest in the artifact you are holding: you can check WHICH
+  rows the repository says were witnessed, and you cannot check from here that they were
+  witnessed blind. Treat it as a claim under this project's name, not as evidence you have
+  verified — and if that distinction matters to your engagement, ask us for that material.
 - **Measurement, with the harness committed.** Every gas figure comes from a real transaction
   against a real node, with its receipt in `harness/*/measured.json`;
   `tools/check_measured.py` re-derives the announcement figures from the EIP-7623 calldata rule
