@@ -1,4 +1,4 @@
-# Conformance vector plan — schemeIds 2 to 6
+# Conformance vector plan — schemeId 3, and what it shares
 
 **Written before any implementation.** The point of reviewing this file rather
 than a diff: if the vectors are right, an implementation that passes them is conformant,
@@ -12,11 +12,10 @@ lets an implementation bug become the standard. It is written out here, in the f
 live in, because this file travels into trees that carry the fixtures without a directory note
 beside them -- and a rule a reader has to go and find is a rule that gets skipped.
 
-> **What the generator emits, measured: every generatable row of all three waves; three
-> rows are recorded as `not_generatable` with the reason.** `V6-03` needs a rejection injected
-> past the derivation — a harness hook rather than a fixture, exactly as `V1-08` already is; no
-> KEM closes it, so it is not waiting on anything. `V6-17` and `V6-18` need lattice
-> arithmetic derived from the prose that this generator does not have.
+> **What the generator emits, measured: every generatable row this tree carries but one,
+> which is recorded as `not_generatable` with the reason.** `V6-03` needs a rejection
+> injected past the derivation — a harness hook rather than a fixture, exactly as `V1-08`
+> already is; no KEM closes it, so it is not waiting on anything.
 >
 > **The oracle is `kyber-py`, a third-party ML-KEM, and its acceptance test is that it
 > reproduces the vendored NIST ACVP file.** It does — the keygen, encapsulation and
@@ -31,17 +30,15 @@ beside them -- and a rule a reader has to go and find is a rule that gets skippe
 > exactly the tuples it reproduces from NIST, and nothing else.
 >
 > **The dependency is OPTIONAL to the generator**, which runs from a bare checkout and records
-> the KEM-bearing rows — `V2-01`, `V2-11`, `V2-13` in wave 1, three in wave 2, and `V6-14`,
-> `V6-16` in wave 3 — as `not_generatable` with the reason
-> when it is absent. `gen_vectors.py --check`
+> the KEM-bearing rows — `V2-01`, `V2-11` and `V2-13` — as `not_generatable` with the
+> reason when it is absent. `gen_vectors.py --check`
 > compares the committed files against a fresh generation, so a set produced under a different
 > availability cannot pass unnoticed. A bare emitted-count is deliberately not written here:
 > the coverage gate in the authoring repository computes four counts and objects to any figure that is not
 > one of them, on the ground that an unlabelled number passes by coincidence rather than by
-> being right — with the ML-KEM installed, a full run emits every row but the three this
-> paragraph opened by recording as `not_generatable`: `V6-03`, `V6-17` and `V6-18`. The KEM
-> closes the KEM-bearing rows and none of those three, which is the point of listing them
-> separately.
+> being right — with the ML-KEM installed, a full run emits every row but the one this
+> paragraph opened by recording as `not_generatable`: `V6-03`. The KEM closes the
+> KEM-bearing rows and not that one, which is the point of listing them separately.
 >
 > > **A finding about ACVP, measured:** its keyGen and encapsulation cases use disjoint
 > > keys, so no vector needing one key's `(d, z)` seed *and* a ciphertext encapsulated to
@@ -53,24 +50,31 @@ beside them -- and a rule a reader has to go and find is a rule that gets skippe
 > **Nothing is approximated.** A fabricated `ct` or `ss` in a conformance fixture would be
 > worse than a missing one, because it would pass.
 
-**Where the sections in the group headings below live.** The specification is written as
-four documents and the section numbering is shared across them, so the headings are unchanged
-and each `§N` resolves in whichever document owns it: `§1`, `§5`, `§6`, `§7`, `§8` and `§9`
-in the common-definitions document; `§2` in the per-payment document; `§3` in the channel
-document; `§4` in the post-quantum-spending document. The coverage table in §7a is generated
-per document and names all four.
+**Where the sections in the group headings below live.** The specification these rows were
+written from is four documents with section numbering shared across them, and the headings
+are unchanged: `§1` and `§5` in the common-definitions document, `§2` and `§2.9` in the
+per-payment document. `§3` and `§4` belong to the channel and post-quantum-spending
+documents, and **their groups are not in this file** — see the note below.
 
-*Cited by name rather than by path, deliberately.* A tree may carry these fixtures together
-with only one of those documents -- the standalone single-rung export does exactly that -- and
-a path here would then be a dead link in the first note a reader reads.
+*Cited by name rather than by path, deliberately.* This file travels into a tree carrying
+one of those four documents, and a path here would be a dead link in the first note a
+reader reads.
 
-**And in such a tree, the rows for the absent documents cannot be audited from it.** Every
-row states the normative sentence it pins, and a reader holding one document can check the
-rows for that document against its text and no others. The rest remain runnable fixtures
-with a stated intent and no local authority to check that intent against. Saying so is the
-point of this paragraph: shipping the suite whole keeps the generator and the manifest
-honest, and it does not turn a reader holding one document into a reader who can review
-four.
+**This is the single-rung variant, and what it drops it drops entirely.** The groups for
+`§3`, `§3.12` and `§4` are absent from this file, their fixture files are absent from
+`vectors/`, and the manifest and the re-derivation ledger beside them describe the four
+files that remain and no others. A sliced plan half-exists and a sliced manifest lies;
+neither is true here, because the three are derived together from one source and the
+release build re-derives them and fails on any disagreement. What is gone is gone
+consistently, and the fixture set, this row list and the generator's own wave table are
+reconciled against each other before the tree is published.
+
+**Why those three and not others.** This tree ships the code for schemeIds 2 and 3 -- §2.8
+requires the code from the shared secret onward be shared rather than duplicated -- and the
+§5 seed derivations underneath both. It ships no channel implementation and no
+post-quantum-spending implementation, so nothing here executes those sections and no
+command here checks their rows. **Fixtures ship where the code they exercise ships**, which
+is a rule a reader can apply to this file rather than a judgement they have to trust.
 
 ---
 
@@ -206,82 +210,6 @@ Everything in §3 above applies. These are the additions.
 > same reason. A fixture generated from either would have tested a parameter that does not
 > exist, which is worse than a missing vector: it would pass.
 
-## 5. §3 — schemeId 4
-
-> **The two channel sections divide as §2 does**: §3.1–§3.11
-> specify schemeId 4 in full and §3.12 gives schemeId 5 as the delta, matching §2's direction.
->
-> **The row IDS did not move, and that is deliberate.** `V4-*` are schemeId 4's rows and `V5-*`
-> are schemeId 5's, which is the mapping the ids themselves imply; renumbering to follow the
-> section order would break every existing reference to these ids for no gain. **The consequence
-> to be aware of: the rows shared by both rungs — the memo, the nonce, the retention rules, the
-> skip dispositions — carry `V5-*` ids while belonging to the base rung.** They are listed under
-> §3.12 below and each says so.
-
-| id | claim | given | expect | wrong |
-|---|---|---|---|---|
-| V4-01 | `k_pairwise = SHA3-256("pq-stealth/pairwise-pq/v1" ‖ ss_pq)` — a **direct hash**, not HKDF | a first contact | 32-byte key | binding `ct` in as well, which is the candidate the author rejected, or reusing schemeId 5's separator |
-| V4-02 | the derivation **differs** from schemeId 5's on the same inputs | the same `ss_pq` under both domain separators | two different keys | the same key — the domain separation this pins is the whole reason both strings are stated |
-| V4-03 | first contact is empty `ephemeralPubKey`, **`view_tag ‖ ct`** 1 096 in `metadata` | a new channel | 1 096 B | `ct` in `ephemeralPubKey`, which is schemeId 2's convention and which no length check distinguishes; **or `ct` alone with no tag — the shape the older references emit, and the one a port will produce** |
-| V4-03a | the first contact's own view tag verifies at **counter 0**, and that is what admits the channel | a first contact addressed to this recipient, and one addressed to a stranger | admitted; discarded with nothing retained | admitting on decapsulation alone, which retains one channel per first contact ever seen; or deriving the tag at counter 1, which matches nothing |
-| V4-03b | the admitted first contact is **also a payment**, at counter 0 | the first contact above | a derived stealth address, and the payment found at it | admitting the channel and deriving no payment — **the first payment on every channel, lost systematically with no error** |
-| V4-04 | meta-address is 1 217 B with **one** point | `spending_pk ‖ ek` | accepted; 1 250 B rejected | validating two points, ported from schemeId 5's decoder |
-| V4-06 | keygen seed is 96 B, and the delegated object is `kem_seed` alone | 96 B; then 128 B | outputs; then error | accepting schemeId 5's 128-byte seed. **The 65-offset scan of V3-02 does not apply here** — with one delegated secret, §2.1's scan over `kem_seed` is already complete |
-| V4-07 | keygen scans the 64-byte `kem_seed` for `spending_seed` at all **33 offsets** and refuses the coincidence | `spending_seed` planted at offsets 0, 16 and 32; and a clean `kem_seed` | error, all three; outputs on the clean control | **omitting the scan** — no other committed schemeId 4 row reaches it, so a port that skips it passes this file while handing the spending seed to a scanning service. V3-02 and V5-01 witness only the 65-offset two-secret form, in files a scheme-4-only port never loads |
-
-**Eight vectors, one of them withdrawn** — described here in prose and
-not in a second table, because a table row carrying an id is a **vector row** to
-the coverage gate in the authoring repository, and listing an id twice makes it a duplicate:
-
-- **`V4-05` is withdrawn**: ~~a combined announcement is not published, at 1 113 B~~. The
-  combined announcement is the specified shape (§3.4), at 1 096 B. A fixture asserting it
-  unrecognised would certify a scanner that rejects every conforming first contact.
-- **`V4-03a` is new.** The view-tag gate on the first contact is what replaced the confirm tag,
-  and it is §9's anti-griefing requirement. Nothing pinned it before, because the gate lived on a
-  memo.
-- **`V4-03b` is new.** §3.6 requires the gating announcement's payment to be derived. That was a
-  vector for the gating *memo*, `V5-19`; it is now one for the first contact, which a scanner
-  reaches by a different code path — so the loss it guards against became easier to hit, not
-  harder.
-- **`V4-07` is new.** The §2.1 scan over the delegated `kem_seed` gets its own planted-offset
-  witness. Its absence is the exact gap the delegation guard exists to close: a scheme-4-only
-  port that omits the scan passes every other committed row while a tracking delegation can
-  carry the spending seed verbatim.
-
-## 6. §3.12 — schemeId 5
-
-**Everything in §5 above carries over**, plus the EC half: V5-01's wider delegation scan,
-V5-02's combined channel key, V5-03's `epk` binding, V5-07's `epk` on the wire and V5-09's `epk`
-decoder cases. **Rows below whose claim is not hybrid-specific belong to both rungs** and carry
-`V5-*` ids for the reason the note in §5 gives.
-
-| id | claim | given | expect | wrong |
-|---|---|---|---|---|
-| V5-01 | 128-byte seed; the `spending_seed` scan covers the **whole 96-byte delegated object**, 65 offsets, not each half's 34 | as V3-01, V3-02 | as above | as above. **Not "both delegated halves checked"** — a per-half scan accepts the 31 straddling offsets and puts the spending key inside delegated scanner material |
-| V5-02 | the channel key's parameters | a first contact | `k_pairwise` | as V3-04, V3-05, V3-06, V3-06a, V3-06b — the same failure modes, different domain separator. **Both implementations currently derive the three-field IKM**, so this vector fails against both until the port lands |
-| V5-03 | `epk` bound into the channel KDF | parity-flipped `epk` | a different `k_pairwise` | the same key — the replay §3.3 exists to stop |
-| V5-04 | the counter is `NONCE_BYTES`-byte **big-endian** in the DERIVATION and appears on no wire, and a **memo** starts at counter 1 | a new channel, second payment | the payment secret and view tag at counter 1, and a memo of exactly 8 bytes | 8-byte or little-endian counter encoding, which gives a different `ss` silently; **publishing the counter**, which is not a wire field; **starting a memo at 0**, which is the first contact's counter and re-derives its address |
-| V5-05 | ~~`ss` and `confirm_tag` come from `(k, nonce)`, and the tag does not depend on `ss`~~ | — | — | **WITHDRAWN.** The confirm tag is deleted (§3.5). `ss` from `(k, nonce)` is pinned by V5-05a below; the independence claim has nothing left to be independent of |
-| V5-05a | `ss = SHA256("pq-stealth/pairwise-payment/v1" ‖ k_pairwise ‖ nonce)`, and the view tag follows from `ss` | `k`, counter 0 and counter 1 | two payment secrets, two view tags | deriving the tag from `(k, nonce)` directly, which is what the deleted confirm tag did — it produces a well-formed eight-byte value that no conforming sender emits |
-| V5-06 | memo is **`view_tag(8)` and nothing else** | the payment above | exactly 8 bytes, and a round-trip parse | 24 bytes with a trailing counter, and 25 with a confirm tag as well — **the two shapes the reference implementations emit**; or a one-byte view tag |
-| V5-07 | first contact is `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 096 in `metadata` | a new channel | 1 129 B | the fields swapped; **or `ct` alone with no tag, the shape the older references emit**. Note this shape is byte-identical to a schemeId 3 announcement (V3-08) — §6 declares the collision and recognition is by `schemeId` too |
-| V5-08 | ~~a combined announcement MUST NOT be published, at 1 146 B~~ | — | — | **WITHDRAWN.** with V4-05. The combined announcement is the specified shape (§3.4). A fixture asserting it unrecognised would certify a scanner that rejects every conforming first contact |
-| V5-09 | bad `epk` → skip, not error | 33 zero bytes; `0x02 ‖ 32×0xff`; a `0x05` tag | not mine ×3, no error | an error, which aborts the scan. The Rust accepted `0x05` and stored the channel; the TypeScript refused it |
-| V5-10 | `ct` length ≠ 1 088 → skip | 1 087 B | not mine | an error |
-| V5-11 | an address comparison is on the **20 address bytes**, never on a string form | a lowercase and an EIP-55 mixed-case form of one address | they compare equal | **string comparison** across the two forms, which matches nothing, silently. This row pins the comparison rule alone (§3.4): a paired-announcement half would have nothing to pair, since a first payment is one announcement. A wire-format test comparing the two forms of one address demonstrates the bug |
-| V5-12 | a channel MUST NOT be retained without a **view-tag match on the first contact itself** | a first contact whose own tag does not verify at counter 0 | not retained | retained on decapsulation alone; **or gated on a paired memo's confirm tag, which gates on a field that is not on the wire** |
-| V5-13 | a duplicate channel key MUST NOT be retained twice, **and the replay presents no payment** | the same first contact replayed | one channel, and no payment on the replay | two, and the list grows without bound even with the gate in place; or one channel retained but the replay credited as a second payment, which the retention count alone does not catch |
-| V5-14 | ~~**every** memo bearing the first contact's `stealthAddress` is tried~~ | — | — | **WITHDRAWN.** with the requirement it pinned. The decoy attack it tested is unreachable once the pairing is transaction identity: an observer cannot add a log to someone else's transaction. Replaced by V5-14a |
-| V5-15 | a scanning context cannot hold a sender-side channel | an attempt to place a channel the caller opened as payer into a scanning context | rejected **by construction** — it does not compile, or the API offers no such call | accepted and filtered at match time, which is the reference's shape and is breakable in a refactor with no test failing |
-| V5-16 | a `schemeId` mismatch is a **skip** | an announcement under schemeId 2 to a recipient registered under 5, and one under 4 | not mine ×2, **no error** | an error — a permanent scan abort any stranger can trigger for one announcement's gas |
-| V5-17 | ~~the accompanying memo is the memo in the first contact's own transaction~~ | — | — | **WITHDRAWN.** There is no accompanying memo and no pairing |
-| V5-18 | **no vector — deliberately.** `CHANNEL_IDLE_SEND` and `CHANNEL_IDLE_SCAN` are a SHOULD NOT for the sender and a MAY for the scanner, so neither expiry nor retention is a conformance obligation and a fixture would pin a permission | — | — | a vector asserting a specific expiry block, which would make one of two conforming behaviours look non-conforming. **The memo-window half of this slot is empty too: those constants are withdrawn.** The slot stays empty until the idle constants are measured and the levels revisited |
-| V5-19 | ~~the gating memo is **also** derived as a payment~~ | — | — | **SUPERSEDED by V4-03a and V4-03b**, which put the same requirement on the first contact. The requirement did not change; what satisfies it did |
-| V5-06a | a scanner matches a memo by deriving the next `SCAN_LOOKAHEAD` counters, not by reading one | a channel at counter 3, and memos at counters 4, 5 and `4 + SCAN_LOOKAHEAD` | the first two matched; the third **not matched**, and no error | matching the third, which means the window was not applied and the scan is unbounded in the counter; or failing on it, which turns a sender's skip into an error a stranger could also cause |
-| V5-14a | ~~a first contact whose transaction carries no verifying memo is discarded~~ | — | — | **SUPERSEDED by V4-03a.** Same disposition — discard, retain nothing — reached from the announcement's own bytes rather than from its transaction |
-| V5-20 | a scanner that stops deriving for a **confirmed** channel can resume it without the seed-only path | a confirmed channel, idle past the scanner's own `CHANNEL_IDLE_SCAN`, then a memo | the channel resumes from its retained first-contact location and the payment is found | resumption only via `O(first-contacts × memos)` recovery, or no resumption at all — which is the invisible-payment path §3.6 now calls a latency cost |
-| V5-21 | a watch delegation carries **one channel's `(k_pairwise, next counter)` and nothing else** — never the tracking key, never the spending point — and its report is §3.6's report in full: **the matched counter and the matched row's identity** | watch state for one channel whose window starts at counter 4, and a memo at counter 4 carrying its row's identity (the announced address, OPAQUE to the watcher — it enters no derivation) | the memo matched, and the report is the counter **and the row's identity echoed** — the watch type has no field for a DERIVED address or a key it must not hold, and the recipient performs §2.8's comparison locally against the identified row | including the tracking key, which un-scopes the delegation back to the whole graph; or the spending point, which names the recipient in their ERC-6538 registry entry; or a report without the row identity, which says a counter matched but not which public row to retrieve and verify |
-
 ## 6a. §5 — seed derivation
 
 Three rules here would otherwise have no vectors because §5 is where their specification lives.
@@ -303,73 +231,6 @@ Three rules here would otherwise have no vectors because §5 is where their spec
 | V6-03 | an `ephemeral_seed` that is not a valid scalar advances the index | **a chosen seed injected through the conformance hook, not a searched `master`** | the announcement uses index `i+1`; index `i` never reappears | failing hard; or retrying index `i`, which breaks the injectivity of the seed stream |
 | V6-04 | a rejected keygen seed advances the index of **that (`schemeId`, `rung`) pair and no other**, and does not change `keygen_master` | a `keygen_master` and one rung whose index-0 seed fails the scalar or delegation test, with a second rung of the same `schemeId` already registered | index 1 accepted; **every other scheme's keygen seed unchanged** | drawing a fresh `keygen_master`, which changes a funded scheme's keys |
 | V6-05 | `announce_seed = SHAKE256(DS ‖ master(32) ‖ u64be(i) ‖ u64be(schemeId) ‖ u64be(\|rung\|) ‖ rung ‖ u64be(\|kem_id\|) ‖ kem_id, n)`, **in exactly that field order**, with `kem_id = u64be(\|name\|) ‖ name` = 18 B for `"ML-KEM-768"` | one `master`, schemeId 2 at index 0 and 1, schemeId 3 at index 0 | three seeds of the specified lengths, and the schemeId 3 seed's 32/32 split | **appending `i` last instead of placing it after `master`**, and **omitting `kem_id`** — two errors this repository's own generator once made, each of which yields a well-formed seed that no conforming implementation reproduces. Also: an unprefixed `kem_id`, or naming a wrapper instead of what it wraps |
-
-## 6b. §4 — schemeId 6, wave 3
-
-> The rows below are written from the post-quantum-spending document's §4.1–§4.5 — never
-> from any implementation, and in particular **never from the Spirit parity KATs**, whose
-> oracle is the authors' C and whose build reverts §4.1's mandatory per-one-time-key seed
-> derivation; §4.2 states that incompatibility in full. The documented likeliest wrong
-> answer throughout is the upstream reference's own layout: `opk_ds ‖ ct` with `rho` on
-> the wire and no view tag.
->
-> **The generatable rows below are runner-executed** — the rung's implementation landed
-> after they were committed, so a pass is a cross-implementation agreement, and the golden
-> count in the runner's test rose by exactly their number. **What cannot
-> have a row:** anything requiring §4.6's mapping — the address rows stay in `V1-08`'s
-> class of named absences until that decision lands. And two expectations need lattice
-> arithmetic derived from the prose (`ExpandA`, NTT, `Power2Round`) that this generator
-> does not have:
-> **V6-17** and **V6-18** are specified and ungenerated, with the reason stated — `V6-03`'s
-> discipline — rather than filled from an implementation, which would make the vectors a
-> regression suite for one codebase, the failure the front door names.
-
-| id | claim | given | expect | wrong |
-|---|---|---|---|---|
-| V6-06 | §4.1 — the keygen seed is `dsa_seed(32) ‖ kem_seed(64)` = 96 B, and an implementation MUST reject any other length | seeds of 95, 96 and 97 bytes | 95 and 97 rejected; 96 accepted (its expected keys are `V6-17`) | accepting either neighbour; or the 192-byte `rho ‖ mkgen_seed ‖ kem_seed` form §5 records as wrong twice over |
-| V6-07 | §4.1 — an implementation MUST reject a keygen where **any 32-byte window** of `kem_seed` equals `dsa_seed` — the delegated object is 64 B, so 33 windows | one `dsa_seed`, and `kem_seed`s with it planted at offsets 0, 16 and 32, plus a clean control | the three planted rejected; the control accepted | scanning §2.9's 65 offsets, which belong to a 96-byte delegated object this rung does not have; or checking the two aligned halves only, which misses offset 16 |
-| V6-08 | §4.1 — `rho' ‖ rhoprime ‖ key = SHAKE256(dsa_seed, 128)` at offsets 0, 32, 96: `rho'` MUST be squeezed and discarded, and `rhoprime` and `key` MUST sit at offsets 32 and 96 of the **same** stream | one `dsa_seed` | the 128-byte stream, `rhoprime` = bytes 32..96, `key` = bytes 96..128 | expanding only 96 bytes and reading from offset 0 — the computed value is committed, and it yields a different masking vector and signatures that verify under nothing |
-| V6-09 | §4 deviation 1 and §4.2 — `CRS_V1 = keccak256("pq-stealth/crs/v1")`, a decoder reconstructs `pk_ds = CRS_V1 ‖ t1`, and `rho` is not on the wire | the string literal | the 32 bytes §4 states, re-derived by this generator's own keccak | `sha3_256` of the same literal — NIST padding, a plausible 32 bytes no Ethereum node reproduces; or SHAKE256 of it; both computed so a runner can tell which mistake was made |
-| V6-10 | §4.2 — decoding MUST reject any length that is not the one its category names, and a decoder MUST accept all three | lengths 4 128, 5 600 and 7 072; their off-by-one neighbours; and this document's other meta-addresses at 1 217 and 1 250 B | the three accepted, with category attribution 2 / 3 / 5; every other length rejected | accepting the `t1 ‖ ek` totals, which omit `t0` and make every payment unfindable; or a `rho`-carrying form 32 B longer |
-| V6-11 | §4.2 — the meta-address is `t1 ‖ t0 ‖ ek`: `t0` MUST be published, and the field offsets are `k·320` and `k·320 + k·416` | the category table, `k = 4 / 6 / 8` | per-category offsets, with `ek` the final 1 184 B in each | omitting `t0` — `OPKGen` and `Track` form `t'` from full-precision `t`, so a sender holding `t1` alone pays an address nobody can find |
-| V6-12 | §4.3 — the announcement is `t1_ot` in `ephemeralPubKey` (`k·320` B) and `view_tag ‖ ct` in `metadata` (1 096 B), and MUST NOT carry `rho`; payloads 2 376 / 3 016 / 3 656 B | the wire table | field lengths and totals per category; `metadata` = 8 + 1 088 | the reference's `opk_ds ‖ ct` with `rho` and no view tag — 24 B larger per category, and its first 32 bytes are a recipient tag a `memcmp` links with no key material |
-| V6-13 | §4.3 — `view_tag = SHA256("pq-stealth/view-tag/v1" ‖ ss)[0..8]`, and it sits **first** in `metadata` | one `ss` | the eight bytes, computed | a one-byte tag — the pre-widening width, which leaves the most expensive per-announcement work in the ladder running on one foreign announcement in 256; or SHAKE256 in place of SHA256; both computed |
-| V6-14 | §4.4 — the sender chain is deterministic from `encap_seed`: `(ct, ss) = ML-KEM-768.Encaps(ek, encap_seed)`, `view_tag` from `ss` | an `ek` from a fixed `(d, z)`, one `encap_seed` | `ct` (1 088 B), `ss` and `view_tag`, all computed | drawing fresh randomness instead of the derandomised form, which makes announcements irreproducible from the seed record and unauditable against §5's stream |
-| V6-15 | §4.4 with §5 — the announce seed is drawn per §5 under each of schemeId 6's **three canonical rung names**, and MUST NOT be reused; distinct indices give distinct seeds | one `master`, the three rung names, indices 0 and 1 | six distinct 32-byte seeds, the three per-rung streams pairwise disjoint | sharing one stream across the three levels — §5 requires independence per (`schemeId`, `rung`) pair, and the `schemeId` alone does not separate them because all three levels share it |
-| V6-16 | §4.5 — the skip ladder: wrong `metadata` length, wrong-category `ephemeralPubKey` length, view-tag mismatch — each is "not ours", and every negative outcome MUST be a skip, never an error | three announcements: `metadata` of 1 095 B; `ephemeralPubKey` of 1 920 B against a category-2 key; a valid shape whose tag does not match | each skipped, no error on any path | an error on any of the three — `announce()` is permissionless, so an error path is a denial of service a stranger can trigger; or running `Track` at the wrong category, which the second line of §4.5's ladder exists to prevent |
-| V6-17 | §4.1's accept half, in bytes: the meta-address a conforming keygen derives from an accepted 96-byte seed | a 96-byte seed | the `t1 ‖ t0 ‖ ek` bytes, derived from the prose | filling the expectation from an implementation — the bytes require `ExpandA`, NTT and `Power2Round` derived independently, which this generator does not have; recorded ungenerated with the reason, `V6-03`'s discipline |
-| V6-18 | §4.5's retain half: a conforming announcement for a known key is retained — `Decaps`, tag match, `Track` true | a meta-address and an announcement derived from one `encap_seed` | retained | same reason as `V6-17`: the positive path needs spec-derived lattice arithmetic; a fixture filled from the implementation under test, or from the parity KATs — whose build is non-conforming by construction — would pin the wrong oracle |
-
-**Every `provisional` row, and why.** The fixtures are the authority — `provisional: true` in the
-JSON — and the reason is one string in `tools/gen_vectors.py` so it cannot drift between rows:
-
-| row | why it is provisional |
-|---|---|
-| `V3-05`, `V3-06` | §2.9's domain separator and combiner are new in this document |
-| `V4-01`, `V4-02`, `V5-02`, `V5-05a` | §3's channel-key and payment separators are new in this document |
-| `V5-06a` | `SCAN_LOOKAHEAD` is the **fixture's choice, not the specification's** — §3.6 leaves the value to ecosystem agreement, and this row is what carries the chosen number |
-| `V6-01`, `V6-02`, `V6-03`, `V6-04`, `V6-05` | §5's seed derivations are new in this document |
-| `V6-06`, `V6-07`, `V6-08`, `V6-09`, `V6-10`, `V6-11`, `V6-12`, `V6-13`, `V6-14`, `V6-15`, `V6-16`, `V6-17`, `V6-18` | §4's wire layout, CRS and derivation constants are new in this document |
-
-In every case the claim is that **no outside implementation has adopted the constant**.
-Waves 1 and 2 have the same two internal witnesses: this project's implementation produces
-these bytes, and a blinded re-derivation from the prose alone agreed on them — wave 2's
-covering every byte-valued row, with the three KEM-dependent rows re-derived against
-supplied NIST-oracled KEM outputs. **Wave 3's rows have TWO internal witnesses** — this
-generator's prose-derived computation, and the rung implementation that executes the
-generatable rows (written after the fixtures were committed, so agreeing but not blinded)
-— plus an ACVP-accepted ML-KEM where a row carries KEM output; the blinded re-derivation
-has not run over this wave, and the fixtures' own `provisional_because` says so. No
-witness is an outside party, so the constants remain proposals.
-
-**V6-03 cannot be written without a conformance hook, and that is the same gap §1 has.**
-Finding a `master` and index whose derived seed is an
-invalid secp256k1 scalar is a ~2⁻¹²⁸ search, so the vector is unconstructible from the public
-interface — exactly the problem this plan already names for §1's scalar reduction, where the
-existing test became a tautology for want of a chosen input. **The same one-sentence spec
-change fixes both**: the retry paths MUST be testable with a chosen seed. Until that lands,
-**V6-03** is specified and ungenerated, and saying so is better than shipping a fixture that
-exercises nothing.
 
 ## 7. What no fixture can check
 

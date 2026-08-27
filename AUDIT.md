@@ -31,11 +31,11 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
    error anywhere.
 3. **The hybrid combiner**, field by field — the order of the inputs, the domain separators, the
    length prefixes, and whether the view tag is a separate digest from the offset.
-4. **The fixtures that have a specification here** — `vectors/section-2_9.json` (this rung) and
-   the shared `vectors/section-1.json` and `vectors/section-5.json` — and whether each pins the
-   normative sentence it claims to. **The other four files are not in scope and §3 says why**:
-   they belong to rungs whose text is absent, so there is no sentence in this tree for a row of
-   theirs to be wrong against. That is 51 of the 75 rows; budget the engagement for 24.
+4. **The fixtures**, and whether each pins the normative sentence it claims to. `vectors/`
+   holds four files and nothing else: `section-2_9.json` is this rung, `section-1.json` and
+   `section-5.json` are the primitives and seed derivations under it, and all three are
+   reviewable against the specification you have. `section-2.json` is not — see §3 — but it is
+   the only one, and it is a quarter of the rows rather than most of them.
 5. **The specification text itself.** Ambiguity is a defect here even where the bytes agree:
    two conforming wallets that read a sentence differently derive disjoint key material and
    neither can see the other's payments. That has happened once already, on an `HKDF-SHA256`
@@ -55,18 +55,20 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
 - **Deployment.** Nothing here is a deployment proposal. No contract of ours is on any network,
   and the announcer under `contracts/` is present so the gas harnesses have something real to
   measure.
-- **The sibling rungs — whose code and fixtures you are nonetheless holding.** The KEM-only
-  per-payment variant's code ships inside `crates/per-payment` — §2.8 requires the code from
-  the shared secret onward be shared rather than duplicated — but its specification does not
-  ship and its behaviour is not what this engagement is about.
-  The same is true of the fixtures, and there it is the larger share: **51 of the 75 rows in
-  `vectors/` pin rungs whose text is absent** — `section-2.json`, `section-3.json`,
-  `section-3_12.json` and `section-4.json` are wholly theirs, and `vectors/PLAN.md` covers the
-  ladder rather than this rung. Only `section-2_9.json` (this rung) and the shared
-  `section-1.json` and `section-5.json` are reviewable against a document you have. **Do not
-  spend the engagement on the other four.** They are here because the generator emits the set
-  as a set and `--check` compares the whole of it; a finding that one of their rows is wrong
-  cannot be adjudicated in this tree, since the sentence it would be wrong against is not in it.
+- **The sibling rungs, and the one whose fixtures are still here.** The ladder has a
+  pairwise-channel pair and a post-quantum *spending* rung. Neither their specifications nor
+  their fixtures ship, and `vectors/` — its plan, its manifest and its re-derivation ledger
+  included — describes only the files present.
+  The KEM-only per-payment variant is the exception, in both directions. Its **code** ships
+  inside `crates/per-payment`, because §2.8 requires the code from the shared secret onward be
+  shared rather than duplicated. Its **fixtures** ship, in `vectors/section-2.json`, because
+  that code would otherwise be shipped untested — and shipping code no fixture reaches is the
+  worse of the two problems. Its **specification does not ship**, so those thirteen rows pin
+  sentences you do not have. Treat them as the reason the shared code is exercised, not as
+  something to review: a finding that one of them is wrong cannot be adjudicated here, because
+  the sentence it would be wrong against is not in this tree. **The rule, so you can apply it
+  yourself rather than trust the boundary: fixtures ship where the code they exercise ships.**
+  It is what keeps `section-2.json` and what removed the other three files.
   The siblings' presence is in scope in exactly one direction: whether they can affect this
   rung. A cross-rung announcement reaching this rung's scanner is specified behaviour, and
   §6 requires a `schemeId` mismatch be a **skip** rather than an error, because an error is a
@@ -96,17 +98,18 @@ counted:
 - **A ledger of blinded independent re-derivation — and read what it is carefully.**
   `vectors/rederivation.json` is a record that a second implementer computed rows from the
   specification prose alone, with no access to the expected values and no elliptic-curve
-  library. **Read its keys rather than this description of them**, because there are five and a
-  summary is where a category goes missing. `bytes_agree` and `outcome_only` are the two kinds
-  of agreement; `bytes_disagree` is empty and its being empty is the claim that none disagreed;
-  `ungeneratable` names a row the re-derivation could not compute, which is a fact about the
-  second implementer's sandbox rather than about the row; and `absent` names a row it did not
-  attempt at all. The last two are different and the file keeps them apart: an `ungeneratable`
-  row was reached and not computed, an `absent` row was never reached. **`absent` is authoritative
-  when populated** — it is empty in the tree you are holding, so every row here sits in one of
-  the other four, but do not reconstruct it by subtraction. Those lists cut across the specification's
-  sections and coincide with no section's row list, so read the file rather than any total quoted
-  about it — including one quoted here, which is why none is.
+  library. **Read its classification keys rather than this description of them.** The file has
+  seven top-level keys: `_what` and `_source`, which describe it, and five that classify rows.
+  `bytes_agree` and `outcome_only` are the two kinds of agreement. `bytes_disagree` is empty,
+  and its being empty is the claim that nothing disagreed. `ungeneratable` names a row the
+  re-derivation reached and could not compute — a fact about the second implementer's sandbox,
+  not about the row. `absent` names a row never attempted at all, and it is **authoritative
+  when populated** rather than something to infer by subtracting the others.
+  **Every row in this tree is in one of those five**, and that is a checked property rather
+  than a promise: the ledger is derived for the fixtures that ship, and the derivation refuses
+  to emit one that leaves a shipped row unclassified, so a release cannot be built where this
+  sentence is false. Read the file rather than any total quoted about it — including one quoted
+  here, which is why none is.
 
   **What this tree does not let you check is the circumstance.** The blinded inputs, the
   implementer's transcript, and the comparison procedure are not here, and the ledger asserts

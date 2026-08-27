@@ -30,22 +30,6 @@
       "rows_in_plan": 12,
       "rows_present": 12
     },
-    "section-3.json": {
-      "sha256": "c4472b6ac1000c11cb8e63a4509d9a8069374f87946a106dac9160b8f50bcd86",
-      "rows_in_plan": 8,
-      "rows_present": 8
-    },
-    "section-3_12.json": {
-      "sha256": "1ee21f10096f81c447589511ec4827620a731cb993e631c0755a1ae1988b6bc6",
-      "rows_in_plan": 24,
-      "rows_present": 17,
-      "rows_withdrawn_or_reserved": 7
-    },
-    "section-4.json": {
-      "sha256": "bc69ea79754beb8eb378033e2890601d325b96fa72ff982cfc647ff7be1dfedb",
-      "rows_in_plan": 13,
-      "rows_present": 13
-    },
     "section-5.json": {
       "sha256": "f600298f4c017c3bb8867bf4434b95a0a5c4465d9be55e1b3836bfb342326fa1",
       "rows_in_plan": 5,
