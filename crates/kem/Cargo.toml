@@ -11,10 +11,7 @@ publish.workspace = true
 pqsa-core.workspace = true
 ml-kem.workspace = true
 
-# Wave 1 is IMPLEMENTED, so the workspace's `unused_variables = "allow"` -- which exists only
-# to make `todo!()` stubs writable -- is turned back on here. A crate with real bodies has no
-# business tolerating an unused parameter. Cargo will not let a crate ADD to
-# `workspace.lints`, so the whole table is restated rather than inherited.
+# Restate the workspace table: crates cannot add to workspace.lints.
 [lints.rust]
 missing_docs = "deny"
 unused_variables = "deny"

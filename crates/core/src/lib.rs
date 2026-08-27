@@ -1,54 +1,16 @@
-//! The shape every rung shares: one trait, the guards, and the errors.
+//! Shared scheme interface: [`StealthScheme`], errors, §5 seed derivation, the delegation guard.
 //!
-//! # What this crate owns
+//! Protocol: `spec/ERC-VVVV-schemeid3.md` (§1 vocabulary, §5 seeds). This crate does not
+//! implement a rung.
 //!
-//! [`StealthScheme`] is the interface every rung of the ladder implements, and it exists so
-//! that a caller — a wallet, a conformance runner, a scanner service — can be written once
-//! against the ladder rather than once per rung. Everything rung-specific lives in a rung
-//! crate; **which rung crates a given tree carries depends on that tree**, and this one
-//! names none of them so the sentence stays true in a tree carrying one.
-//!
-//! [`SenderState`] is the other half, and it is a **guard rather than a convenience**. §5 of
-//! the common ERC requires announcement seeds to be derived rather than drawn freely, and the
-//! reason is not hygiene: reusing a seed reuses the KEM message, which reuses `ss`, which
-//! repeats a stealth address. A sender that draws its own bytes can violate that and nothing
-//! will tell it. So the type that hands out seeds is the only way to get one.
-//!
-//! # What this crate deliberately cannot do
-//!
-//! It has **no cryptography in it**, and no dependency that does. It cannot construct a key,
-//! derive an address, or produce an announcement. That is what makes it reviewable in an
-//! afternoon and what stops "the interface" quietly becoming a fourth implementation.
-//!
-//! It also **cannot represent a sender-side channel**, which belongs to the pairwise-channel
-//! rung rather than being a gap here. That rung's specification requires the separation be
-//! structural, because a runtime filter is guard-by-documentation — and a tree carrying
-//! only a per-payment rung has neither the crate nor the section, which is why neither is
-//! named as a pointer here.
-//!
-//! # Where the specification is
-//!
-//! §1 for the definitions and §5 for the seed derivations these guards enforce. Each item
-//! below cites the section it implements.
-//!
-//! **Sections are cited by number and not by file, deliberately.** One numbering runs across
-//! every document that specifies a rung of this ladder, so `§1` resolves in whichever of them
-//! a reader holds — and a tree carrying a different subset of those documents does not turn
-//! this header into a pointer at nothing.
-//!
-//! # Status
-//!
-//! **Implemented against the committed conformance vectors**, which existed before any
-//! of these bodies did.
+//! [`SenderState`] derives announce seeds and increments an index. Reusing a seed repeats
+//! the KEM ciphertext and the stealth address. [`StealthScheme::announce`] still takes raw
+//! `&[u8]`; using [`SenderState`] is convention, not enforced.
 
 use sha3::Shake256;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 
-/// A 32-byte value: a seed, a scalar, a shared secret, or a hash output.
-///
-/// Deliberately not distinct newtypes at this stage. Naming each role separately is the right
-/// end state and it is a large amount of surface to review before the derivations it protects
-/// are written, so it is deferred deliberately rather than overlooked.
+/// 32-byte array (seed, scalar, shared secret, or hash).
 pub type Bytes32 = [u8; 32];
 
 /// §5's domain separator for the sender-entropy derivation.
@@ -57,398 +19,161 @@ const DS_SENDER: &[u8] = b"pq-stealth/sender-seed/v1";
 /// §5's canonical KEM name for the deployed path. `kem_id` length-prefixes it.
 const KEM_NAME: &[u8] = b"ML-KEM-768";
 
-/// The view tag's width, in bytes. §1.
+/// View-tag width in bytes. §1.
 ///
-/// **Eight, and it is an exact matcher rather than a prefilter.** ML-KEM rejects implicitly, so
-/// decapsulating a ciphertext addressed to somebody else returns a pseudorandom shared secret
-/// and no error: the KEM gives a scanner no signal of its own, the view tag is the only signal
-/// there is, and its width is how much of that signal a scanner gets. At one byte a scanner does
-/// not know, and it has to resolve the ambiguity with a chain-state query — which is the
-/// disclosing step §9's RPC paragraph is about. A narrow tag does not avoid that leak; it makes
-/// it necessary.
-///
-/// It lives here rather than in each scheme's crate because §1 owns it and **every** announcement
-/// in the ladder carries one — including the pairwise rungs' first contacts.
-/// At eight bytes it also subsumes the pairwise-channel rungs' confirm tag, which is why a
-/// channel memo carries one field rather than two. Named rather than linked: the crate that
-/// defines it is not in every tree that carries this one, and a rustdoc link into an absent
-/// crate renders as a dead path.
-///
-/// Not a `u8`-typed constant and not an integer type for the tag itself: an integer lets a call
-/// site format the value at the wrong width, which produces a well-formed announcement that no
-/// conforming implementation matches. The tag is bytes.
+/// Compared in full. ML-KEM implicit rejection returns a pseudorandom secret (no error) for
+/// a foreign ciphertext, so this tag is how a scanner decides "ours". At 1 byte, 1 in 256
+/// foreign announcements look like hits and force a chain-state query (§9).
 pub const VIEW_TAG_BYTES: usize = 8;
 
-/// What went wrong.
-///
-/// Per §2.5 and §4.5, **a scanner's negative outcome is never one of these**: "not ours" is
-/// the overwhelmingly common case on a permissionless event stream, and an error path a
-/// stranger can trigger is a denial of service. Scanning returns [`Option`].
+/// Recoverable failure. A scan miss is [`Option::None`], because `announce()` is
+/// permissionless and an error path would be a DoS (§2.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    /// A length, a tag byte or a field ordering that the specification rejects. §1.
+    /// Wrong length, tag, or field layout. §1.
     Malformed,
-    /// A seed whose reduction yielded no valid scalar, after the retry bound of §1.
+    /// Scalar reduction hit §1's retry bound with no valid scalar.
     NoValidScalar,
-    /// §2.1's guard fired: a 32-byte window of the delegated object equalled the spending
-    /// seed, so delegating it would hand over spending authority. See
-    /// [`reject_if_spending_key_is_delegated`].
+    /// A 32-byte window of the delegated object equals the spending seed. §2.1.
     SpendingKeyDelegated,
-    /// §5's per-sender counter is exhausted. A wallet MUST NOT wrap it: index reuse is seed
-    /// reuse, and §5 requires that a rejected index never be retried.
+    /// Sender counter would wrap. Wrapping reuses a seed. §5.
     CounterExhausted,
-    /// The KEM refused — encapsulation to a malformed key, or decapsulation of a ciphertext
-    /// that is not one. **Never surfaced by a scanner**, which treats it as "not ours".
+    /// KEM rejected a malformed key or ciphertext. [`StealthScheme::scan`] maps this to [`None`].
     Kem,
-    /// **This announce seed is unusable; draw the next one.** §5's rejection rule, and the only
-    /// error a sender is expected to LOOP on.
+    /// This announce seed is unusable; draw the next index. The only error a sender should retry.
     ///
-    /// §5 requires that an announce seed whose derived material is invalid advance the sender's
-    /// index rather than being retried, and that the rejected index never be reused. schemeId 3
-    /// is where this is reachable: its seed is `ephemeral_seed(32) ‖ encap_seed(32)` and the
-    /// first half must be a valid secp256k1 scalar, which a uniformly drawn 32 bytes is not with
-    /// probability about 2⁻¹²⁸ per draw.
-    ///
-    /// # Why it is its own variant, and why that is not pedantry
-    ///
-    /// A bare [`Error::NoValidScalar`] would not do — that is the same error a *keygen*
-    /// returns when the master spending seed is unusable, and the same one a scan returns
-    /// when a derived offset is. The loop §5 asks for could not be written against it:
-    ///
-    /// ```text
-    /// loop {
-    ///     let seed = sender.draw_seed::<S>()?;
-    ///     match S::announce(meta, &seed) {
-    ///         Ok(a) => return Ok(a),
-    ///         Err(Error::NoValidScalar) => continue,   // ALSO catches unrelated failures
-    ///         Err(e) => return Err(e),
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// A caller writing that retries forever on a permanently broken meta-address, and one that
-    /// declines to write it violates §5 on the payment where it matters. **A specification that
-    /// requires a retry needs an API that says which failure to retry** — a property
-    /// visible only by writing the loop above, not by reading the interface.
+    /// [`Self::NoValidScalar`] also comes from keygen and from offset reduction. Looping on
+    /// that would retry a permanently broken meta-address. schemeId 3 returns this when the
+    /// first 32 bytes of the announce seed are not a valid secp256k1 scalar (~2⁻¹²⁸ per draw).
     SeedRejected,
-    /// A tracking key does not belong to the meta-address it was asked to scan for: `ek`
-    /// recomputed from its `(d, z)` seed is not the `ek` in the registry — or, on the hybrid
-    /// rungs, the point derived from the delegated viewing scalar is not the registered
-    /// viewing point. §1 requires BOTH comparisons (every delegated component against its
-    /// registered counterpart) at least once before scanning, and [`StealthScheme::bind`] is
-    /// where they run: either half wrong means a scanner that silently matches nothing,
-    /// forever, with no later error.
-    ///
-    /// **This is the one setup error the specification says MUST surface**, and the reason is
-    /// specific: a bit-flipped `(d, z)` expands through `KeyGen_internal` into a
-    /// self-consistent keypair for a *different* key, so FIPS 203's own `dk` check passes and
-    /// every subsequent scan returns "not mine" with no error anywhere. A recipient sees zero
-    /// payments for ever and has nothing to look at. There is no other mechanism in the
-    /// document by which a corrupt tracking key is detectable.
-    ///
-    /// It is emphatically NOT a scan outcome. `scan` returns [`Option`] because `announce()` is
-    /// permissionless (§2.5); this is the recipient's own key being wrong, which is not
-    /// something a stranger can trigger.
+    /// Tracking key does not match the meta-address: recomputed `ek` (and on schemeId 3 the
+    /// viewing point) differs from the registry. §1. A bit-flipped `(d, z)` expands to a
+    /// consistent keypair for a different key, so FIPS 203's own checks pass and only this
+    /// comparison notices. A stranger cannot trigger it.
     TrackingKeyMismatch,
-    /// **No conforming schemeId 6 announcement can be emitted, because §4.6 is an open
-    /// decision.** §4.4: ERC-5564's `announce()` takes the stealth address as an argument, the
-    /// address MUST be the one §4.6's mapping yields for `opk_ds`, and the mapping is not yet
-    /// specified — so the one field the call needs beyond the two §4.3 defines has no defined
-    /// value. schemeId 6's `announce` returns this unconditionally.
-    ///
-    /// # Why a variant rather than a panic, an `unimplemented!` or a missing method
-    ///
-    /// The refusal is **specified behaviour**, not an implementation gap. §4.4 forbids every
-    /// substitute — the zero address, the recipient's registered address, any value not derived
-    /// from `opk_ds` — so the correct output of a conforming `announce` today is "no
-    /// announcement", stated as a value a caller can match on. A panic would make the
-    /// specification's own state an abnormal exit; an unimplemented method would read as work
-    /// remaining rather than a decision pending. The rung is *unemittable*, and this variant is
-    /// that sentence as data.
-    ///
-    /// It is NOT retryable and NOT an input defect: no seed, meta-address or counter changes
-    /// it. Only a revision of §4.6 does, at which point the variant is deleted and every
-    /// caller that matched on it fails to compile — which is the desired upgrade path, since
-    /// each such site was written knowing the address mapping was open.
+    /// `master` and `Match` are well-formed but the spending scalar does not control
+    /// the match's stealth address. §2.6.
+    MasterKeyMismatch,
+    /// Unused in this tree.
     AddressMappingOpen,
 }
 
-/// What [`StealthScheme::keygen`] returns: the published meta-address, the secret a recipient
-/// keeps, and the secret it may delegate.
-///
-/// A named alias rather than a bare tuple because the three are easy to transpose at a call
-/// site and two of them are secrets — `Master` never leaves the device and `Tracking` may.
+/// [`StealthScheme::keygen`] output: `(Meta, Master, Tracking)` in that order.
 pub type Keys<S> = (
     <S as StealthScheme>::Meta,
     <S as StealthScheme>::Master,
     <S as StealthScheme>::Tracking,
 );
 
-/// One rung of the ladder.
+/// One stealth-address scheme. Vocabulary §1; wire and registry §6.
 ///
-/// # Why associated types rather than concrete ones
-///
-/// The five rungs differ in what a meta-address, an announcement and a match *are*: schemeId
-/// 2's announcement is a KEM ciphertext and a view tag, schemeId 4's later payments are
-/// 8-byte memos, and schemeId 6's one-time key is an ML-DSA public key. A trait over
-/// concrete byte vectors would push every one of those distinctions into runtime parsing,
-/// which is where wire-format defects live.
-///
-/// # The one thing this trait asserts about all five
-///
-/// **Keygen is deterministic in its seed.** Every rung derives its keys from bytes the caller
-/// supplies, and nothing here draws randomness. That is what makes conformance vectors
-/// possible at all, and §5's seed-only recovery depends on it.
-///
-/// Specification: §1 for the vocabulary, §6 for the wire and registry rules every
-/// implementation of this trait must satisfy.
+/// Associated types vary by scheme. Keygen is deterministic in its seed; nothing here draws
+/// randomness. The `SCHEME_ID` values in this tree are proposals, not reserved with ERC-5564.
 pub trait StealthScheme {
-    /// The ERC-5564 `schemeId` this rung claims.
-    ///
-    /// **None of 2, 3, 4, 5 or 6 is reserved with the ERC-5564 authors** — item 1 of the
-    /// common ERC's Open before submission. Until they are, this constant is a proposal, and
-    /// publishing material under an id that means something else has a live example: the
-    /// upstream reference emits Spirit vectors labelled `schemeId: 4`, which this
-    /// specification assigns to the ML-KEM-only pairwise channel.
+    /// ERC-5564 `schemeId` this scheme claims. Not reserved.
     const SCHEME_ID: u64;
 
-    /// Human-readable name, for vector files and test output. Never parsed.
+    /// Stable protocol/domain-separation name, also used in vectors and logs. Never parsed,
+    /// but changing it changes the announce-seed stream.
     const NAME: &'static str;
 
-    /// The keygen seed's length in bytes; an implementation MUST reject any other. §2.1 makes
-    /// this 96 for schemeId 2 and §2.9 makes it 128 for schemeId 3.
+    /// Keygen seed length. Other lengths are [`Error::Malformed`].
     const KEYGEN_SEED_BYTES: usize;
 
-    /// The announce seed's length in bytes, per §5.
+    /// Announce seed length. §5.
     const ANNOUNCE_SEED_BYTES: usize;
 
-    /// What a recipient publishes through ERC-6538. §6's registry column gives the size.
+    /// Published via ERC-6538.
     type Meta;
-    /// What a recipient keeps in order to spend. Never leaves the device.
+    /// Recipient spending secret. Never delegated.
     type Master;
-    /// What a recipient may hand to a scanning service. §2.1 permits delegating this and
-    /// **only** this; §9 records that a delegated scanner learns the entire payment graph.
+    /// May be handed to a scanning service. §2.1. A delegated scanner sees the whole payment graph (§9).
     type Tracking;
-    /// What a sender publishes through ERC-5564 `announce()`. §6's wire table gives the shape.
+    /// Published via ERC-5564 `announce()`.
     type Announcement;
-    /// What a successful scan yields, and what spending consumes.
+    /// Successful scan; input to [`Self::spend_key`].
     type Match;
-    /// A tracking key **already checked against a meta-address**, plus whatever scanning needs
-    /// more than once. Produced only by [`Self::bind`], which is what makes §1's check
-    /// unskippable: there is no other way to obtain the argument [`Self::scan`] takes.
-    ///
-    /// It is also where the values that do not change per announcement live. Deriving `ek` and
-    /// the viewing point inside `scan` costs a full ML-KEM key generation on every event a
-    /// scanner looks at, including every foreign one, which prices adversarial traffic at the
-    /// scanner's expense and overruns the per-announcement cost floor §2 states.
+    /// Output of [`Self::bind`]: tracking checked against a meta-address, plus values
+    /// [`Self::scan`] reuses (so `scan` does not rerun ML-KEM keygen per event).
     type Scanner;
-    /// The one-time key spending uses.
-    ///
-    /// **An associated type and not `Bytes32`.** For schemeIds 2
-    /// to 5 it is a 32-byte secp256k1 scalar. For schemeId 6 it is the parameter set's
-    /// secret-key encoding of `(CRS, tr, key_j, t0_ot, s1, s2)` — §4.7's `OSKGen` output, which
-    /// §4.8 passes to `Sign`. Fixing this to 32 bytes made the trait unimplementable by a
-    /// conforming schemeId 6 without truncating a lattice signing key, while the crate
-    /// documentation claimed the interface covered all five rungs. An API contract mismatch,
-    /// separate from that rung being undeployable.
+    /// One-time spending key. secp256k1 scalar on schemeIds 2 and 3.
     type SpendKey;
 
-    /// Derive a recipient's keys from `seed`, which MUST be [`Self::KEYGEN_SEED_BYTES`] long.
-    ///
-    /// Deterministic: the same seed gives the same three outputs, on every platform and in
-    /// every process. §5's seed-only recovery is built on that.
+    /// Derive `(meta, master, tracking)` from `seed` of length [`Self::KEYGEN_SEED_BYTES`].
     ///
     /// # Errors
     ///
-    /// [`Error::Malformed`] on a wrong length, [`Error::NoValidScalar`] if a derived scalar is
-    /// invalid after §1's retry bound, [`Error::SpendingKeyDelegated`] if §2.1's guard fires.
+    /// [`Error::Malformed`] on a wrong length, [`Error::NoValidScalar`] after §1's retry
+    /// bound, [`Error::SpendingKeyDelegated`] if §2.1's guard fires.
     fn keygen(seed: &[u8]) -> Result<Keys<Self>, Error>
     where
         Self: Sized;
 
-    /// Produce an announcement for `meta`, using `seed` from [`SenderState::draw_seed`].
+    /// Announce a payment to `meta` using `seed`.
     ///
-    /// **The seed parameter is not a convenience.** §5 requires it be derived per payment, and
-    /// taking it as a parameter is what lets [`SenderState`] be the only source of one.
+    /// `seed` should come from [`SenderState::draw_seed`]. This method does not enforce
+    /// that: the same seed twice yields the same announcement and stealth address.
     ///
     /// # Errors
     ///
-    /// [`Error::Malformed`] on a meta-address this rung does not recognise, [`Error::Kem`] on
-    /// encapsulation failure.
+    /// [`Error::Malformed`] on a meta-address this rung does not accept, [`Error::Kem`] on
+    /// encapsulation failure, [`Error::SeedRejected`] if this seed's derived material is
+    /// unusable (retry with the next index).
     fn announce(meta: &Self::Meta, seed: &[u8]) -> Result<Self::Announcement, Error>;
 
-    /// Check a tracking key against the meta-address it will scan for, and cache what scanning
-    /// needs repeatedly. **Every scan goes through this first, by construction.**
+    /// Check `tracking` against `meta` and cache what [`Self::scan`] reuses.
     ///
-    /// §1: *"A recipient or a delegated scanner MUST recompute `ek` from its `(d, z)` seed and
-    /// compare it against the `ek` in the registered meta-address, at least once before
-    /// scanning"* — and, on the hybrid rungs, the same sentence covers the viewing half: the
-    /// point derived from the delegated viewing scalar MUST be compared against the
-    /// registered viewing point in the same pass. Those comparisons are the whole reason
-    /// this function exists, and the section
-    /// states its own justification: without the comparison there is **no mechanism anywhere in
-    /// the document** by which a corrupt tracking key surfaces.
-    ///
-    /// # Why a separate step and not a check inside `scan`
-    ///
-    /// Three reasons, and the first is the one that matters.
-    ///
-    /// **It cannot be skipped.** [`Self::scan`] takes a [`Self::Scanner`] and nothing else
-    /// produces one, so an implementation that forgets the check does not compile. A
-    /// `verify_tracking()` a caller is asked to remember is the same defect with a longer
-    /// name — and this repository's standing rule is that a correction is not done until the
-    /// mechanism is prevented rather than the symptom removed.
-    ///
-    /// **It runs once.** §1 says "at least once before scanning", not per announcement. Doing
-    /// it inside `scan` recomputes an ML-KEM key generation for every event a scanner looks at,
-    /// foreign ones included — which the per-payment document's cost
-    /// floor of one decapsulation plus one scalar multiplication forbids.
-    ///
-    /// **It separates a setup error from a scan outcome.** `scan` returns [`Option`] because
-    /// `announce()` is permissionless; a wrong tracking key is the recipient's own state being
-    /// broken, and returning [`None`] for it reports "no payments" where the truth is "you
-    /// cannot see your payments".
+    /// Recomputes `ek` from `(d, z)` and compares it to the registered key; schemeId 3 also
+    /// compares the viewing point. A bit-flipped tracking seed is otherwise silent.
     ///
     /// # Errors
     ///
-    /// [`Error::TrackingKeyMismatch`] if the recomputed `ek` differs from the registered one
-    /// — or, on the hybrid rungs, if the derived viewing point differs from the registered
-    /// one: BOTH delegated components are compared, because either half wrong is a scanner
-    /// that finds nothing with no error. [`Error::Malformed`] if the tracking key or the
-    /// meta-address is not this rung's shape.
+    /// [`Error::TrackingKeyMismatch`] if a delegated component does not match the registry.
+    /// [`Error::Malformed`] if the shapes are not this scheme's.
     fn bind(tracking: &Self::Tracking, meta: &Self::Meta) -> Result<Self::Scanner, Error>;
 
-    /// Is this announcement ours?
+    /// Whether this announcement is ours.
     ///
-    /// **Returns [`Option`], never [`Result`].** §2.5 and §4.5: every negative outcome is "not
-    /// ours" rather than an error, because `announce()` is permissionless and an error path is
-    /// a denial of service a stranger can trigger. A malformed announcement, a foreign one and
-    /// a KEM failure are all [`None`].
+    /// Returns [`Option`], never [`Result`]. Malformed, foreign, and KEM-failure cases are
+    /// all [`None`] (`announce()` is permissionless, §2.5).
     ///
-    /// # Why the meta-address is an argument, and why it is checked
-    ///
-    /// §2.5 opens *"Given the tracking key, the meta-address, and an announcement already
-    /// classified as schemeId 2 per §6"* — **three** inputs. A two-input signature cannot
-    /// satisfy that sentence: a [`Self::Match`] carries a stealth address,
-    /// the address is `spending_pk + H(ss)·G`, and a tracking key does not carry
-    /// `spending_pk`. It cannot: §2.1 delegates only what a scanner needs to *detect*, and the
-    /// spending point is published in the registry rather than delegated.
-    ///
-    /// **So a two-input API cannot implement the section it cites.** Adding the point to
-    /// [`Self::Tracking`] was the other option and is worse: it makes the delegated object
-    /// carry a field §2.1 does not list, and the delegated object's exact contents are what
-    /// the 65-offset window scan is defined over.
-    ///
-    /// Both inputs live behind [`Self::bind`] because a
-    /// three-argument form would let a caller scan with a tracking key belonging to a different
-    /// meta-address — which is the failure §1 has a MUST about. The fix is not to add a check
-    /// to this function but to make the checked pair the only thing it accepts.
-    ///
-    /// This is the defect class documented stubs exist to surface — the signatures compile, so
-    /// nothing objected until a body had to satisfy the specification.
-    ///
-    /// # What this function does NOT do: replay deduplication
-    ///
-    /// §2.5 states that *a derived stealth address identifies ONE payment* and that a scanner
-    /// **MUST NOT** present two announcements deriving the same address as two payments. This
-    /// function cannot satisfy that requirement and does not try: it takes ONE announcement,
-    /// holds no state between calls, and returns the same [`Self::Match`] every time it is
-    /// handed the same input. `announce()` is permissionless, so a verbatim replay is free to
-    /// arrange and both copies pass every check here.
-    ///
-    /// **The requirement therefore binds the CALLER'S state**, which is the only thing that sees
-    /// more than one announcement: it keeps the set of stealth addresses already presented and
-    /// drops a match whose address is in it. Stating that here rather than leaving it implicit,
-    /// because a caller who reads this signature as "the scanner" builds the behaviour §2.5
-    /// forbids and nothing in this crate objects.
-    ///
-    /// **That set must outlive the scan, not the batch.** The log is append-only and `announce()`
-    /// is permissionless, so the replay is under no obligation to arrive in the same batch as the
-    /// payment — it can land in a later block range, after a restart, or in a re-scan. A caller
-    /// that deduplicates within one call satisfies §2.5 for that call and breaks it across two.
+    /// `scanner` comes from [`Self::bind`]. Stateless: the same input always yields the same
+    /// match. Deduplicating replays (same stealth address twice) is the caller's job and
+    /// must persist across batches (§2.5).
     fn scan(scanner: &Self::Scanner, ann: &Self::Announcement) -> Option<Self::Match>;
 
-    /// Derive the one-time spending key for a match.
+    /// One-time spending key for a match.
     ///
-    /// **A caller MUST have observed [`Self::scan`] return [`Some`] for this announcement
-    /// first.** §4.7 states that obligation for schemeId 6 explicitly; the upstream
-    /// reference's own caller does not discharge it — it decapsulates and derives
-    /// without scanning.
+    /// Call only after [`Self::scan`] returned [`Some`] for this announcement. SchemeIds 2
+    /// and 3 return [`Error::MasterKeyMismatch`] if `master`'s spending scalar does not
+    /// control the match's stealth address (§2.6).
     ///
     /// # Errors
     ///
-    /// [`Error::Kem`] or [`Error::NoValidScalar`] on the classical rungs;
-    /// [`Error::Malformed`] where a rung refuses malformed or cross-rung material
-    /// (schemeId 6 does, for a wrong-width match or a crossed master). The concrete
-    /// set is the implementation's.
+    /// [`Error::NoValidScalar`] if the derived scalar is invalid;
+    /// [`Error::MasterKeyMismatch`] if the key would not spend at the match address.
     fn spend_key(master: &Self::Master, m: &Self::Match) -> Result<Self::SpendKey, Error>;
 
-    /// The stealth address a match derives.
-    ///
-    /// # Why the trait needs this at all
-    ///
-    /// [`Self::Match`] is an associated type, so a caller generic over the rung cannot reach
-    /// inside it — and §2.8 lets a scanner **compare the announced address against the one it
-    /// derives**. Without an accessor that comparison is available only to code that knows the
-    /// concrete rung, which means the conformance runner cannot perform it, a generic wallet
-    /// cannot perform it, and a permission the specification grants is one this API withholds.
-    ///
-    /// Without it, an end-to-end demonstration generic over the rung can derive the
-    /// address, announce it, scan it, and then not say whether the two agreed — an
-    /// interface that compiles while no body can satisfy the specification.
+    /// Stealth address of this match. For generic code that cannot read [`Self::Match`]
+    /// fields; §2.8 compares it to the announced address.
     fn match_address(m: &Self::Match) -> [u8; 20];
 
-    /// Serialise a meta-address for ERC-6538 `registerKeys`. §6's registry rules.
+    /// Serialise a meta-address for ERC-6538 `registerKeys`. §6.
     fn meta_to_bytes(meta: &Self::Meta) -> Vec<u8>;
 
-    /// Parse a meta-address read out of the registry. [`None`] if it is not one of this rung's.
+    /// Parse a registry blob. [`None`] if it is not this scheme's.
     fn meta_from_bytes(bytes: &[u8]) -> Option<Self::Meta>;
 
-    /// Serialise an announcement into ERC-5564's `announce()` arguments —
-    /// `(stealthAddress, ephemeralPubKey, metadata)`, in that order.
+    /// ERC-5564 payload: `(stealthAddress, ephemeralPubKey, metadata)`.
     ///
-    /// §6's wire table fixes the last two, and the field ORDER within `metadata` is where
-    /// the older external implementations diverge from this document.
-    ///
-    /// # `stealthAddress` is a return value
-    ///
-    /// ERC-5564's call is
-    /// `announce(schemeId, stealthAddress, ephemeralPubKey, metadata)` — **four arguments** —
-    /// and this returned two, so **an implementer following this API could not make a
-    /// conforming call at all.** The tutorial followed the API and told a reader to call
-    /// `announce()` "with those two fields", which is not a call that exists.
-    ///
-    /// §2.4 requires the field be the address the announcement's own payment derives, and names
-    /// the failure: *"a sender that announces one address and pays another has made a payment
-    /// its recipient cannot find."* Filling a placeholder is worse than wrong — §3.4 records
-    /// that it marks the announcement as a channel opening to any observer — and a scanner
-    /// exercising §2.8's comparison rejects it.
-    ///
-    /// So the address is carried in [`Self::Announcement`] and returned here, rather than left
-    /// for a caller to recompute: recomputing it needs `ss`, which the sender has and a
-    /// serialiser should not have to ask for twice.
+    /// The address is the one this announcement's payment derives (§2.4). `schemeId` is a
+    /// separate argument of `announce()` and is not part of this triple.
     fn announcement_to_bytes(ann: &Self::Announcement) -> ([u8; 20], Vec<u8>, Vec<u8>);
 
-    /// Parse an announcement off the event stream. [`None`] if it is not one of ours, which is
-    /// the common case and is not an error.
+    /// Parse an ERC-5564 event. [`None`] if it is not this scheme's.
     ///
-    /// # Three arguments, mirroring [`Self::announcement_to_bytes`], and the third is load-bearing
-    ///
-    /// A signature of `(epk, metadata)` — the two payload fields alone — would leave both
-    /// rungs filling `stealth_address` with **twenty zero bytes**. §2.8 lets a scanner
-    /// compare the announced address against the one it derives, and a caller implementing
-    /// that MAY against such a parsed announcement rejects **every valid payment**, because
-    /// the announced side is always zero. Reserialising such a parsed announcement emits
-    /// zero as ERC-5564's `stealthAddress` for the same reason.
-    ///
-    /// The address was never missing from the world. `announce(schemeId, stealthAddress,
-    /// ephemeralPubKey, metadata)` is four arguments and a scanner reading a log has all of
-    /// them; a parser that does not ask for one encodes a gap in its own API
-    /// rather than a gap in the event, and a caller has no way to tell those apart — which
-    /// is what makes it dangerous rather than merely untidy.
-    ///
-    /// A sentinel is the wrong shape for "this field was not supplied" whenever the absent
-    /// value is indistinguishable from a real one. `[0u8; 20]` is a valid Ethereum address.
+    /// `stealth_address` is required. `[0u8; 20]` is a valid Ethereum address, so it cannot
+    /// stand in for "missing"; a parser that filled zeros would make §2.8 reject every payment.
     fn announcement_from_bytes(
         stealth_address: &[u8; 20],
         epk: &[u8],
@@ -456,66 +181,31 @@ pub trait StealthScheme {
     ) -> Option<Self::Announcement>;
 }
 
-/// The rungs whose spend key is an **exportable** secret — a secp256k1 scalar a caller hands
-/// to an ordinary ECDSA signer, which is how schemeIds 2 to 5 spend.
-///
-/// # Why this is not on [`StealthScheme`]
-///
-/// On the shared trait, every rung would have to implement it — schemeId 6 included,
-/// exposing the packed lattice signing key as raw bytes from a rung whose
-/// specification says the one-time key "MUST NOT be
-/// retained, exported, logged, backed up or transmitted" (§4.8). A trait method is an
-/// export path: generic code could copy the bytes out without ever naming the rung it was
-/// betraying. So the accessor lives here, the classical rungs implement it because handing
-/// the scalar to a signer IS their spend path, and schemeId 6 deliberately does not — its
-/// spending capability is a consuming `sign` on the concrete type, one signature per
-/// derivation, recompute rather than cache.
-///
-/// A slice rather than `[u8; 32]`, still: the width belongs to the rung, and a future
-/// exportable-key rung need not carry a scalar.
+/// Spend key as bytes for a secp256k1 ECDSA signer.
 pub trait ExportableSpendKey: StealthScheme {
-    /// The one-time spending key as bytes, for a caller generic over the exportable rungs.
+    /// One-time spending key as bytes.
     fn spend_key_bytes(k: &Self::SpendKey) -> &[u8];
 }
 
 /// §5's domain separator for the keygen-seed derivation. Distinct from the announce seed's.
 const DS_KEYGEN: &[u8] = b"pq-stealth/keygen/v1";
 
-/// §5's keygen-seed derivation: one backed-up master to every scheme's keygen seed.
+/// §5 keygen-seed derivation from a 32-byte master:
 ///
 /// ```text
-/// keygen_seed(schemeId, rung, j) = HKDF-SHA256(
-///     ikm  = keygen_master(32),
-///     salt = absent,
+/// HKDF-SHA256(
+///     ikm  = keygen_master,
+///     salt = absent,          // RFC 5869: HashLen zero bytes, not "skip Extract"
 ///     info = "pq-stealth/keygen/v1" ‖ u64be(schemeId) ‖ u64be(|rung|) ‖ rung ‖ u64be(j),
-///     L    = the scheme's keygen-seed length)
+///     L    = KEYGEN_SEED_BYTES)
 /// ```
 ///
-/// **`HKDF-SHA256` is the complete RFC 5869 construction — Extract then Expand — and an absent
-/// salt is RFC 5869 §2.2's 32 zero bytes.** §5 says so normatively, and it says so because an
-/// independent implementer working from the document found the naming ambiguous: reading `ikm =
-/// keygen_master` as a PRK and running Expand alone is a coherent reading that produces a
-/// different seed for every `schemeId` and every rung, so two conforming wallets would derive
-/// disjoint key material and neither could see the other's payments.
-///
-/// # Why this exists
-///
-/// The crates implement the *scheme* — keygen, announce, scan, spend — and every one of them
-/// takes a keygen seed as an input. §5's recovery layer sits above that and derives the seed,
-/// which is a wallet's job rather than a rung's, so nobody wrote it. The consequence was
-/// specific and worth stating: `V6-01` and `V6-04` pin this derivation, the fixtures existed,
-/// an independent re-derivation agreed with them, and **the conformance runner could not
-/// execute either row because there was no function to call**. A requirement with a fixture and
-/// no implementation is not covered; it is documented.
-///
-/// `j` starts at 0 and increments on rejection — §5 requires that a rejected index never be
-/// retried and that the accepted `j` be recorded with the backup, per (`schemeId`, `rung`) pair.
-/// That bookkeeping is the caller's; this function is the derivation only.
+/// Running Expand alone (treating `ikm` as a PRK) yields a different seed. `j` starts at 0
+/// and advances on rejection. This function only derives; the caller stores `j`.
 ///
 /// # Errors
 ///
-/// [`Error::Malformed`] if `master` is not 32 bytes, or if `length` is zero or exceeds
-/// HKDF-SHA256's 255 × 32 = 8 160-byte output limit.
+/// [`Error::Malformed`] if `master` is not 32 bytes, or if `length` is 0 or > 255 × 32.
 pub fn keygen_seed(
     master: &[u8],
     scheme_id: u64,
@@ -533,53 +223,29 @@ pub fn keygen_seed(
     info.extend_from_slice(rung);
     info.extend_from_slice(&j.to_be_bytes());
 
-    // `None` is RFC 5869's absent salt, which Extract expands to HashLen zero bytes. Written as
-    // `None` rather than as an explicit `[0u8; 32]` so the intent is the RFC's word and not a
-    // constant a reader has to check against it -- the two are equal because HMAC zero-pads a
-    // short key to the block size, and `keygen_seed_matches_an_explicit_zero_salt` asserts it.
+    // RFC 5869 absent salt = HashLen zeros. `None` and `Some(&[0u8; 32])` agree; a test pins it.
     let hk = hkdf::Hkdf::<sha2::Sha256>::new(None, master);
     let mut out = vec![0u8; length];
     hk.expand(&info, &mut out).map_err(|_| Error::Malformed)?;
     Ok(out)
 }
 
-/// The only way to get an announce seed, which is the point.
+/// Per-sender announce-seed state: master and next unused index. §5.
 ///
-/// # Why a type and not a function
-///
-/// §5 requires `seed_i = SHAKE256(domain ‖ master ‖ u64be(i))` with `i` never reused, and a
-/// free function taking `i` puts the counter in the caller's hands. Holding it here means a
-/// wallet cannot reuse an index without reaching for a second `SenderState`, which is
-/// something a reviewer can see.
-///
-/// # What must be persisted
-///
-/// **`master` and `i` together**, per §5. A wallet that cannot persist `i` MUST NOT use a
-/// derived seed at all — losing the counter and continuing is index reuse, and index reuse
-/// repeats a stealth address.
-///
-/// Specification: §5, in full.
+/// Persist both. Losing the counter and continuing reuses an index, which repeats a stealth
+/// address. [`StealthScheme::announce`] still accepts any `&[u8]`. Two `SenderState` values
+/// resumed at the same counter also collide.
 pub struct SenderState {
     _master: Bytes32,
     _counter: u64,
 }
 
 impl SenderState {
-    /// Resume from a persisted `(master, counter)` pair, where **`counter` is the next UNUSED
-    /// index** — not the last used one.
+    /// Resume from a persisted pair. `counter` is the **next unused** index, not the last used.
     ///
-    /// §5 defines `i` as strictly increasing and never reused, so `resume(m, 42)` means 42 has
-    /// not been drawn yet: the next [`Self::draw_seed`] consumes 42 and [`Self::counter`] then
-    /// returns 43. A fresh sender starts at 0.
-    ///
-    /// **Off by one in the other direction repeats the previous index after every restart**,
-    /// which repeats the seed, the KEM message and the stealth address, and links two payments
-    /// publicly and permanently. Stated on this type because a caller reads the type, not the
-    /// tutorial, and "next unused" versus "last used" is exactly the off-by-one that repeats a seed.
-    ///
-    /// There is deliberately **no** constructor that starts a fresh counter without the caller
-    /// saying so: "new" and "resumed" look identical at a call site, and choosing wrong reuses
-    /// every index.
+    /// `resume(m, 42)` consumes 42 on the next [`Self::draw_seed`]. Passing the last-used
+    /// index after restart repeats a seed. There is no `new()`: a fresh sender is
+    /// `resume(master, 0)`.
     #[must_use]
     pub fn resume(master: Bytes32, counter: u64) -> Self {
         Self {
@@ -588,36 +254,26 @@ impl SenderState {
         }
     }
 
-    /// The next unused index, to persist alongside `master`. Read it after every
-    /// [`Self::draw_seed`] and store what it returns — not what was passed to
-    /// [`Self::resume`].
+    /// The next unused index, to persist alongside `master`. Store this after every
+    /// [`Self::draw_seed`], not the value passed to [`Self::resume`].
     #[must_use]
     pub fn counter(&self) -> u64 {
         self._counter
     }
 
-    /// Draw the next announce seed for rung `S`, advancing the counter.
+    /// Draw the next announce seed for rung `S` and advance the counter.
     ///
-    /// # Why the rung is a type parameter
-    ///
-    /// §5 binds the rung into the derivation, and binding [`StealthScheme::SCHEME_ID`] alone
-    /// is **not sufficient** — the three schemeId 6 levels share an id and a seed length, so
-    /// one master and one counter would produce the byte-identical KEM message for all three.
-    /// The upstream guard records that as a defect it actually had. §5's rule is
-    /// per-`(schemeId, rung)`.
+    /// The seed binds both [`StealthScheme::SCHEME_ID`] and [`StealthScheme::NAME`].
     ///
     /// # Errors
     ///
-    /// [`Error::CounterExhausted`] rather than wrapping.
+    /// [`Error::CounterExhausted`] if the index would wrap.
     pub fn draw_seed<S: StealthScheme>(&mut self) -> Result<Vec<u8>, Error> {
         self.draw(S::SCHEME_ID, S::NAME, S::ANNOUNCE_SEED_BYTES)
     }
 
-    /// §5's rejection loop, as one call, so a caller cannot get it wrong.
-    ///
-    /// Draws seeds and hands each to `attempt` until one is accepted, advancing the index on
-    /// every rejection and never reusing one. Stops on [`Error::CounterExhausted`], on any error
-    /// other than [`Error::SeedRejected`], or after `tries` attempts.
+    /// Draw seeds until `attempt` accepts one. The draw is inside the loop so a rejection
+    /// advances the index. Other errors stop immediately.
     ///
     /// ```no_run
     /// # use pqsa_core::{SenderState, StealthScheme, Error};
@@ -627,31 +283,19 @@ impl SenderState {
     /// # }
     /// ```
     ///
-    /// # Why a combinator rather than documentation
-    ///
-    /// The loop is four lines and every caller has to write the same four, correctly, including
-    /// the part that is easy to get wrong: **the index must advance on rejection**, which means
-    /// the seed must be drawn inside the loop and not before it. A caller who hoists the draw
-    /// retries the same rejected index for ever, which is precisely the reuse §5 exists to
-    /// forbid — and it is the natural way to write it, because drawing once looks like the
-    /// efficient choice.
-    ///
-    /// `tries` is bounded rather than unbounded because a permanently unusable meta-address must
-    /// terminate. Four is generous: schemeId 3's rejection probability is about 2⁻¹²⁸ per draw,
-    /// so more than one rejection in a row is evidence of a defect and not of luck.
+    /// `tries == 0` is treated as 1 (`tries.max(1)`).
     ///
     /// # Errors
     ///
-    /// Whatever `attempt` returns other than [`Error::SeedRejected`];
-    /// [`Error::CounterExhausted`] if the index runs out; [`Error::SeedRejected`] if `tries`
-    /// attempts were all rejected, which is a signal to stop and look rather than to keep going.
+    /// [`Error::CounterExhausted`] if an index would wrap; [`Error::SeedRejected`] if every
+    /// attempt rejects its seed; otherwise the first non-rejection error from `attempt`.
     pub fn announce_retrying<S, T, F>(&mut self, tries: u32, mut attempt: F) -> Result<T, Error>
     where
         S: StealthScheme,
         F: FnMut(&[u8]) -> Result<T, Error>,
     {
         for _ in 0..tries.max(1) {
-            // INSIDE the loop. Drawing before it is the defect this function exists to prevent.
+            // Draw inside the loop: hoisting it retries the same rejected index.
             let seed = self.draw_seed::<S>()?;
             match attempt(&seed) {
                 Err(Error::SeedRejected) => continue,
@@ -661,17 +305,10 @@ impl SenderState {
         Err(Error::SeedRejected)
     }
 
-    /// The counter-advancing draw, without the trait bound.
-    ///
-    /// Exists so this crate's own tests can exercise §5 without depending on a scheme crate:
-    /// `pqsa-core` sits below all of them, so a test needing a real [`StealthScheme`] would
-    /// have to invert the dependency graph or duplicate the derivation — and a duplicated
-    /// derivation is how the two halves of §5 came to disagree in the first place.
+    /// Counter-advancing draw without a [`StealthScheme`] bound (tests and [`Self::draw_seed_untyped`]).
     fn draw(&mut self, scheme_id: u64, rung: &str, n: usize) -> Result<Vec<u8>, Error> {
         let i = self._counter;
-        // Exhaustion is an error, never a wrap. A wrapped counter reuses index 0, and index
-        // reuse repeats the stealth address — the failure §5 exists to prevent — so failing
-        // loudly is the only acceptable behaviour at the boundary.
+        // Do not wrap: a wrapped counter reuses index 0.
         self._counter = i.checked_add(1).ok_or(Error::CounterExhausted)?;
         Ok(announce_seed(
             &self._master,
@@ -682,23 +319,12 @@ impl SenderState {
         ))
     }
 
-    /// Draw the next announce seed for a scheme family this crate cannot name by trait.
-    ///
-    /// **A HAZARDOUS low-level door, and public only because it has to be.**
-    /// [`Self::draw_seed`] is the front door for [`StealthScheme`] rungs. The channel rungs
-    /// live in a crate above this one and are deliberately not `StealthScheme` — their
-    /// announce is a channel opening with retained state, not a per-payment announcement —
-    /// so their crate wraps this with its own typed front door, and THAT wrapper is the
-    /// call an integrator makes. What this door does not and cannot check: the three values
-    /// are free text and numbers, a wrong `rung` string or width derives a different seed
-    /// stream *silently*, and every call advances the shared index whether or not the seed
-    /// is used — the typed prevention the wrappers claim is a convention here, not a
-    /// property. **Take the three values off a scheme type's constants, or do not call
-    /// this.**
+    /// Untyped draw. A wrong `rung` string or `n` silently selects a different seed stream
+    /// and still advances the counter. Prefer [`Self::draw_seed`].
     ///
     /// # Errors
     ///
-    /// [`Error::CounterExhausted`] when the index space is spent.
+    /// [`Error::CounterExhausted`] if the index would wrap.
     pub fn draw_seed_untyped(
         &mut self,
         scheme_id: u64,
@@ -715,46 +341,19 @@ impl SenderState {
     }
 }
 
-/// Reject a keygen seed that would hand spending authority to a scanner.
+/// Reject a keygen seed that would put the spending scalar in the delegated object. §2.1.
 ///
-/// # The rule, and why it is not the obvious one
-///
-/// §2.1 requires scanning **the delegated object as a whole** at every 32-byte offset, not
-/// each of its fields separately. For schemeId 3 the delegated object is `viewing_ec ‖ dk` —
-/// 96 bytes, so 65 window positions, of which per-field scanning covers 34. The 31 straddling
-/// positions can place the spending seed verbatim in bytes handed to a scanning service and
-/// pass a per-field check.
-///
-/// # Why it is public here rather than private to a rung
-///
-/// Because upstream it is `pub(crate)` in a crate that schemeId 6's does not depend on, so
-/// that rung cannot reach it. One guard, one place, reachable by every rung.
-///
-/// # The signature takes ONE slice, not a list of fields, and that is the point
-///
-/// `delegated: &[&[u8]]` — a list of the fields making up the delegated object — would
-/// **steer a caller into
-/// exactly the defect the function exists to prevent.** Given a list, the obvious
-/// implementation scans each element; the obvious *test* passes; and the 31 straddling
-/// offsets are missed. A guard whose API invites the wrong implementation is worse than no
-/// guard, because it also tells the reader the question has been handled.
-///
-/// So the caller concatenates first, and this takes the result. Concatenation is the caller's
-/// job because only the caller knows the field order that goes on the wire, and the order is
-/// what determines which offsets straddle.
+/// Scan every 32-byte window of the **concatenated** delegated bytes, including windows that
+/// straddle field boundaries. A per-field scan of schemeId 3's `viewing_ec ‖ dk` (96 B)
+/// covers 34 positions; the full scan covers 65. The caller concatenates in wire order.
 ///
 /// # Errors
 ///
-/// [`Error::SpendingKeyDelegated`] if any 32-byte window of `delegated` equals
-/// `spending_seed`. There are `delegated.len() - 31` windows: 33 for a 64-byte `dk`, and
-/// **65** for a 96-byte `viewing_ec ‖ dk`, not the 34 a per-field scan reaches.
+/// [`Error::SpendingKeyDelegated`] if any window equals `spending_seed`.
 pub fn reject_if_spending_key_is_delegated(
     spending_seed: &Bytes32,
     delegated: &[u8],
 ) -> Result<(), Error> {
-    // EVERY 32-byte window, including the ones that straddle the boundary between the fields
-    // the caller concatenated. `windows` yields exactly `len - 31` of them, which is what
-    // `delegation_window_count` states and what a per-field scan misses 31 of.
     for window in delegated.windows(32) {
         if window == spending_seed.as_slice() {
             return Err(Error::SpendingKeyDelegated);
@@ -763,22 +362,13 @@ pub fn reject_if_spending_key_is_delegated(
     Ok(())
 }
 
-/// §5's announce-seed derivation, shared by every rung.
+/// §5 announce seed. Integers are u64be. `i` sits immediately after `master` (V6-05).
 ///
 /// ```text
-/// seed_i = SHAKE256(DS || master(32) || u64be(i)
-///                   || u64be(schemeId) || u64be(|rung|) || rung
-///                   || u64be(|kem_id|) || kem_id, n)
+/// SHAKE256(DS || master(32) || u64be(i)
+///          || u64be(schemeId) || u64be(|rung|) || rung
+///          || u64be(|kem_id|) || kem_id, n)
 /// ```
-///
-/// **The field order is load-bearing and every integer is eight bytes big-endian.** `i` sits
-/// immediately after `master`, not at the end — an easy transposition to make, so `V6-05`
-/// pins the order: a wrong one yields a well-formed seed
-/// that no conforming implementation reproduces.
-///
-/// `kem_id` is **structural** — `u64be(|name|) || name`, so a wrapper embeds the identifier of
-/// what it wraps rather than replacing it. Binding the rung alone is not enough: the same rung
-/// over two KEMs is two different things that must not share a seed stream.
 fn announce_seed(master: &Bytes32, scheme_id: u64, rung: &[u8], i: u64, n: usize) -> Vec<u8> {
     let kem_id = kem_id(KEM_NAME);
     let mut input = Vec::with_capacity(DS_SENDER.len() + 32 + 8 * 4 + rung.len() + kem_id.len());
@@ -805,12 +395,7 @@ fn kem_id(name: &[u8]) -> Vec<u8> {
     out
 }
 
-/// The number of 32-byte windows in a delegated object of `len` bytes.
-///
-/// Exposed so a conformance test can assert the count rather than trust it, because the count
-/// is the whole difference between the correct scan and the one that ships the spending key:
-/// `len - 32 + 1`, never `len / 32`. Returns 0 for `len < 32`, where there is no window at all
-/// and a loop written as `0..=len - 32` on unsigned arithmetic would panic instead.
+/// Number of 32-byte windows in `len` bytes: `len - 31`, or 0 if `len < 32`.
 #[must_use]
 pub const fn delegation_window_count(len: usize) -> usize {
     if len < 32 { 0 } else { len - 31 }
@@ -820,11 +405,7 @@ pub const fn delegation_window_count(len: usize) -> usize {
 mod tests {
     use super::*;
 
-    /// A minimal rung, so `draw_seed` can be exercised without depending on a scheme crate.
-    ///
-    /// It carries §5's canonical name for schemeId 2, because the NAME is bound into the
-    /// derivation: two rungs sharing a `schemeId` and differing only in name must produce
-    /// different seeds, and that is exactly what the three schemeId 6 levels need.
+    /// Stand-in so §5 can be tested without a scheme crate. `NAME` is bound into the seed.
     struct Rung2;
 
     impl Rung2 {
@@ -838,14 +419,7 @@ mod tests {
         announce_seed(&master, scheme_id, rung.as_bytes(), i, n)
     }
 
-    /// `V6-05`, from `vectors/section-5.json`, which was committed before this code existed.
-    ///
-    /// The three values are the ones a conforming sender draws. They are written out here
-    /// rather than read from the file on purpose: this crate has no JSON dependency, and
-    /// the conformance runner is what checks the whole committed set where a tree carries
-    /// one — named rather than pathed, since this crate ships into trees that carry the
-    /// fixtures without it. What this test buys is that `pqsa-core` alone cannot regress the
-    /// derivation.
+    /// V6-05 known answers (transcribed; this crate has no JSON dependency).
     #[test]
     fn announce_seed_matches_v6_05() {
         assert_eq!(
@@ -877,12 +451,7 @@ mod tests {
         );
     }
 
-    /// V6-05's `wrong` column: the transposition this test exists to catch.
-    ///
-    /// The index appended last instead of placed after `master` yields a well-formed 32-byte
-    /// seed that no conforming implementation reproduces. Asserting the WRONG value is not
-    /// produced is weaker than asserting the right one is; both are here because the wrong
-    /// value is what the generator emitted for a day, so a regression to it is a real path.
+    /// V6-05: `i` after `master`, not appended last.
     #[test]
     fn the_index_is_not_appended_last() {
         let wrong = "c16df0c3b3391be833173fe20b7aab90665a5d9ba2c3f4f15b2e59b624035c1c";
@@ -893,7 +462,7 @@ mod tests {
         );
     }
 
-    /// `kem_id` is `u64be(|name|) || name` — 18 bytes for `"ML-KEM-768"`, per §5.
+    /// `kem_id` is `u64be(|name|) || name` (18 bytes for `"ML-KEM-768"`). §5.
     #[test]
     fn kem_id_is_length_prefixed_and_18_bytes() {
         let id = kem_id(KEM_NAME);
@@ -906,10 +475,7 @@ mod tests {
         );
     }
 
-    /// §2.1's scan is over the WHOLE delegated object, so the count is `len - 31`.
-    ///
-    /// 33 windows for a 64-byte `dk`, and **65** for a 96-byte `viewing_ec || dk` — not the 34
-    /// a per-field scan reaches. The 31 straddling positions are the defect.
+    /// Window count is `len - 31` (65 for 96 B, not 34).
     #[test]
     fn delegation_window_counts() {
         assert_eq!(delegation_window_count(64), 33);
@@ -923,8 +489,7 @@ mod tests {
         assert_eq!(delegation_window_count(0), 0);
     }
 
-    /// The guard fires on a straddling offset, which is the whole point of scanning the
-    /// concatenation. Offset 17 of a 96-byte object lies across the 32-byte boundary.
+    /// Guard catches windows that straddle the 32-byte field boundary (e.g. offset 17).
     #[test]
     fn the_guard_catches_a_straddling_offset() {
         let spending: Bytes32 = [0x11; 32];
@@ -943,8 +508,7 @@ mod tests {
         assert!(reject_if_spending_key_is_delegated(&spending, &clean).is_ok());
     }
 
-    /// `resume(m, 42)` means 42 is the next UNUSED index, so drawing consumes it and the
-    /// counter becomes 43. Off by one the other way repeats an index after every restart.
+    /// `resume` takes the next unused index; drawing consumes it.
     #[test]
     fn the_counter_is_next_unused() {
         let mut st = SenderState::resume([0xA5; 32], 0);
@@ -960,8 +524,7 @@ mod tests {
         );
     }
 
-    /// A rung's NAME is bound in, so two rungs sharing a `schemeId` get different seeds.
-    /// Without this the three schemeId 6 levels would draw the byte-identical KEM message.
+    /// `NAME` is bound in: two rungs with the same id must not share a seed stream.
     #[test]
     fn the_rung_name_is_bound_not_only_the_id() {
         let a = seed(6, "schemeId 6 (Spirit, level 2)", 0, 32);
@@ -973,13 +536,7 @@ mod tests {
         b.iter().map(|x| format!("{x:02x}")).collect()
     }
 
-    /// §5's rejection loop advances the index, and does so because the draw is inside the loop.
-    ///
-    /// The rejection cannot be reached by choosing inputs — that is what `V6-03` records — so the
-    /// `attempt` closure stands in for it: it rejects the first two seeds and accepts the third,
-    /// and the test asserts the three seeds were DIFFERENT. That is the property §5 actually
-    /// requires, and the one a caller who hoists the draw out of the loop breaks while still
-    /// appearing to retry.
+    /// Rejection advances the index; a non-rejection error stops; exhausting `tries` reports SeedRejected.
     #[test]
     fn a_rejected_seed_advances_the_index_and_is_never_reused() {
         struct Fake;
@@ -1047,8 +604,7 @@ mod tests {
             "and the index advanced once per attempt"
         );
 
-        // An error that is NOT a rejection stops immediately: retrying a broken meta-address
-        // for ever is the failure the bound and this branch exist to prevent.
+        // Non-rejection errors are not retried.
         let mut state = SenderState::resume([0x11; 32], 0);
         let mut calls = 0;
         let out = state.announce_retrying::<Fake, usize, _>(4, |_| {
@@ -1058,7 +614,7 @@ mod tests {
         assert_eq!(out, Err(Error::Malformed));
         assert_eq!(calls, 1, "a non-rejection error is not retried");
 
-        // And exhausting the tries reports the rejection rather than looping.
+        // Exhausting tries reports SeedRejected.
         let mut state = SenderState::resume([0x11; 32], 0);
         let out = state.announce_retrying::<Fake, usize, _>(2, |_| Err(Error::SeedRejected));
         assert_eq!(out, Err(Error::SeedRejected));
@@ -1069,12 +625,7 @@ mod tests {
     const RUNG_2: &[u8] = b"schemeId 2 (direct KEM)";
     const RUNG_3: &[u8] = b"schemeId 3 (direct KEM, hybrid)";
 
-    /// `V6-01`, both rungs, against the committed fixture.
-    ///
-    /// The bytes are transcribed from `vectors/section-5.json`, which is the thing this is
-    /// checked against. That makes this a *second implementation* of §5's derivation agreeing
-    /// with the Python that generated the fixture — the two are independent in the part that
-    /// matters, since `tools/vecprim.py` hand-rolls HKDF over `hmac` and this calls RustCrypto's.
+    /// V6-01 known answers (RustCrypto HKDF vs the Python generator).
     #[test]
     fn v6_01_the_keygen_seed_derivation() {
         let s2 = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
@@ -1091,21 +642,12 @@ mod tests {
         );
     }
 
-    /// `V6-01`'s `wrong` column, which is the half that makes the row a test rather than a
-    /// transcription. Each of these is a plausible misreading of §5 and each produces a
-    /// well-formed seed that recovers keys the recipient never had.
+    /// V6-01: short L is a prefix; a shortened or omitted rung name is a different seed.
     #[test]
     fn v6_01_the_named_wrong_answers_are_wrong() {
         let right = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
 
-        // "L = 32 always", instead of the scheme's seed length -- and the interesting part is
-        // that this is NOT a different string. HKDF-Expand is counter-based, so a shorter L is a
-        // PREFIX of a longer one for the same info. **This error is undetectable by comparing
-        // content and is caught only by the seed-length check.**
-        //
-        // A `fixed_L_32` generated with a shortened rung name as well would change two
-        // variables at once and look like a distinguishable wrong answer — which is what
-        // writing this test against the fixture is for.
+        // HKDF-Expand: shorter L is a prefix of longer L for the same info.
         let fixed_l = keygen_seed(&MASTER, 2, RUNG_2, 0, 32).unwrap();
         assert_eq!(
             fixed_l[..],
@@ -1114,8 +656,6 @@ mod tests {
         );
         assert_ne!(fixed_l.len(), right.len(), "so LENGTH is the entire signal");
 
-        // The shortened name, which IS a different string -- and shares no prefix with the
-        // right answer, because `info` changed rather than `L`.
         let short_name = keygen_seed(&MASTER, 2, b"schemeId 2", 0, 96).unwrap();
         assert_eq!(
             hexlify(&short_name),
@@ -1126,7 +666,6 @@ mod tests {
         );
         assert_ne!(right, short_name);
 
-        // The rung name omitted from `info` altogether.
         let no_rung = keygen_seed(&MASTER, 2, b"", 0, 96).unwrap();
         assert_eq!(
             hexlify(&no_rung),
@@ -1136,11 +675,7 @@ mod tests {
         assert_ne!(right, no_rung);
     }
 
-    /// `V6-04`: a rejection advances the index of that pair and **no other**.
-    ///
-    /// The trigger cannot be reached by choosing inputs — it needs a seed injected past the
-    /// derivation — so what is pinned is the consequence, which is the half the superseded rule
-    /// got wrong: it drew a fresh `keygen_master`, which would move every other rung's seeds too.
+    /// V6-04: advancing `j` for one (schemeId, rung) pair leaves the others alone.
     #[test]
     fn v6_04_a_rejection_advances_one_index_and_leaves_the_others() {
         let a0 = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
@@ -1153,15 +688,11 @@ mod tests {
                 .replace(' ', "")
         );
         assert_ne!(a0, a1, "the index moved the seed");
-        // The point of the row: rung B is untouched by rung A's rejection, which is only true
-        // because `keygen_master` is unchanged and `j` is per (schemeId, rung).
         assert_eq!(b0, keygen_seed(&MASTER, 3, RUNG_3, 0, 128).unwrap());
         assert_ne!(b0[..96], a1[..], "and the two rungs never collide");
     }
 
-    /// RFC 5869's absent salt is HashLen zero bytes, and the code writes `None`. Asserted rather
-    /// than trusted, because §5 now makes the equivalence normative and a reader checking the
-    /// document against the code should find the claim tested somewhere.
+    /// `Hkdf::new(None, …)` equals `Some(&[0u8; 32])`.
     #[test]
     fn keygen_seed_matches_an_explicit_zero_salt() {
         let info_free = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
@@ -1180,8 +711,7 @@ mod tests {
         assert_eq!(info_free, explicit);
     }
 
-    /// Lengths and bounds. `L = 0` and `L > 255 * 32` are both `Malformed`, and a 31- or
-    /// 33-byte master is too — §5 fixes it at 32.
+    /// `L = 0`, `L > 255*32`, and a master other than 32 bytes are `Malformed`.
     #[test]
     fn keygen_seed_rejects_out_of_range_inputs() {
         assert!(matches!(

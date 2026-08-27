@@ -35,10 +35,11 @@ is why each says which it is: in gas the registry entry is 8.4×, and in bytes t
 is 33.2×. Gas is the one that matters for the announcement because it recurs, and bytes for the
 registry entry because it is stored.
 
-**Hybrid, deliberately.** The payment secret combines an ECDH secret with the KEM secret, so
-the rung's privacy survives either primitive failing. That costs 33 bytes of registry entry and
-about 2.4% of announcement gas against a KEM-only variant, and the two are different
-`schemeId`s because their meta-address lengths differ.
+**Hybrid.** `ss` is SHA3-256 of the ECDH secret, the ML-KEM secret, and the public fields
+`epk`, `ct`, `viewing_pk_ec`, `ek`. Both secrets are inputs. Spending is secp256k1 ECDSA.
+The hash does not change `ct` or `ek`; those stay public (log and registry). Cost: 33 bytes
+on the registry entry and about 2.4% of announcement gas versus the KEM-only variant; the
+two are different `schemeId`s because their meta-address lengths differ.
 
 ## What is here
 
