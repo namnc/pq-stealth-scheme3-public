@@ -28,8 +28,12 @@ layer is post-quantum, the money is not.
 | a whole payment — announce, fund, spend | **111 510** |
 
 For comparison, classical ERC-5564 announces 34 B for 28 067 gas and registers 66 B for
-115 310. The registry entry is **18.9×** the classical one and is paid once per `schemeId`,
-not once per payment; the announcement is 2.48× and is paid every time.
+115 310. The registry entry is **18.9× the classical one in bytes** — 1 250 against 66 — and is
+paid once per `schemeId`, not once per payment. The announcement is **2.48× in gas** — 69 570
+against 28 067 — and is paid every time. **The two multiples are not on the same basis**, which
+is why each says which it is: in gas the registry entry is 8.4×, and in bytes the announcement
+is 33.2×. Gas is the one that matters for the announcement because it recurs, and bytes for the
+registry entry because it is stored.
 
 **Hybrid, deliberately.** The payment secret combines an ECDH secret with the KEM secret, so
 the rung's privacy survives either primitive failing. That costs 33 bytes of registry entry and

@@ -31,7 +31,11 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
    error anywhere.
 3. **The hybrid combiner**, field by field — the order of the inputs, the domain separators, the
    length prefixes, and whether the view tag is a separate digest from the offset.
-4. **The fixtures** in `vectors/`, and whether each pins the normative sentence it claims to.
+4. **The fixtures that have a specification here** — `vectors/section-2_9.json` (this rung) and
+   the shared `vectors/section-1.json` and `vectors/section-5.json` — and whether each pins the
+   normative sentence it claims to. **The other four files are not in scope and §3 says why**:
+   they belong to rungs whose text is absent, so there is no sentence in this tree for a row of
+   theirs to be wrong against. That is 51 of the 75 rows; budget the engagement for 24.
 5. **The specification text itself.** Ambiguity is a defect here even where the bytes agree:
    two conforming wallets that read a sentence differently derive disjoint key material and
    neither can see the other's payments. That has happened once already, on an `HKDF-SHA256`
@@ -92,12 +96,17 @@ counted:
 - **A ledger of blinded independent re-derivation — and read what it is carefully.**
   `vectors/rederivation.json` is a record that a second implementer computed rows from the
   specification prose alone, with no access to the expected values and no elliptic-curve
-  library. It sorts the rows into three lists: those whose **bytes** agreed, those confirmed
-  only at the level of the **outcome**, and those not generatable at all, and it records that
-  none disagreed. Those lists cut across the specification's sections and coincide with no
-  section's row list, so read the file rather than any total quoted about it — including one
-  quoted here, which is why none is. A row in none of the three has no witness outside this
-  project.
+  library. **Read its keys rather than this description of them**, because there are five and a
+  summary is where a category goes missing. `bytes_agree` and `outcome_only` are the two kinds
+  of agreement; `bytes_disagree` is empty and its being empty is the claim that none disagreed;
+  `ungeneratable` names a row the re-derivation could not compute, which is a fact about the
+  second implementer's sandbox rather than about the row; and `absent` names a row it did not
+  attempt at all. The last two are different and the file keeps them apart: an `ungeneratable`
+  row was reached and not computed, an `absent` row was never reached. **`absent` is authoritative
+  when populated** — it is empty in the tree you are holding, so every row here sits in one of
+  the other four, but do not reconstruct it by subtraction. Those lists cut across the specification's
+  sections and coincide with no section's row list, so read the file rather than any total quoted
+  about it — including one quoted here, which is why none is.
 
   **What this tree does not let you check is the circumstance.** The blinded inputs, the
   implementer's transcript, and the comparison procedure are not here, and the ledger asserts
