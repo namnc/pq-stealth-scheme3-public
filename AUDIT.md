@@ -51,11 +51,20 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
 - **Deployment.** Nothing here is a deployment proposal. No contract of ours is on any network,
   and the announcer under `contracts/` is present so the gas harnesses have something real to
   measure.
-- **The sibling rungs.** The KEM-only per-payment variant's code ships inside
-  `crates/per-payment` — §2.8 requires the code from the shared secret onward be shared rather
-  than duplicated — but its specification does not ship and its behaviour is not what this
-  engagement is about. Its presence is still in scope in one direction: whether it can affect
-  this rung. A cross-rung announcement reaching this rung's scanner is specified behaviour, and
+- **The sibling rungs — whose code and fixtures you are nonetheless holding.** The KEM-only
+  per-payment variant's code ships inside `crates/per-payment` — §2.8 requires the code from
+  the shared secret onward be shared rather than duplicated — but its specification does not
+  ship and its behaviour is not what this engagement is about.
+  The same is true of the fixtures, and there it is the larger share: **51 of the 75 rows in
+  `vectors/` pin rungs whose text is absent** — `section-2.json`, `section-3.json`,
+  `section-3_12.json` and `section-4.json` are wholly theirs, and `vectors/PLAN.md` covers the
+  ladder rather than this rung. Only `section-2_9.json` (this rung) and the shared
+  `section-1.json` and `section-5.json` are reviewable against a document you have. **Do not
+  spend the engagement on the other four.** They are here because the generator emits the set
+  as a set and `--check` compares the whole of it; a finding that one of their rows is wrong
+  cannot be adjudicated in this tree, since the sentence it would be wrong against is not in it.
+  The siblings' presence is in scope in exactly one direction: whether they can affect this
+  rung. A cross-rung announcement reaching this rung's scanner is specified behaviour, and
   §6 requires a `schemeId` mismatch be a **skip** rather than an error, because an error is a
   permanent scan abort any stranger can trigger for one announcement's gas.
 

@@ -45,7 +45,7 @@ about 2.4% of announcement gas against a KEM-only variant, and the two are diffe
 | `crates/ec` | secp256k1: SEC1 decoding, ECDH, scalar and point addition, the address |
 | `crates/kem` | ML-KEM-768, over `ml-kem`, checked against NIST's own ACVP cases |
 | `crates/per-payment` | the rung itself |
-| `vectors/` | the fixtures, with `PLAN.md` saying what each row pins and which wrong output it distinguishes |
+| `vectors/` | the fixtures, with `PLAN.md` saying what each row pins and which wrong output it distinguishes — for the whole ladder, not this rung alone; see the last section |
 | `harness/` | the gas harnesses: real transactions against a real node, with their receipts |
 | `tools/` | the fixture generator, the size derivation and the gas verifier, each with its self-test |
 | `contracts/` | the ERC-5564 announcer the gas harnesses measure against |
@@ -79,12 +79,24 @@ persisting.
   does not satisfy that**, the specification says so in place, and what ships instead is the
   generator: the fixtures are plain JSON and their provenance is independent of the code they
   check.
-- **No sibling rungs.** The ladder this rung belongs to has others — a KEM-only per-payment
-  variant, a pairwise-channel pair, and a post-quantum *spending* rung. None of their
-  specifications ship here, which is the point of this tree.
-  The KEM-only variant's code does ship, inside `crates/per-payment`, because §2.8 requires the
+- **No sibling specifications — but their fixtures are here, and most of the fixtures are
+  theirs.** The ladder this rung belongs to has others: a KEM-only per-payment variant, a
+  pairwise-channel pair, and a post-quantum *spending* rung. **None of their specifications
+  ship**, which is the point of this tree. Two other things of theirs do, and a reader who
+  takes the heading at its word will be surprised by both.
+  The KEM-only variant's **code** ships inside `crates/per-payment`, because §2.8 requires the
   code from the shared secret onward be shared rather than duplicated: a crate carrying only
   this rung would violate the document it implements.
+  Their **fixtures** ship too, and they are the majority of `vectors/`. Of 75 rows, 24 bear on
+  this rung — `section-1.json` and `section-5.json` pin primitives and seed derivations shared
+  across the ladder, and `section-2_9.json` is this rung. The other 51 are four whole files
+  belonging to rungs whose text is absent: `section-2.json` (KEM-only per-payment),
+  `section-3.json` and `section-3_12.json` (the channel pair), `section-4.json` (spending).
+  `vectors/PLAN.md` is one document for all of them and is titled so. They ship because the
+  generator emits the set as a set and its `--check` mode compares the whole of it; **nothing
+  in this tree specifies what they pin**, so treat them as provenance for the generator rather
+  than as anything you can review, and read `section-2_9.json`, `section-1.json` and
+  `section-5.json` as the rows this engagement is about.
 - **No pinned command output.** Commands above are runnable; nothing here records what they
   printed, so run them.
 - **Nothing is deployed.** No contract of ours is on any network, no `schemeId` is reserved, and
