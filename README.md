@@ -94,7 +94,12 @@ every fixture row present.
   rung's fixtures do not ship either, and `vectors/` describes only what is in it — the plan,
   the manifest and the re-derivation ledger were each cut to the four files that remain, and
   the release build re-derives all three and refuses to publish a tree where any of them has
-  drifted.
+  drifted. That check alone would not be worth much, since all three are cut by the same
+  decision and would agree with each other about a wrong set. What makes it load-bearing is a
+  separate one that reconciles the fixtures against the **crate directories** instead: a rung
+  whose crate ships without its fixtures fails the build, and so does a fixture whose crate is
+  absent. The rule below is enforced rather than asserted, and the thing enforcing it does not
+  read the documents that state it.
   Two things of the KEM-only variant's are still here, for one reason. Its **code** ships
   inside `crates/per-payment`, because §2.8 requires the code from the shared secret onward be
   shared rather than duplicated: a crate carrying only this rung would violate the document it

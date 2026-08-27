@@ -256,10 +256,14 @@ conflated RFC 2119 keywords with requirement sentences. By this project's own ru
 measurement whose generator does not exist is worse than an absent one, so the figure is
 withdrawn and this section is generated instead.
 
-**The count depends on what you are counting, and quoting the wrong one is a real
-defect class: 61 is right as a count of rows and wrong as a count of *emittable*
-fixtures, and a document quoting 59 quotes a number that matches no count of anything.** The four counts below are all true
-at once:
+**The count depends on what you are counting, and quoting the wrong one is a real defect
+class.** This file carries wave 1 alone -- 37 rows, the wave whose fixtures ship
+beside it -- and the four counts below are computed over the whole four-document suite in
+the authoring repository, not over this file. They are kept because the DISTINCTIONS are
+what a reader needs in order to read the table underneath, and the table underneath is
+likewise the authoring repository's: it reports the two documents this export folds and
+the rows they contain there. **So do not read either as a measurement of this tree.** The
+four are all true at once:
 
 | count | what it is | use it for |
 |---|---|---|
@@ -269,10 +273,9 @@ at once:
 | **generatable** | slots minus ids marked *specified and ungenerated* | **the only count a generator's acceptance criterion may use** |
 
 **A tool gets this wrong exactly as easily as a hand does, which is the point.** A row
-regex that misses the four letter-suffixed ids (`V3-02a`, `V3-06a`, `V3-06b`, `V3-08a`)
-reports 57 rows — a fifth wrong number. A harness is
-worth more than a hand-count because it can be *checked*, not because it is right first
-time.
+regex that misses the letter-suffixed ids (`V3-02a`, `V3-06a`, `V3-06b`, `V3-08a` are
+four of them) reports a fifth wrong number. A harness is worth more than a hand-count
+because it can be *checked*, not because it is right first time.
 
 the coverage gate in the authoring repository computes all four from this file's own prose — a new
 deliberate absence or a newly generatable row moves them with no edit to the tool — and
@@ -283,31 +286,6 @@ quotes anything but `generatable`.
 
 | section | document | levelled keywords | vector rows |
 |---|---|---|---|
-| ERC-WWWW: Post-Quantum Stealth Addresses — schemeIds 4 and 5 (pairwise channel) | channel | 0 | — |
-| Abstract | channel | 0 | — |
-| Motivation | channel | 0 | — |
-| Dependencies | channel | 0 | — |
-| Specification | channel | 5 | — |
-| §3 3. schemeIds 4 and 5 — pairwise channel | channel | 0 | 8 |
-| §3.1 3.1 Keys and seeds | channel | 4 | 0 |
-| §3.2 3.2 Meta-address encoding | channel | 3 | 0 |
-| §3.3 3.3 First contact, and the channel key | channel | 8 | 0 |
-| §3.4 3.4 Wire mapping — normative | channel | 10 | 0 |
-| §3.5 3.5 Per payment | channel | 14 | 0 |
-| §3.6 3.6 Scanner: the view-tag gate, and channel retention | channel | 42 | 0 |
-| §3.7 3.7 Recipient | channel | 1 | 0 |
-| §3.8 3.8 Recovery from the seed alone | channel | 9 | 0 |
-| §3.9 3.9 What is an error and what is a skip | channel | 1 | 0 |
-| §3.10 3.10 What this section does not specify | channel | 3 | 0 |
-| §3.11 3.11 Prior art for the pairwise channel | channel | 1 | 0 |
-| §3.12 3.12 schemeId 5 — the hybrid variant | channel | 13 | 24 |
-| Rationale | channel | 4 | — |
-| Backwards Compatibility | channel | 0 | — |
-| Test Cases | channel | 0 | — |
-| Reference implementation | channel | 0 | — |
-| Security Considerations | channel | 0 | — |
-| Copyright | channel | 0 | — |
-| Open before submission | channel | 1 | — |
 | ERC-XXXX: Post-Quantum Stealth Address Schemes (schemeIds 2 to 6) | common | 3 | — |
 | Abstract | common | 0 | — |
 | Motivation | common | 0 | — |
@@ -332,16 +310,6 @@ quotes anything but `generatable`.
 | §9 9. Security considerations | common | 17 | 0 |
 | Copyright | common | 0 | — |
 | Open before submission | common | 3 | — |
-| Post-quantum spending — schemeId 6 | pq-spending | 1 | — |
-| §4 4. schemeId 6 — post-quantum spending | pq-spending | 8 | 13 |
-| §4.1 4.1 Keys and seeds | pq-spending | 5 | 0 |
-| §4.2 4.2 Meta-address and registration | pq-spending | 7 | 0 |
-| §4.3 4.3 Announcement and wire mapping | pq-spending | 3 | 0 |
-| §4.4 4.4 Sender | pq-spending | 4 | 0 |
-| §4.5 4.5 Scanner | pq-spending | 3 | 0 |
-| §4.6 4.6 The address mapping — an open decision, and the one that blocks emission | pq-spending | 8 | 0 |
-| §4.7 4.7 `OPKGen`, `Track` and `OSKGen` — defined | pq-spending | 13 | 0 |
-| §4.8 4.8 Recipient and spending | pq-spending | 5 | 0 |
 | ERC-ZZZZ: Post-Quantum Stealth Addresses — schemeIds 2 and 3 (per-payment) | per-payment | 0 | — |
 | Abstract | per-payment | 0 | — |
 | Motivation | per-payment | 0 | — |

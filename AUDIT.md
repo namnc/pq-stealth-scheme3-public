@@ -68,7 +68,10 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
   something to review: a finding that one of them is wrong cannot be adjudicated here, because
   the sentence it would be wrong against is not in this tree. **The rule, so you can apply it
   yourself rather than trust the boundary: fixtures ship where the code they exercise ships.**
-  It is what keeps `section-2.json` and what removed the other three files.
+  It is what keeps `section-2.json` and what removed the other three files, and it is checked at
+  release time against the crate directories rather than against any document that states it —
+  so a future release cannot drop a fixture for code it still carries, which is the failure a
+  reduction like this one invites.
   The siblings' presence is in scope in exactly one direction: whether they can affect this
   rung. A cross-rung announcement reaching this rung's scanner is specified behaviour, and
   §6 requires a `schemeId` mismatch be a **skip** rather than an error, because an error is a
