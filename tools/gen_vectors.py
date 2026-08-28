@@ -361,6 +361,176 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                      "a scanner that misses most payments to it and finds "
                                      "the occasional one -- an intermittent fault, which is "
                                      "harder to chase than a clean empty scan"}}
+
+    # ----------------------------------------------------------------------------------
+    # V3-09..V3-16 -- RE-HOMED from the schemeId 2 set, which this tree no longer ships.
+    #
+    # Eight rules §2 states for THIS rung had their only fixture in that set and lost it
+    # with it; `vectors/PLAN.md` names each and where §2 states it. These rows put them
+    # back. They are NEW VALUES and are listed under `absent` in
+    # `vectors/rederivation.json`: the blinded re-derivation predates them and witnessed
+    # none of them, which is exactly why they are fenced off here rather than filed in
+    # among the witnessed rows above.
+    #
+    # Neither KEM-bearing row runs a KEM. V3-09 takes `ek` from ACVP keygen and V3-14
+    # takes `(dk, ct, ss_pq)` from an ACVP decapsulation case whose `reason` is
+    # `modified ciphertext` -- which is the implicit-rejection behaviour itself, oracled
+    # by NIST rather than asserted by us.
+    # ----------------------------------------------------------------------------------
+    kg = t1["keygen"][0]
+    kem_seed = bytes.fromhex(kg["d"]) + bytes.fromhex(kg["z"])
+    v_ec_seed = bytes([0x33]) * 32
+    assert vp.encode_compressed(vp.mul(int.from_bytes(v_ec_seed, "big"))) == viewing_pk_ec
+    delegated = v_ec_seed + kem_seed
+    assert not any(delegated[i:i + 32] == spending_seed for i in range(65)), \
+        "§2.1's window scan would reject this fixture's own keygen seed"
+    keygen_seed = spending_seed + delegated
+    spending_pk = vp.encode_compressed(vp.mul(int.from_bytes(spending_seed, "big")))
+    meta = spending_pk + viewing_pk_ec + bytes.fromhex(kg["ek"])
+    v["V3-09"] = {"claim": "keygen MUST be deterministic in the seed -- the same 128 bytes "
+                           "produce the same three outputs",
+                  "given": {"keygen_seed": hx(keygen_seed),
+                            "kem_seed_source": f"ML-KEM (d, z) of ACVP keygen tcId "
+                                               f"{kg['tcId']}, so the ek below is NIST's "
+                                               f"value and not this generator's"},
+                  "expect": {"meta_address": hx(meta), "meta_address_bytes": len(meta),
+                             "spending_pk": hx(spending_pk),
+                             "viewing_pk_ec": hx(viewing_pk_ec),
+                             "ek_at": "meta_address[66:1250]",
+                             "tracking": hx(delegated), "tracking_bytes": len(delegated),
+                             "master": hx(spending_seed)},
+                  "wrong": {"note": "calling the KEM's randomness-taking keygen and ignoring "
+                                    "kem_seed -- the entry point most ML-KEM APIs offer "
+                                    "first. The meta-address is still well formed and "
+                                    "registration still succeeds, so nothing fails until the "
+                                    "owner restores from the seed, gets a different dk, and "
+                                    "can decapsulate no payment ever made to the registered "
+                                    "ek. Undetectable at keygen and total afterwards"}}
+
+    v["V3-10"] = {"claim": "spending_seed and viewing_ec_seed MUST each be a valid secp256k1 "
+                           "scalar -- error at keygen, per §2.7",
+                  "given": {"seeds_128_B_differing_only_in_the_first_or_second_32": {
+                      "spending_seed_0": hx(bytes(32)),
+                      "spending_seed_n": f"{vp.N:064x}",
+                      "spending_seed_n_minus_1": f"{vp.N - 1:064x}",
+                      "viewing_ec_seed_0": hx(bytes(32))}},
+                  "expect": {"outcome": "error, error, accepted, error"},
+                  "wrong": {"note": "reducing the seed mod n instead of rejecting it. §1's "
+                                    "counter-reduction is for the offset BASE, not for a "
+                                    "seed: a library that reduces silently turns "
+                                    "spending_seed = n into spending_seed = 0, and every "
+                                    "payment to the resulting meta-address is spendable by "
+                                    "anyone. n - 1 is the positive control -- an off-by-one "
+                                    "in the bound rejects a legitimate seed"}}
+
+    v["V3-11"] = {"claim": "decoding MUST reject a meta-address length other than 1250",
+                  "given": {"lengths": [1249, 1250, 1251]},
+                  "expect": {"outcome": "error, accepted, error"},
+                  "wrong": {"note": "slicing [0:33], [33:66], [66:] with no length check. "
+                                    "1251 then decodes with a trailing byte ignored and 1249 "
+                                    "yields a 1183-byte ek that the KEM rejects much later, "
+                                    "so the failure surfaces at the first payment rather "
+                                    "than at decode"}}
+
+    nonpoint_x = 5
+    v["V3-12"] = {"claim": "33 bytes of the right length can still be a non-point -- both "
+                           "points MUST be validated before the meta-address is used",
+                  "given": {"viewing_pk_ec_nonpoint": hx(b"\x02" + nonpoint_x.to_bytes(32, "big")),
+                            "why": f"x = {nonpoint_x} is the smallest x for which x^3 + 7 is "
+                                   f"not a square mod p, so no y exists and this is 33 "
+                                   f"well-formed bytes that are not a point",
+                            "viewing_pk_ec_valid": hx(viewing_pk_ec)},
+                  "expect": {"outcome": "error at decode, then accepted"},
+                  "wrong": {"note": "checking the length and the 0x02/0x03 tag byte and "
+                                    "storing the bytes. The ECDH that follows either throws "
+                                    "from inside a curve library, far from the meta-address "
+                                    "that caused it, or -- in a library that does not "
+                                    "validate -- returns a value on the wrong curve"}}
+
+    off_pt = vp.mul(scalar_from_ss := vp.h_of_ss(ss)[1])
+    stealth_pt = vp.add(vp.decode_compressed(spending_pk), off_pt)
+    address = vp.address_of(stealth_pt)
+    uncompressed = vp.encode_uncompressed(stealth_pt)
+    v["V3-13"] = {"claim": "address = keccak256(uncompressed(stealth_pk) without its 0x04 "
+                           "prefix)[12..32]",
+                  "given": {"stealth_pk_compressed": hx(vp.encode_compressed(stealth_pt)),
+                            "stealth_pk_uncompressed": hx(uncompressed)},
+                  "expect": {"address": hx(address), "eip55": vp.eip55(address)},
+                  "wrong": {"keccak_of_compressed": hx(
+                                vp.keccak256(vp.encode_compressed(stealth_pt))[12:32]),
+                            "keccak_with_0x04_prefix": hx(
+                                vp.keccak256(uncompressed)[12:32]),
+                            "first_20_bytes_not_last_20": hx(
+                                vp.keccak256(uncompressed[1:])[0:20]),
+                            "note": "each is 20 well-formed bytes and each is a different "
+                                    "address. The sender pays one of them and the recipient "
+                                    "derives another; the payment is not lost to an error, "
+                                    "it is lost to a chain address nobody holds a key for"}}
+
+    dc = next(c for c in t1["decapsulation"] if c["reason"] == "modified ciphertext")
+    dk_88 = bytes.fromhex(dc["dk"])
+    ek_88 = dk_88[1152:2336]
+    assert hashlib.sha3_256(ek_88).digest() == dk_88[2336:2368], \
+        "ek is not embedded in this dk where FIPS 203 puts it"
+    ct_foreign = bytes.fromhex(dc["c"])
+    ss_pq_88 = bytes.fromhex(dc["k"])
+    ss_foreign = hashlib.sha3_256(
+        DS_HYBRID + ss_ec + ss_pq_88 + epk + ct_foreign + viewing_pk_ec + ek_88).digest()
+    derived_tag = vp.view_tag(ss_foreign)
+    announced_tag = bytes([derived_tag[0] ^ 0x01])
+    v["V3-14"] = {"claim": "a view-tag mismatch is a skip -- and decapsulation does not fail",
+                  "given": {"acvp_decapsulation_tcId": dc["tcId"],
+                            "acvp_reason": dc["reason"],
+                            "dk": "ACVP decapsulation tcId "
+                                  f"{dc['tcId']}, vendored in vectors/tier1/",
+                            "ek": hx(ek_88),
+                            "ek_source": "dk[1152:2336] per FIPS 203's expanded key layout, "
+                                         "checked against the H(ek) at dk[2336:2368]",
+                            "announcement": {"ephemeralPubKey": hx(epk),
+                                             "view_tag": hx(announced_tag),
+                                             "ct": hx(ct_foreign)}},
+                  "expect": {"decapsulation": "returns 32 bytes and does NOT fail",
+                             "ss_pq": hx(ss_pq_88),
+                             "ss": hx(ss_foreign),
+                             "derived_view_tag": hx(derived_tag),
+                             "outcome": "skip"},
+                  "wrong": {"note": "scanning on whether Decaps errored. It never does -- "
+                                    "ML-KEM rejects implicitly, which is what this NIST case "
+                                    "shows: a ciphertext not produced for this key returns a "
+                                    "pseudorandom secret and no error. An implementation "
+                                    "that treats decapsulation as the ownership test matches "
+                                    "every announcement ever published. Raising on the tag "
+                                    "mismatch is the other error: announce() is "
+                                    "permissionless, so an error path there is a scanner "
+                                    "denial of service (§2.4)"}}
+
+    v["V3-15"] = {"claim": "a malformed ct is a skip at the entry point, not an error",
+                  "given": {"metadata_lengths": [1088, 1089, 1090],
+                            "ephemeralPubKey_lengths": [32, 33]},
+                  "expect": {"outcome": "skip for every length but 1089 / 33, which is "
+                                        "processed"},
+                  "wrong": {"note": "raising, or propagating a library exception. Anyone can "
+                                    "call announce() with any bytes, so a scanner that errors "
+                                    "on shape stops at the first announcement an attacker "
+                                    "publishes -- and it costs the attacker one transaction. "
+                                    "The 1089 case is the positive control"}}
+
+    stealth_sk = (int.from_bytes(spending_seed, "big") + scalar_from_ss) % vp.N
+    v["V3-16"] = {"claim": "a wallet SHOULD verify the derived key controls the derived "
+                           "address, as a key-to-address relation",
+                  "given": {"spending_sk": hx(spending_seed), "ss": hx(ss),
+                            "offset": f"{scalar_from_ss:064x}"},
+                  "expect": {"stealth_sk": f"{stealth_sk:064x}",
+                             "address_from_the_key": hx(vp.address_of(vp.mul(stealth_sk))),
+                             "address_from_the_point": hx(address),
+                             "assertion": "identical"},
+                  "wrong": {"note": "checking only that both paths produced bytes. They "
+                                    "always do: spending_pk + offset*G and "
+                                    "spending_sk + offset are two derivations that agree "
+                                    "only if both are right, and a sign or byte-order slip "
+                                    "in either yields a well-formed key for a different "
+                                    "address. The payment is then presented as spendable and "
+                                    "is not"}}
     return v
 
 

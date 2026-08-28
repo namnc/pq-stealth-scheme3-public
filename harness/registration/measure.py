@@ -3,7 +3,7 @@
 
 WHAT IS MEASURED, AND AGAINST WHAT
 ----------------------------------
-§7's registration table prices the one-time ERC-6538 `registerKeys` call whose calldata is
+§6's registration table prices the one-time ERC-6538 `registerKeys` call whose calldata is
 the meta-address. Its cost is dominated by STORAGE, and how much storage depends on how the
 registry lays the value out — which the specification does not specify and MUST NOT assume.
 So this harness measures no model and no recompilation: it installs the **canonical
@@ -22,7 +22,7 @@ FIRST REGISTRATION, DISTINCT REGISTRANTS
 ----------------------------------------
 Every row is a FIRST registration: each row sends from its own fresh account, so every
 storage slot written goes zero → nonzero, which is the cost a new recipient pays and the
-table's "registered once" framing. The three schemeId 6 categories share a `schemeId`, so
+table's "registered once" framing. Rows may share a `schemeId`, so
 sending them from one account would overwrite one entry three times — nonzero → nonzero,
 a different and cheaper operation that is not the row's claim.
 
@@ -37,7 +37,7 @@ all-zero 32-byte slots (an SSTORE writing zero is cheaper); real key material pr
 one with probability ~2^-256, so the storage side prices a real registration exactly.
 CALLDATA does depend on byte values: each zero byte is charged 12 gas less, and real key
 material has one in roughly 256 bytes. So each figure is an UPPER BOUND that a real
-registration undercuts by a few hundred gas at the schemeId 6 sizes — the same worst-case
+registration undercuts by a few hundred gas at schemeId 3's 1 250 bytes — the same worst-case
 token convention as the announcement harness, with its consequence stated rather than
 rounded away.
 
@@ -77,7 +77,7 @@ BYTECODE_SHA256 = "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b
 SIG = "registerKeys(uint256,bytes)"
 
 # One fresh key per row: FIRST registration requires a registrant whose entry is empty, and
-# the three schemeId 6 categories share a schemeId. Any 32-byte scalar is a secp256k1 key;
+# rows may share a schemeId. Any 32-byte scalar is a secp256k1 key;
 # these are funded via `anvil_setBalance`, so nothing here depends on anvil's account list.
 KEYS = [f"0x{i:064x}" for i in range(1, 1 + len(derive_sizes.REGISTRATION_RATIOS))]
 
@@ -153,7 +153,7 @@ def install_registry(url):
 
 
 def rows():
-    """`(name, schemeId, meta_len, key)` per row of §7's registration table.
+    """`(name, schemeId, meta_len, key)` per row of §6's registration table.
 
     Lengths come from `derive_sizes.REGISTRATION_RATIOS`, which re-derives them from
     FIPS 203 and FIPS 204 and asserts them against §6/§4.2.

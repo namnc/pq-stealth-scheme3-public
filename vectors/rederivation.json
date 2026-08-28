@@ -2,6 +2,7 @@
   "_what": "Which rows an independent, blinded re-derivation actually witnessed.",
   "_source": "generated from independent, blinded re-derivations of the committed rows, wave by wave: a second implementer computed them from the specification prose alone, with each expected value stripped and each cross-row answer redacted, using no elliptic-curve library. Where a row needed an ML-KEM operation the sandbox could not perform, the KEM outputs were supplied as NIST-oracled values and only the composition beyond them was re-derived",
   "_narrowing": "The re-derivation witnessed an EIGHT-byte view tag. The shipped width is one byte (§1), narrowed when §2.4 made the announced stealthAddress comparison a MUST. No row was re-derived again for the new width and none needed to be: every value that moved is a strict PREFIX of the value already witnessed, the shared secrets those tags derive from are byte-identical, and the byte counts that moved are arithmetic on the width. The affected rows are V1-07, V3-08 and V3-08a; each carries the superseded eight-byte value in its `wrong` column, so the prefix relation is checkable from the fixtures alone.",
+  "_absent_why": "The eight re-homed rows, and the whole of `absent`. Eight rules of §2 lost their only fixture when the schemeId 2 set was removed with that rung; V3-09 to V3-16 put them back as schemeId 3 rows, and `vectors/PLAN.md` maps each rule to its new id. They were written AFTER the blinded re-derivation and were never put to the second implementer, so nothing independent has witnessed them -- which is a weaker warrant than `bytes_agree` and is recorded here rather than left for a reader to notice. Two of them carry an oracle that is not this project's: V3-09 takes `ek` from an ACVP keygen case and V3-14 takes `(dk, ct, ss_pq)` from an ACVP decapsulation case whose `reason` field reads `modified ciphertext`, so the implicit-rejection behaviour V3-14 exhibits is NIST's value rather than ours. That is not independent re-derivation and does not promote them out of this bucket; it is the reason those two are the least likely of the eight to be wrong.",
   "_keys": "Read these classifications rather than any description of them elsewhere. `bytes_agree` and `outcome_only` are the two kinds of agreement: the first means the re-derivation produced the same BYTES, the second that it reached the same OUTCOME for a row whose expectation is an outcome rather than a value. `bytes_disagree` is empty, AND ITS BEING EMPTY IS THE CLAIM -- that nothing disagreed, not that nothing was compared. `ungeneratable` names a row the re-derivation reached and could not compute: a fact about the second implementer's sandbox, not about the row. `absent` names a row never attempted at all, and it is AUTHORITATIVE WHEN POPULATED rather than something to infer by subtracting the others. Every row that ships is in exactly one of the five, and that is checkable: compare this file's union against the ids in `section-*.json`.",
   "bytes_agree": [
     "V1-01",
@@ -28,5 +29,14 @@
     "V3-03"
   ],
   "ungeneratable": [],
-  "absent": []
+  "absent": [
+    "V3-09",
+    "V3-10",
+    "V3-11",
+    "V3-12",
+    "V3-13",
+    "V3-14",
+    "V3-15",
+    "V3-16"
+  ]
 }

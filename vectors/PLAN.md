@@ -51,29 +51,36 @@ implemented.
 > (V3-01), the 65-offset delegation window scan (V3-02), the meta-address encoding (V3-03),
 > the SEC1 `0x02`/`0x03` tag rule (V3-03), and the announcement's wire shape (V3-08).
 >
-> **Eight rules the specification still states for this rung lost their only fixture.**
-> Nothing in this tree pins them now:
+> **Eight rules the specification still states for this rung lost their only fixture, and
+> have been re-homed as V3-09 to V3-16.** The gap is recorded rather than erased because
+> the re-homed rows differ in one respect from every row above them, stated in the next
+> paragraph:
 >
-> | rule | stated at |
-> |---|---|
-> | keygen is deterministic in the seed — the same 128 bytes give the same three keys | §2.1 |
-> | `spending_seed` MUST be a valid secp256k1 scalar | §2.1, §2.7 |
-> | decode MUST reject a meta-address of any length but 1 250 | §2.2, §2.7 |
-> | 33 bytes of the right length can still be a non-point | §2.2, §2.7 |
-> | `address = keccak256(uncompressed(pk)[1..])[12..32]` | §2.4 |
-> | a view-tag mismatch is a skip — **and decapsulation does not fail** | §2.7 |
-> | a malformed `ct` is a skip at the entry point, not an error | §2.7 |
-> | the derived key controls the derived address, as a key-to-address relation | §2.6 |
+> | rule | stated at | re-homed as |
+> |---|---|---|
+> | keygen is deterministic in the seed — the same 128 bytes give the same three keys | §2.1 | V3-09 |
+> | `spending_seed` MUST be a valid secp256k1 scalar | §2.1, §2.7 | V3-10 |
+> | decode MUST reject a meta-address of any length but 1 250 | §2.2, §2.7 | V3-11 |
+> | 33 bytes of the right length can still be a non-point | §2.2, §2.7 | V3-12 |
+> | `address = keccak256(uncompressed(pk)[1..])[12..32]` | §2.4 | V3-13 |
+> | a view-tag mismatch is a skip — **and decapsulation does not fail** | §2.7 | V3-14 |
+> | a malformed `ct` is a skip at the entry point, not an error | §2.7 | V3-15 |
+> | the derived key controls the derived address, as a key-to-address relation | §2.6 | V3-16 |
 >
-> The sixth is the one to weigh: it was the only fixture exhibiting **ML-KEM's implicit
-> rejection** — a foreign ciphertext yielding a pseudorandom secret and no error — which is
-> the fact §2.4's required address comparison and §1's one-byte tag are both built on. The
-> specification asserts it; no fixture demonstrates it any more.
+> **These eight are unwitnessed, and `rederivation.json` lists every one of them under
+> `absent`.** The blinded re-derivation predates them: a second implementer computed the
+> rows above from the prose alone, and these were not among the rows put to them. That is
+> a weaker warrant than `bytes_agree` and the ledger says so in the one place a reader
+> checks — which is the whole reason the gap was left standing until it could be closed
+> this way rather than quietly.
 >
-> These are recoverable as schemeId 3 rows. They were not re-homed in the pass that removed
-> schemeId 2, because a re-homed row is a **new value** that the blinded re-derivation
-> (`rederivation.json`) has never witnessed, and quietly adding unwitnessed rows to a set
-> whose whole claim is independent witness is a worse trade than a stated gap.
+> The sixth was the one to weigh, and V3-14 is built to carry it. It is the only fixture
+> exhibiting **ML-KEM's implicit rejection** — a foreign ciphertext yielding a pseudorandom
+> secret and no error — which is the fact §2.4's required address comparison and §1's
+> one-byte tag are both built on. It takes `(dk, ct, ss_pq)` from an ACVP decapsulation case
+> whose own `reason` field reads `modified ciphertext`, so the behaviour is **oracled by
+> NIST rather than asserted by this project**, and the composition beyond it needs no
+> lattice arithmetic. V3-09 is oracled the same way, from an ACVP keygen case.
 >
 > **§5's seed-derivation group went in the same pass, and for a different reason.** Its five
 > rows pinned `keygen_seed` and `announce_seed` — the HKDF and SHAKE256 field orders, the
@@ -98,6 +105,14 @@ implemented.
 | V3-07 | `epk` MUST be bound in | the same first contact with the parity byte flipped `0x02`↔`0x03` | a **different** `ss` | the same `ss` — the flipped point has the same x-coordinate, so without `epk` in the IKM this is a replay with a different-looking announcement |
 | V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 089 in `metadata`, 1 122 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]` — the same length as the right answer, so no length check distinguishes it |
 | V3-08a | the view tag is `metadata[0]` | a real payment, and a foreign announcement | matched; skipped | comparing against the first byte of `ct` — a scanner that agrees 1 time in 256 by coincidence, so it misses most payments to it and finds the occasional one. An intermittent fault, and harder to chase than a clean empty scan |
+| V3-09 | **keygen MUST be deterministic in the seed** | a 128-byte seed whose `kem_seed` is ACVP keygen `(d, z)`, so `ek` is NIST's value | the 1 250-byte meta-address, the 96-byte tracking key, the 32-byte master | calling the KEM's randomness-taking keygen and ignoring `kem_seed` — the entry point most ML-KEM APIs offer first. The meta-address is well formed and registration succeeds; nothing fails until the owner restores from seed, gets a different `dk`, and can decapsulate no payment ever made to the registered `ek` |
+| V3-10 | `spending_seed` and `viewing_ec_seed` MUST each be a valid secp256k1 scalar | 128-byte seeds differing only in one 32-byte half: `0`, `n`, `n − 1`, and `viewing_ec_seed = 0` | error, error, **accepted**, error | reducing the seed mod n rather than rejecting it. §1's counter-reduction is for the offset *base*, not for a seed: `spending_seed = n` becomes `0`, and every payment to the resulting meta-address is spendable by anyone. `n − 1` is the positive control |
+| V3-11 | decoding MUST reject a meta-address length other than 1 250 | 1 249, 1 250, 1 251 | error, accepted, error | slicing `[0:33]`, `[33:66]`, `[66:]` with no length check: 1 251 decodes with a trailing byte ignored, 1 249 yields a 1 183-byte `ek` the KEM rejects at the first payment rather than at decode |
+| V3-12 | 33 bytes of the right length can still be a **non-point** | `0x02 ‖ x` for `x = 5`, the smallest `x` with no `y` on the curve; then a valid key | error at decode, then accepted | checking the length and the `0x02`/`0x03` tag byte and storing the bytes. The ECDH that follows throws from inside a curve library, far from the meta-address that caused it — or, in a library that does not validate, returns a value on the wrong curve |
+| V3-13 | `address = keccak256(uncompressed(pk)[1..])[12..32]` | a derived `stealth_pk`, both encodings | the 20-byte address and its EIP-55 form | keccak of the *compressed* form; keccak *with* the `0x04` prefix; `[0..20]` rather than `[12..32]`. Each is 20 well-formed bytes and each is a different address — the payment is lost to a chain address nobody holds a key for, not to an error |
+| V3-14 | a view-tag mismatch is a skip — **and decapsulation does not fail** | ACVP decapsulation tcId 88, `reason: modified ciphertext`; `ek` read from `dk[1152:2336]` and checked against the `H(ek)` at `dk[2336:2368]` | 32 bytes and **no error**; a derived tag differing from the announced one; **skip** | scanning on whether `Decaps` errored — it never does, so such an implementation matches every announcement ever published. Raising on the mismatch is the other error: `announce()` is permissionless, so an error path there is a scanner denial of service (§2.4) |
+| V3-15 | a malformed `ct` is a **skip at the entry point**, not an error | `metadata` of 1 088, 1 089, 1 090 B; `ephemeralPubKey` of 32 and 33 B | skip for every shape but 1 089 / 33 | raising, or propagating a library exception. Anyone can call `announce()` with any bytes, so a scanner that errors on shape stops at the first announcement an attacker publishes, for the price of one transaction. The 1 089 case is the positive control |
+| V3-16 | the derived key controls the derived address, **as a key-to-address relation** | `spending_sk`, `ss`, the offset | `stealth_sk`, and the address from the key **identical** to the address from the point | checking only that both paths produced bytes. They always do: `spending_pk + offset·G` and `spending_sk + offset` agree only if both are right, and a sign or byte-order slip in either yields a well-formed key for a different address — presented as spendable, and not |
 
 ## 7. Deliverables, in order
 

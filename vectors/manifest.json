@@ -21,9 +21,9 @@
       "rows_present": 7
     },
     "section-2_9.json": {
-      "sha256": "1364113923dc7d1fec71b4c973955114c0db69d3200bd3a38fc0c5ce8555c139",
-      "rows_in_plan": 12,
-      "rows_present": 12
+      "sha256": "87ccac0b5bc27f987e666f8df1c31a31585495e31bb074d5f56843717c8fc458",
+      "rows_in_plan": 20,
+      "rows_present": 20
     }
   }
 }

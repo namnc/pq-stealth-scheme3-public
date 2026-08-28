@@ -52,6 +52,13 @@ needs a live ML-KEM: the ciphertexts come from NIST's own ACVP file, vendored at
 and adds one thing — an acceptance test of that vendored file against an independent
 implementation, reported at the top of the run.
 
+`vectors/rederivation.json` says how strongly each row is backed, which is not the same
+question as whether it is current. Nineteen of the twenty-seven were re-derived by a second
+implementer from the specification's prose alone, with every expected value stripped; that
+file records what the re-derivation witnessed, row by row, and its `bytes_disagree` list
+being empty *is* the claim. The other eight are listed under `absent` — written later, and
+witnessed by nobody outside this project.
+
 ```bash
 python3 tools/check_measured.py
 ```

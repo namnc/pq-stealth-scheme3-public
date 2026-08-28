@@ -479,20 +479,24 @@ under 3 coexists with no migration.
 `python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
-**Nineteen rows pin this rung**, in two groups rather than one, which is worth stating
+**Twenty-seven rows pin this rung**, in two groups rather than one, which is worth stating
 because a reader expecting a single `schemeId 3` file will not find one:
 
 | group | rows | what it pins |
 |---|---|---|
 | `vectors/section-1.json` | 7 | §1 — the offset derivation, the counter-reduction retry, the big-endian reading, the view tag |
-| `vectors/section-2_9.json` | 12 | §2 — the 128-byte keygen seed, the delegation window scan, the 1 250-byte meta-address, the combiner and its bindings, and the wire mapping |
+| `vectors/section-2_9.json` | 20 | §2 — the 128-byte keygen seed and its scalar and determinism rules, the delegation window scan, the 1 250-byte meta-address and its point validation, the combiner and its bindings, the wire mapping, the address derivation, and what §2.7 calls a skip |
 
-**What these rows do NOT cover is recorded in `vectors/PLAN.md`, not left to be inferred.**
-The set was reduced with this document, and eight rules stated here lost their only fixture
-in the process — among them that a view-tag mismatch is a skip *and decapsulation does not
-fail*, which is the implicit-rejection behaviour §2.4 and §1 both rest on. The plan names
-each one and where this document states it. An implementer should read that table as part of
-the suite.
+**What warrant each row carries is recorded in `vectors/rederivation.json`, not left to be
+inferred.** Nineteen of the twenty-seven were re-derived by a second implementer working from
+this document's prose alone, with every expected value stripped; that file records what the
+re-derivation witnessed, row by row, and its `bytes_disagree` list being empty *is* the claim.
+The remaining eight are the ones re-homed when the set was reduced with this document — among
+them that a view-tag mismatch is a skip *and decapsulation does not fail*, the
+implicit-rejection behaviour §2.4 and §1 both rest on. They are listed under `absent`: written
+after that re-derivation and witnessed by nobody outside this project, which is a weaker
+warrant and is stated as one. `vectors/PLAN.md` maps each to the sentence above that it pins,
+and an implementer should read both files as part of the suite.
 
 ## Reference implementation
 
