@@ -30,7 +30,8 @@ boundary in mind, because it is the one a reader is most likely to widen on the 
    length prefixes, and whether the view tag is a separate digest from the offset.
 4. **The fixtures**, and whether each pins its own claims. `vectors/`
    holds four files: `section-2_9.json` is this rung, `section-1.json` and
-   `section-5.json` are the primitives and seed derivations under it, and all three are
+   `section-5.json` are the primitives and seed derivations under it, and `section-2.json`
+   is the KEM-only rung this one is specified as a delta against. All four are
    reviewable against the specification.
    `section-2.json` is not — see §3 — but it is
    the only one, and it is a quarter of the rows rather than most of them.
@@ -80,7 +81,8 @@ counted:
   `vectors/rederivation.json` is a record that a second implementer computed rows from the
   specification prose alone, with no access to the expected values and no elliptic-curve
   library. **Read its classification keys rather than this description of them.** The file has
-  seven top-level keys: `_what` and `_source`, which describe it, and five that classify rows.
+  eight top-level keys: `_what`, `_source` and `_narrowing`, which describe it, and five that
+  classify rows.
   `bytes_agree` and `outcome_only` are the two kinds of agreement. `bytes_disagree` is empty,
   and its being empty is the claim that nothing disagreed. `ungeneratable` names a row the
   re-derivation reached and could not compute — a fact about the second implementer's sandbox,
@@ -110,5 +112,5 @@ those bytes and, where the record says so, a blinded re-derivation agreed on the
 external has committed to the value. **A finding that such a constant is wrong is welcome; a
 finding that it is unsourced is already recorded.**
 
-The domain separators, the 8-byte view tag width, the field order of the seed derivations and
+The domain separators, the one-byte view tag width, the field order of the seed derivations and
 the choice of ML-KEM-768 over other parameter sets are all in that class.

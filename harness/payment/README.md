@@ -20,10 +20,8 @@ either works or it does not, and the node decides, not us.
 ## Run it
 
 ```
-# First, produce payment.json in this directory -- see "The payment.json contract" below.
-# In a tree carrying the end-to-end demonstration crate that is one command against it,
-# with `--emit-payment-json` and this path. In a tree carrying only the per-payment
-# library there is no such command, and you derive the fields yourself.
+# First, produce payment.json in this directory. From the repository root:
+cargo run -q --example emit_payment_json -p pqsa-per-payment > harness/payment/payment.json
 
 # then, from here:
 python3 measure.py                # boots its own anvil, prints the table
@@ -38,10 +36,10 @@ Needs `anvil`, `cast`, `forge` and `cargo` on PATH.
 This harness does not implement the scheme and must not. A second implementation inside the
 measuring tool is a second thing that can be wrong, and when the two disagree the measurement is
 what a reader believes. It consumes `payment.json` — addresses, payloads and derived keys —
-produced by the reference implementation: in a tree carrying the end-to-end demonstration
-crate, by that crate's `--emit-payment-json`; in a tree carrying only the per-payment library,
-by deriving the same fields from `input_seed`, which is the file's only secret. The contract
-below holds either way, and `measure.py` validates the file before it spends anything.
+produced by the reference implementation: here, by `crates/per-payment`'s
+`emit_payment_json` example, which calls the library's own `keygen`, `announce`, `scan` and
+`spend_key` and formats what comes back. It computes nothing itself. `measure.py` validates
+the file before it spends anything.
 
 ## The `payment.json` contract
 
@@ -88,11 +86,12 @@ They are real private keys and they are printed in a file. That is acceptable in
 context and nowhere else: every value is meant to derive from a hard-coded demonstration seed,
 the chain is a throwaway local anvil, and the addresses hold nothing but its play money.
 
-**Whether anything ENFORCES that depends on the tree.** The demonstration crate's emitter
-refuses any seed but the demonstration one, so where that crate is present the file cannot be
-produced from real key material by accident. **A tree carrying only the per-payment library has
-no emitter and therefore no such refusal** — the rule above is then a rule you keep, not a check
-that has already run, and the file you write is the one that would leak.
+**What ENFORCES that here is that the emitter takes no input.** The demonstration seed is
+written into `emit_payment_json.rs` as the three constants below and there is no flag, no path
+and no environment variable that could point it at anything else — so the file cannot be
+produced from real key material without editing the source, which is a different act from
+running a command. A tree whose emitter accepts a seed has a rule you keep rather than a check
+that has already run; this one does not.
 
 `payment.json` is regenerated rather than committed, which is why the release does not contain it and why the command above is the first step rather than a note.
 

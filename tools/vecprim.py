@@ -387,22 +387,23 @@ def h_of_ss(ss: bytes) -> tuple[bytes, int, int]:
     return base, scalar, counter
 
 
-VIEW_TAG_BYTES = 8
+VIEW_TAG_BYTES = 1
 
 
 def view_tag(ss: bytes) -> bytes:
     """§1's view tag: a **separate digest**, its first `VIEW_TAG_BYTES` bytes.
 
-    **Eight bytes, returned as `bytes` and not as an `int`**,
-    deliberately rather than to an eight-byte integer. An `int` return let every
-    call site format the value itself, and a call site that formatted it as `f"{tag:02x}"`
-    after the width changed would emit **two hex characters of an eight-byte tag** -- a
-    truncation that produces a well-formed fixture nobody can pass. `bytes` makes the width
-    the primitive's business and a formatting mistake a type error.
+    **One byte, returned as `bytes` and not as an `int`.** The width is a parameter and has
+    already moved once -- it was eight bytes until the announced `stealthAddress` was made
+    the authoritative check (§2.4) and the tag was narrowed to a prefilter. An `int` return
+    would let every call site format the value itself, and a call site formatting a widened
+    tag as `f"{tag:02x}"` would emit two hex characters of it: a truncation that produces a
+    well-formed fixture nobody can pass. `bytes` makes the width the primitive's business
+    and a formatting mistake a type error.
 
-    V1-07's `wrong` column names the errors it distinguishes: taking `[0]` alone, a one-byte
-    tag and the mistake a port will reach for; taking the trailing bytes; and taking
-    the leading bytes of `H(ss)` rather than of this separate digest.
+    V1-07's `wrong` column names the errors it distinguishes: taking other than `[0]` alone;
+    taking the trailing bytes; and taking the leading bytes of `H(ss)` rather than of this
+    separate digest.
     """
     return hashlib.sha256(DS_VIEWTAG + ss).digest()[:VIEW_TAG_BYTES]
 

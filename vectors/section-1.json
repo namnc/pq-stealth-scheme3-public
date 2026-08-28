@@ -84,18 +84,19 @@
       }
     },
     "V1-07": {
-      "claim": "view_tag = SHA256(DS_viewtag || ss)[0..8]",
+      "claim": "view_tag = SHA256(DS_viewtag || ss)[0]",
       "given": {
         "ss": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
       },
       "expect": {
-        "view_tag": "feaba572e3c54d12",
-        "view_tag_bytes": 8
+        "view_tag": "fe",
+        "view_tag_bytes": 1
       },
       "wrong": {
-        "one_byte_only": "fe",
-        "trailing_eight_of_own_digest": "396ec34b6f04ac25",
-        "leading_eight_of_H_ss": "d8b37e9fb5fd784c"
+        "superseded_eight_byte_width": "feaba572e3c54d12",
+        "trailing_byte_of_own_digest": "25",
+        "leading_byte_of_H_ss": "d8",
+        "note": "the tag was eight bytes until the announced stealthAddress became the authoritative check (2.4 MUST) and the tag was narrowed to a prefilter; an implementation carrying the old width matches nothing"
       }
     }
   }

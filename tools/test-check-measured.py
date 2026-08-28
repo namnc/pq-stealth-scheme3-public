@@ -172,7 +172,7 @@ def main() -> int:
 
     print("\na PAYLOAD that no longer matches §6 FAILS -- the staleness this exists for")
     d = copy.deepcopy(real)
-    d["cases"][1]["payload_bytes"] = 1089
+    d["cases"][1]["payload_bytes"] = 1096   # the superseded eight-byte-tag payload
     rc, out = run(d)
     case("a superseded payload exits 1", rc, 1)
     case("and says the wire changed and the receipt did not",
@@ -181,7 +181,7 @@ def main() -> int:
     print("\nfield lengths are checked too, not just the total")
     d = copy.deepcopy(real)
     d["cases"][1]["epk_bytes"] = 1080
-    d["cases"][1]["metadata_bytes"] = 16
+    d["cases"][1]["metadata_bytes"] = 9
     rc, out = run(d)
     case("a wrong field split exits 1", rc, 1)
     case("and names §6's split", "where §6 gives" in out, True)

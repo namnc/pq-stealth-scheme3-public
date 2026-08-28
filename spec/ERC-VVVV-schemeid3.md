@@ -9,7 +9,7 @@ further scheme, **schemeId 3**, which makes the **announcement layer** post-quan
 | | schemeId 3 |
 |---|---|
 | announcement secret | ML-KEM-768 **combined with a secp256k1 ECDH secret** |
-| announcement | 1 129 B, one encapsulation and one ephemeral key per payment |
+| announcement | 1 122 B, one encapsulation and one ephemeral key per payment |
 | meta-address | 1 250 B, registered once via ERC-6538 |
 | spending | secp256k1 ECDSA |
 | account | a plain EOA — no batching account, no ERC-4337, no EIP-7702 |
@@ -240,14 +240,21 @@ address     = keccak256(uncompressed(stealth_pk) without its 0x04 prefix)[12..32
 Encapsulation MUST be deterministic in `encap_seed`, so that a vector fixing `(ek, m)` fixes
 `ct` and `ss_pq`. The sender then:
 
-1. publishes the announcement of §6 — `epk` in `ephemeralPubKey`, the 1 085 bytes
+1. publishes the announcement of §5 — `epk` in `ephemeralPubKey`, the 1 089 bytes
    `view_tag(ss) ‖ ct` in `metadata`; and
 2. pays `address`.
 
-**The `stealthAddress` field of the announcement MUST be the address derived above.** A
-sender that announces one address and pays another has made a payment its recipient cannot
-find. Note that this places a value on chain which a recipient could re-derive and compare;
-whether a scanner MUST do so is **not** settled by this specification — see §2.8.
+**The `stealthAddress` field of the announcement MUST be the address derived above, and a
+scanner MUST compare the address it derives against it.** A sender that announces one address
+and pays another has made a payment its recipient cannot find.
+
+The comparison is **local and exact**: the announcement carries the address, so a scanner needs
+no chain query to perform it, and 160 bits decide the question outright. That is what allows
+§1's view tag to be **one byte**. ML-KEM rejects implicitly — a foreign ciphertext yields a
+pseudorandom secret and no error — so something other than the KEM has to decide whether an
+announcement is ours; the announced address is that something, and the tag is a prefilter in
+front of it rather than the decision itself. A mismatch is a **skip** and not an error (§2.7):
+`announce()` is permissionless, so an error path here would be a denial of service.
 
 The sender learns `stealth_pk` but never `stealth_sk`, and MUST NOT be able to: the
 recipient's `spending_sk` is the other addend.
@@ -263,14 +270,25 @@ ss_pq ← Decaps(dk, ct)
 ss    ← the identical hybrid_combine call of §2.4
 if view_tag(ss) ≠ announcement.metadata[0]:  not ours, skip
 stealth_pk ← spending_pk + H(ss)·G
+if address(stealth_pk) ≠ announcement.stealthAddress:  not ours, skip
 ```
 
 As the view tag is a
 function of `ss`, it cannot be computed before decapsulation and the ECDH. This rung
-therefore has **no prefilter ahead of the KEM**: per-announcement scanning cost is one
-ML-KEM-768 decapsulation **plus one scalar multiplication**, on input that anyone can publish.
-An implementation SHOULD account for that when sizing a scanning service, and §8's
-requirement to defer or batch balance lookups applies.
+therefore has **no prefilter ahead of the KEM**: one ECDH and one ML-KEM-768 decapsulation are
+paid on **every** announcement, on input that anyone can publish, and that is the floor.
+
+What the tag filters is the work *after* it. At one byte it admits one foreign announcement in
+256, so the scalar multiplication and the address derivation are paid on 1 in 256 rather than
+on all — the expected per-announcement cost is one ECDH, one decapsulation, and 1/256 of a
+scalar multiplication. **A scanning service MUST be sized on the decapsulation**, which is the
+term the tag cannot reduce; sizing on the scalar multiplication as though it were paid per
+announcement overstates that term by a factor of 256.
+
+Widening the tag would shrink only the 1/256 term, and would not remove the address comparison
+that §2.4 requires in any case. Note also what the required comparison buys: the residual
+ambiguity a narrow tag leaves is resolved **locally**, against a field the announcement already
+carries, so a scanner never queries chain state to disambiguate a tag hit.
 
 #### 2.6 Recipient
 
@@ -286,7 +304,7 @@ as spendable.
 `spending_sk = stealth_sk − H(ss) mod n`. Implementations MUST NOT disclose both for the same
 payment, and MUST NOT treat a one-time key as low-value on the grounds that it controls one
 address. In particular a scanning service already holds every `ss`, so handing it any
-one-time key hands it the master. §9 carries the general treatment.
+one-time key hands it the master. §7 carries the general treatment.
 
 #### 2.7 What is an error and what is a skip
 
@@ -297,6 +315,7 @@ one-time key hands it the master. §9 carries the general treatment.
 | `epk` malformed or not a curve point | skip |
 | `ct` malformed, `ek` malformed | skip |
 | view-tag mismatch | skip |
+| announced `stealthAddress` ≠ the derived address | skip |
 | decapsulation "fails" | **cannot happen** — ML-KEM rejects implicitly |
 | keygen seed not 128 bytes | error, at keygen |
 | `spending_seed` or `viewing_ec_seed` not a valid scalar | error, at keygen |
@@ -318,8 +337,10 @@ order sees nothing wrong about the announcement.
 2. **`metadata` MUST be exactly `view_tag ‖ ct`, in that order**, and an implementation MUST
    NOT reorder the fields.
 3. **`ephemeralPubKey` MUST carry exactly `epk`**, and an implementation MUST NOT swap the
-   two ERC-5564 fields. Note this cannot be inferred from lengths: **no `schemeId` is
-   identifiable by the position of 1 088 bytes**, as the note after the table records.
+   two ERC-5564 fields. Note this cannot be inferred from lengths: **1 088 bytes of ML-KEM
+   ciphertext identify no `schemeId` by position**, since a scheme is free to place them in
+   either ERC-5564 field and registered schemes differ on which. Recognition is by `schemeId`
+   together with the field lengths, never by where the ciphertext sits.
 4. **Every multi-byte integer on the wire is big-endian.** No such integer occurs in a
    schemeId 3 announcement. The rule stands for a future revision that adds one.
    
@@ -345,12 +366,19 @@ wire model does.
 | schemeId | payload | calldata | execution | gas | floor binds | vs classical |
 |---|---|---|---|---|---|---|
 | 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 067** | no | 1.00× |
-| **3** | **1 129 B** | **1 380 B** | **14 269** | **69 570** | YES | **2.48×** |
+| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 360** | YES | **2.47×** |
 
 > **Both rows are measured.** The measurement regime is withdrawal-not-adjustment: when a
-> payload moves (a tag widens, a field leaves the wire), every affected figure is withdrawn
-> and re-measured rather than adjusted by the known byte delta, because an adjusted figure
-> has no generator.
+> payload moves (a tag changes width, a field leaves the wire), every affected figure is
+> withdrawn and re-measured rather than adjusted by the known byte delta, because an adjusted
+> figure has no generator. Every figure in this table was re-measured when the view tag
+> narrowed from eight bytes to one.
+>
+> **The calldata column did not move with the payload, and that is not an error.** ABI
+> encoding pads `metadata` to whole 32-byte words, and 1 089 bytes and 1 096 bytes both
+> occupy 35 of them. The seven bytes did not leave the calldata; they became zero padding,
+> which EIP-7623 prices at 1 token against 4 — so the narrowing is worth 21 tokens, or 210
+> gas, and not the 280 a reader computing 7 × 4 × 10 would expect.
 >
 > `tools/check_measured.py` re-derives every total here from `max(21000 + 4·tokens +
 > execution, 21000 + 10·tokens)` and checks every payload against §6's wire table, without a
@@ -386,13 +414,13 @@ tables are separate. The 18.9x above **is** a comparison against the classical r
 meant as one; what it is not is a per-payment figure, and reading it as one is the single way
 to get this table wrong.
 
-**A whole payment IS measured, and the figure is 111 510 gas.** `harness/payment/` runs all
+**A whole payment IS measured, and the figure is 111 300 gas.** `harness/payment/` runs all
 three transactions against a local node — announce, fund the derived address, then spend from
 it with the derived key — and commits the receipts at `harness/payment/measured.json`:
 
 | | announce | fund | spend | total |
 |---|---|---|---|---|
-| **schemeId 3** | 69 510 | **21 000** | **21 000** | **111 510** |
+| **schemeId 3** | 69 300 | **21 000** | **21 000** | **111 300** |
 
 **The funding transfer is exactly the 21 000 intrinsic**, because a native-ETH transfer to an
 EOA carries empty calldata and touches no contract. The same is true of the sweep. So for

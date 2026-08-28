@@ -69,13 +69,13 @@ def main() -> int:
     case("and names the category and both numbers",
          "category 3" in out and "5600" in out and "3104" in out, True)
 
-    rc, out = run(("SPEC_ANNOUNCEMENT = {2: 2_376, 3: 3_016, 5: 3_656}",
-                   "SPEC_ANNOUNCEMENT = {2: 2_376, 3: 3_017, 5: 3_656}"))
+    rc, out = run(("SPEC_ANNOUNCEMENT = {2: 2_369, 3: 3_009, 5: 3_649}",
+                   "SPEC_ANNOUNCEMENT = {2: 2_369, 3: 3_010, 5: 3_649}"))
     case("a wrong announcement payload exits 1", rc, 1)
-    case("and names the announcement figure", "3017" in out, True)
+    case("and names the announcement figure", "3010" in out, True)
 
-    rc, out = run(('"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_096)',
-                   '"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_095)'))
+    rc, out = run(('"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_089)',
+                   '"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_088)'))
     case("a wrong schemeId 2 payload exits 1", rc, 1)
     case("and names schemeId 2", "schemeId 2 announcement" in out, True)
     # The ANNOUNCE_ERC loop and the SHAPES loop both compare a total against the same quoted
@@ -83,16 +83,16 @@ def main() -> int:
     # mutation deleting ANNOUNCE_ERC's `bad.append` SURVIVE this suite. Each loop's message
     # is asserted separately below, so each append is individually observable. A guard nothing
     # can distinguish from its neighbour is a guard nobody notices losing.
-    case("and it is the ANNOUNCE_ERC loop that says so", "derived 1096 != quoted 1095" in out,
+    case("and it is the ANNOUNCE_ERC loop that says so", "derived 1089 != quoted 1088" in out,
          True)
     case("and the SHAPES loop says so too, in its own words",
-         "totals 1096 != §6's 1095" in out, True)
+         "totals 1089 != §6's 1088" in out, True)
 
     print("\nthe shape table -- (ephemeralPubKey, metadata), not the total")
     rc, out = run(('    "schemeId 4 first contact": (0,                VIEW_TAG + CT),',
                    '    "schemeId 4 first contact": (1,                VIEW_TAG + CT),'))
     case("a shape whose fields do not total the quoted payload exits 1", rc, 1)
-    case("and names the shape", "shape (1, 1096) totals 1097" in out, True)
+    case("and names the shape", "shape (1, 1089) totals 1090" in out, True)
 
     # Two rows sharing a shape is legal and declared; a THIRD collision appearing quietly is
     # what this catches. §6's note about recognition would go stale and nothing else would say

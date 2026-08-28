@@ -285,14 +285,18 @@ def group_1() -> dict[str, dict]:
 
     tag = vp.view_tag(ss)
     v["V1-07"] = {
-        "claim": "view_tag = SHA256(DS_viewtag || ss)[0..8]",
+        "claim": "view_tag = SHA256(DS_viewtag || ss)[0]",
         "given": {"ss": hx(ss)},
         "expect": {"view_tag": hx(tag), "view_tag_bytes": vp.VIEW_TAG_BYTES},
         "wrong": {
-            "one_byte_only": hx(tag[:1]),
-            "trailing_eight_of_own_digest":
-                hx(hashlib.sha256(vp.DS_VIEWTAG + ss).digest()[24:]),
-            "leading_eight_of_H_ss": hx(base[:8]),
+            "superseded_eight_byte_width":
+                hx(hashlib.sha256(vp.DS_VIEWTAG + ss).digest()[:8]),
+            "trailing_byte_of_own_digest":
+                hx(hashlib.sha256(vp.DS_VIEWTAG + ss).digest()[31:]),
+            "leading_byte_of_H_ss": hx(base[:1]),
+            "note": "the tag was eight bytes until the announced stealthAddress became the "
+                    "authoritative check (2.4 MUST) and the tag was narrowed to a prefilter; "
+                    "an implementation carrying the old width matches nothing",
         },
     }
     return v
@@ -454,7 +458,7 @@ def group_5() -> dict[str, dict]:
 S6_CATEGORIES = {2: 4, 3: 6, 5: 8}
 S6_EK = 1184
 S6_CT = 1088
-S6_TAG = 8
+S6_TAG = vp.VIEW_TAG_BYTES   # NOT a second definition of the width. One name.
 
 
 def s6_t1(k: int) -> int:
@@ -605,10 +609,10 @@ def group_4() -> dict[str, dict]:
     # wrong answer -- 24 B larger per category, and its first 32 bytes are a recipient tag.
     v["V6-12"] = {
         "claim": "the announcement is t1_ot in ephemeralPubKey (k*320 B) and "
-                 "view_tag || ct in metadata (1096 B), and MUST NOT carry rho",
+                 "view_tag || ct in metadata (1089 B), and MUST NOT carry rho",
         "provisional": True,
         "provisional_because": PROVISIONAL_WHY_W3,
-        "given": {"metadata_layout": "view_tag(8) || ct(1088)"},
+        "given": {"metadata_layout": "view_tag(1) || ct(1088)"},
         "expect": {str(c): {"ephemeralPubKey_bytes": s6_t1(k),
                             "metadata_bytes": S6_TAG + S6_CT,
                             "payload_bytes": s6_t1(k) + S6_TAG + S6_CT}
@@ -624,17 +628,16 @@ def group_4() -> dict[str, dict]:
     ss13 = hashlib.shake_256(b"V6-13 ss").digest(32)
     tag13 = vp.view_tag(ss13)
     v["V6-13"] = {
-        "claim": "view_tag = SHA256 of the view-tag domain separator || ss, first 8 bytes, "
+        "claim": "view_tag = SHA256 of the view-tag domain separator || ss, first byte, "
                  "and it sits FIRST in metadata",
         "provisional": True,
         "provisional_because": PROVISIONAL_WHY_W3,
         "given": {"ss": hx(ss13), "ds": vp.DS_VIEWTAG.decode()},
-        "expect": {"view_tag": hx(tag13), "position": "metadata[0..8]"},
-        "wrong": {"one_byte_tag": hx(tag13[:1]),
-                  "shake_tag": hx(hashlib.shake_256(vp.DS_VIEWTAG + ss13).digest(8)),
-                  "note": "the pre-widening one-byte width, which leaves the most "
-                          "expensive per-announcement work in the ladder running on one "
-                          "foreign announcement in 256; or SHAKE256 in place of SHA256"},
+        "expect": {"view_tag": hx(tag13), "position": "metadata[0]"},
+        "wrong": {"superseded_eight_byte_tag":
+                      hx(hashlib.sha256(vp.DS_VIEWTAG + ss13).digest()[:8]),
+                  "shake_tag": hx(hashlib.shake_256(vp.DS_VIEWTAG + ss13).digest(1)),
+                  "note": "the superseded eight-byte width; or SHAKE256 in place of SHA256"},
     }
 
     # V6-14: the sender chain, deterministic from encap_seed. Needs a real KEM round trip.
@@ -868,7 +871,7 @@ def group_2(t1: dict) -> dict[str, dict]:
     ct = bytes.fromhex(en["c"])
     ss_pq = bytes.fromhex(en["k"])
     tag = vp.view_tag(ss_pq)
-    v["V2-10"] = {"claim": "announcement is ct in ephemeralPubKey, view_tag (8 B) in metadata",
+    v["V2-10"] = {"claim": "announcement is ct in ephemeralPubKey, view_tag (1 B) in metadata",
                   "given": {"ct": hx(ct), "ss": hx(ss_pq),
                             "source": f"ACVP encapsulation tcId {en['tcId']}"},
                   "expect": {"ephemeralPubKey": hx(ct), "metadata": hx(tag),
@@ -876,10 +879,11 @@ def group_2(t1: dict) -> dict[str, dict]:
                              "payload_bytes": len(ct) + len(tag)},
                   "wrong": {"swapped_fields": {"ephemeralPubKey": hx(tag),
                                                "metadata": hx(ct)},
-                            "one_byte_metadata": hx(tag[:1]),
+                            "superseded_eight_byte_metadata":
+                                hx(hashlib.sha256(vp.DS_VIEWTAG + ss_pq).digest()[:8]),
                             "note": "the two fields swapped -- which is §3's convention and "
-                                    "is wrong here; or a one-byte metadata, which no "
-                                    "scheme in the specification emits"}}
+                                    "is wrong here; or the superseded eight-byte metadata, "
+                                    "which no scheme in the specification emits any more"}}
     if vp.have_kem():
         # A FOREIGN announcement: encapsulated to somebody else's ek, decapsulated with ours.
         # This is the row that exhibits implicit rejection, and it is the one that could not be
@@ -1090,13 +1094,15 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "or ct || view_tag, which puts the view tag at "
                                     "metadata[1088]. This shape is byte-identical to a "
                                     "schemeId 5 first contact -- §6 declares the collision"}}
-    v["V3-08a"] = {"claim": "the view tag is metadata[0..8]",
+    v["V3-08a"] = {"claim": "the view tag is metadata[0]",
                    "given": {"metadata": hx(tag) + hx(ct)},
-                   "expect": {"view_tag_at_index_0_8": hx(tag)},
-                   "wrong": {"leading_eight_of_ct": hx(ct[:vp.VIEW_TAG_BYTES]),
-                             "note": "a scanner that misses EVERY payment to it, silently, "
-                                     "and reports a clean empty scan. At one byte it still "
-                                     "matched 1 in 256 and left a symptom to chase"}}
+                   "expect": {"view_tag_at_index_0": hx(tag)},
+                   "wrong": {"leading_byte_of_ct": hx(ct[:vp.VIEW_TAG_BYTES]),
+                             "note": "reading the tag off ct rather than off metadata[0]. "
+                                     "At one byte this still agrees 1 time in 256, so it is "
+                                     "a scanner that misses most payments to it and finds "
+                                     "the occasional one -- an intermittent fault, which is "
+                                     "harder to chase than a clean empty scan"}}
     return v
 
 
@@ -1420,22 +1426,26 @@ def group_3_12(t1: dict) -> dict[str, dict]:
             "tag_from_key_and_nonce_directly": hx(hashlib.sha256(
                 vp.DS_VIEWTAG + k5 + ube_nonce(1)).digest()[:vp.VIEW_TAG_BYTES]),
             "note": "deriving the tag from the channel key and nonce without ss in between "
-                    "-- a well-formed eight-byte value that no conforming sender emits, so "
+                    "-- a well-formed tag value that no conforming sender emits, so "
                     "a scanner using it matches nothing",
         },
     }
     v["V5-06"] = {
-        "claim": "the memo is view_tag(8) and nothing else",
+        "claim": "the memo is view_tag(1) and nothing else",
         "given": {"view_tag": hx(tag_1)},
         "expect": {"metadata": hx(tag_1), "metadata_bytes": vp.VIEW_TAG_BYTES,
                    "ephemeralPubKey_bytes": 0,
-                   "round_trip": "parses back to the same eight bytes"},
+                   "round_trip": "parses back to the same byte"},
         "wrong": {"with_trailing_counter": hx(tag_1 + ube_nonce(1)),
-                  "one_byte_tag": hx(tag_1[:1]),
-                  "note": "24 bytes with a trailing counter, or 25 with a second eight-byte "
-                          "confirmation field as well -- shapes the upstream references "
-                          "emit; or a one-byte tag, whose matches are spurious at 1 in 256 "
-                          "and which cannot terminate recovery"},
+                  "superseded_eight_byte_tag":
+                      hx(hashlib.sha256(vp.DS_VIEWTAG + ss_1).digest()[:8]),
+                  "note": "17 bytes with a trailing counter, or a second confirmation field "
+                          "as well -- shapes the upstream references emit; or the superseded "
+                          "eight-byte tag. NOTE the memo is the ONLY field in this shape, so "
+                          "the width is the whole of the filter here and the candidate set is "
+                          "channels x lookahead rather than one -- the narrowing that §2.4's "
+                          "required address comparison pays for on the per-payment rungs is "
+                          "NOT paid for here, and this rung is not specified in this tree"},
     }
     v["V5-07"] = {
         "claim": "first contact is epk in ephemeralPubKey, view_tag || ct in metadata",

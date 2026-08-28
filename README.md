@@ -4,6 +4,11 @@ Post-quantum stealth addresses for Ethereum: one `schemeId` extending
 [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) with an ML-KEM-768 encapsulation combined
 with a secp256k1 ECDH secret (for implementation risk hedging), one announcement per payment, no protocol change.
 
+The view tag is **one byte**. ML-KEM rejects implicitly, so the KEM never tells a scanner
+whether an announcement is its own — but the announcement carries the `stealthAddress`, and
+§2.4 requires a scanner to compare the address it derives against it. That comparison is local
+and exact, so the tag only has to be a prefilter and the remaining seven bytes buy nothing.
+
 ## The rung
 
 A sender pays an address only the recipient can derive. The announcement is public and
@@ -14,15 +19,15 @@ layer is post-quantum, the spending is not.
 | | |
 |---|---|
 | meta-address, registered once via ERC-6538 | `spending_pk(33) ‖ viewing_pk_ec(33) ‖ ek(1184)` = **1 250 B** |
-| announcement, per payment | `epk` 33 B in `ephemeralPubKey`, `view_tag ‖ ct` 1 096 B in `metadata` = **1 129 B** |
-| announcement gas, Prague | **69 570** upper bound; 69 510 for the one measured instance |
+| announcement, per payment | `epk` 33 B in `ephemeralPubKey`, `view_tag ‖ ct` 1 089 B in `metadata` = **1 122 B** |
+| announcement gas, Prague | **69 360** upper bound; 69 300 for the one measured instance |
 | first-time registration gas | **964 809** |
-| a whole payment — announce, fund, spend | **111 510** |
+| a whole payment — announce, fund, spend | **111 300** |
 
 For comparison, classical ERC-5564 announces 34 B for 28 067 gas and registers 66 B for
 115 310. Gas is the one that matters for the announcement because it recurs, and bytes for the
 registry entry because it is stored. The registry entry is **18.9x the classical one in bytes** — 1 250 against 66 — and is
-paid once per `schemeId`, not once per payment. The announcement is **2.48x in gas** — 69 570
+paid once per `schemeId`, not once per payment. The announcement is **2.47x in gas** — 69 360
 against 28 067 — and is paid every time.
 
 ## What is here

@@ -62,8 +62,10 @@ DK_EXPANDED = 768 * MLKEM_768_K + 96      # not used on the wire; see the seed n
 
 # ---- the announcement ERC's own figures ----------------------------------------------
 SEC1_COMPRESSED = 33      # secp256k1 point, SEC1 compressed, per §1
-VIEW_TAG = 8              # §6: the first EIGHT bytes of `metadata`, in EVERY announcement.
-                          # Eight, everywhere; there is no confirm tag.
+VIEW_TAG = 1              # §5 rule 1: the FIRST BYTE of `metadata`, in EVERY announcement.
+                          # One, everywhere; there is no confirm tag. It was eight until the
+                          # announced `stealthAddress` was made the authoritative check
+                          # (§2.4 MUST) and the tag was narrowed to a prefilter.
 # NONCE_BYTES is a parameter of §3.5's DERIVATION and is no longer a wire field. The counter is
 # derived on both sides rather than transmitted -- so this constant
 # still governs `ss = SHA256(DS || k_pairwise || ubeN(counter))` and contributes nothing to any
@@ -77,21 +79,21 @@ SCALAR = 32               # a secp256k1 scalar, or a 32-byte seed
 T1_OT = {cat: k * T1_BYTES_PER_POLY for cat, k in K_BY_CATEGORY.items()}
 
 ANNOUNCE_ERC = {
-    "schemeId 2 announcement":  (CT + VIEW_TAG,                       1_096),
-    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_129),
-    "schemeId 4 first contact": (VIEW_TAG + CT,                       1_096),
-    "schemeId 5 first contact": (SEC1_COMPRESSED + VIEW_TAG + CT,     1_129),
-    "memo (schemeIds 4, 5)":    (VIEW_TAG,                                 8),
+    "schemeId 2 announcement":  (CT + VIEW_TAG,                       1_089),
+    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),
+    "schemeId 4 first contact": (VIEW_TAG + CT,                       1_089),
+    "schemeId 5 first contact": (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),
+    "memo (schemeIds 4, 5)":    (VIEW_TAG,                                 1),
     # schemeId 6's three, so the shape machinery below covers the WHOLE ladder
     # and `harness/announcement/measure.py` can read one table instead of retyping nine field
     # lengths. `t1_ot` is derived from FIPS 204's packing widths above, not from a constant.
-    "schemeId 6 announcement, category 2": (T1_OT[2] + VIEW_TAG + CT, 2_376),
-    "schemeId 6 announcement, category 3": (T1_OT[3] + VIEW_TAG + CT, 3_016),
-    "schemeId 6 announcement, category 5": (T1_OT[5] + VIEW_TAG + CT, 3_656),
+    "schemeId 6 announcement, category 2": (T1_OT[2] + VIEW_TAG + CT, 2_369),
+    "schemeId 6 announcement, category 3": (T1_OT[3] + VIEW_TAG + CT, 3_009),
+    "schemeId 6 announcement, category 5": (T1_OT[5] + VIEW_TAG + CT, 3_649),
 }
 
 # §6's shape is the PAIR of field lengths, not the total, and the distinction is load-bearing:
-# schemeId 2 and schemeId 4's first contact both total 1 096 B and are still distinguishable,
+# schemeId 2 and schemeId 4's first contact both total 1 089 B and are still distinguishable,
 # because one puts `ct` in `ephemeralPubKey` and the other in `metadata`. Modelling the total
 # alone would call that a collision.
 #
@@ -144,7 +146,7 @@ SPIRIT_POC_EK_MLKEM768 = 1_184
 # ---- the figures the specification quotes -------------------------------------------
 # §4.2's meta-address table, and §4.3's announcement payloads.
 SPEC_META = {2: 4_128, 3: 5_600, 5: 7_072}
-SPEC_ANNOUNCEMENT = {2: 2_376, 3: 3_016, 5: 3_656}
+SPEC_ANNOUNCEMENT = {2: 2_369, 3: 3_009, 5: 3_649}
 CT_MLKEM768 = 1_088      # FIPS 203 ML-KEM-768 ciphertext
 # NOT a second definition of the width. This shadowed the constant above, so two assignments
 # governed one figure and changing the first alone would have moved the ladder's payloads and

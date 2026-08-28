@@ -92,7 +92,7 @@ pub fn verified_ek(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error>
     Ok(ek)
 }
 
-/// ERC-5564 payload. §6: schemeId 2 puts `ct` in `ephemeralPubKey` and the 8-byte tag in
+/// ERC-5564 payload. §5: schemeId 2 puts `ct` in `ephemeralPubKey` and the one-byte tag in
 /// `metadata`; schemeId 3 puts `epk` in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`.
 #[derive(Debug, Clone)]
 pub struct Announcement {
@@ -100,7 +100,7 @@ pub struct Announcement {
     pub epk: Option<CompressedPoint>,
     /// ML-KEM ciphertext, 1 088 bytes.
     pub ct: Vec<u8>,
-    /// `metadata[0..8]`. Compared in full.
+    /// `metadata[0]`. Compared in full.
     pub view_tag: [u8; VIEW_TAG_BYTES],
     /// ERC-5564 `stealthAddress` for this payment. `[0u8; 20]` is a valid Ethereum address,
     /// so it cannot stand in for "missing".
@@ -110,13 +110,15 @@ pub struct Announcement {
 /// Successful scan. [`StealthScheme::spend_key`] checks that `master` controls `stealth_address`.
 #[derive(Clone)]
 pub struct Match {
-    /// Derived stealth address. §2.8 comparison against the announced address is a MAY.
+    /// Derived stealth address. §2.4 makes the comparison against the announced
+    /// `stealthAddress` a MUST and [`match_from_secret`] performs it, so a `Match` never
+    /// carries an address that disagrees with the announcement it came from.
     pub stealth_address: [u8; 20],
     /// Payment secret for the one-time key.
     pub shared_secret: Bytes32,
 }
 
-/// Offset and view tag from the payment secret. Shared by schemeId 2 and 3 as required by §2.8.
+/// Offset and view tag from the payment secret. Shared by schemeId 2 and 3, per §1.
 ///
 /// # Errors
 ///
@@ -125,7 +127,7 @@ pub fn derive_from_shared_secret(ss: &Bytes32) -> Result<(Bytes32, [u8; VIEW_TAG
     Ok((offset_of(ss)?, view_tag_of(ss)))
 }
 
-/// `SHA256(DS_viewtag ‖ ss)[0..8]`. Does not run offset reduction.
+/// `SHA256(DS_viewtag ‖ ss)[0]`. Does not run offset reduction.
 #[must_use]
 pub fn view_tag_of(ss: &Bytes32) -> [u8; VIEW_TAG_BYTES] {
     let tag_digest = Sha256::digest([DS_VIEWTAG, ss.as_slice()].concat());
@@ -196,19 +198,30 @@ pub fn combine_secrets(
     Ok(h.finalize().into())
 }
 
-/// Shared scanner tail. Tag first (§2.5), then offset, then the stealth point.
+/// Shared scanner tail. Tag first (§2.5), then offset, then the stealth point, then the
+/// announced address.
+///
+/// The one-byte tag is a prefilter and not a decision: it admits 1 foreign announcement in
+/// 256. §2.4 requires the announced `stealthAddress` to be the derived one, so the address
+/// comparison is what actually decides, and §2.7 makes a disagreement a **skip** rather than
+/// an error — `announce()` is permissionless, so an error path here would be a DoS.
 fn match_from_secret(
     ss: &Bytes32,
     spending: &CompressedPoint,
-    announced: &[u8; VIEW_TAG_BYTES],
+    announced_tag: &[u8; VIEW_TAG_BYTES],
+    announced_address: &[u8; 20],
 ) -> Option<Match> {
-    if view_tag_of(ss) != *announced {
+    if view_tag_of(ss) != *announced_tag {
         return None;
     }
     let offset = offset_of(ss).ok()?;
     let stealth = add_points(spending, &offset)?;
+    let stealth_address = pqsa_ec::address_of(&stealth);
+    if stealth_address != *announced_address {
+        return None;
+    }
     Some(Match {
-        stealth_address: pqsa_ec::address_of(&stealth),
+        stealth_address,
         shared_secret: *ss,
     })
 }
@@ -283,7 +296,7 @@ impl StealthScheme for SchemeId2 {
             return None;
         }
         let ss = MlKem768::decapsulate(&scanner.kem_seed, &ann.ct).ok()?;
-        match_from_secret(&ss, &scanner.spending, &ann.view_tag)
+        match_from_secret(&ss, &scanner.spending, &ann.view_tag, &ann.stealth_address)
     }
 
     /// §1 `ek` check. Viewing fields must be absent (schemeId 3 material is [`Error::Malformed`]).
@@ -451,7 +464,7 @@ impl StealthScheme for SchemeId3 {
             &scanner.ek,
         )
         .ok()?;
-        match_from_secret(&ss, &scanner.spending, &ann.view_tag)
+        match_from_secret(&ss, &scanner.spending, &ann.view_tag, &ann.stealth_address)
     }
 
     /// Checks `ek` and the viewing point against the registry. Either mismatch is
@@ -729,9 +742,9 @@ mod tests {
         }
     }
 
-    /// Parsed announcement keeps the real stealth address; §2.8 comparison succeeds.
+    /// Parsed announcement keeps the real stealth address; §2.4's comparison succeeds.
     #[test]
-    fn a_parsed_announcement_survives_the_optional_address_comparison() {
+    fn a_parsed_announcement_survives_the_required_address_comparison() {
         let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
         let built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
 
@@ -745,8 +758,8 @@ mod tests {
         let m = SchemeId2::scan(&scanner, &parsed).expect("our own payment");
         assert_eq!(
             m.stealth_address, parsed.stealth_address,
-            "the derived address must equal the announced one, or §2.8's comparison is a \
-             guaranteed false negative"
+            "the derived address must equal the announced one, or §2.4's required \
+             comparison is a guaranteed false negative"
         );
     }
 
@@ -764,26 +777,33 @@ mod tests {
         assert_ne!(parsed.stealth_address, [0u8; 20]);
     }
 
-    /// Lying announced address still matches; §2.8 can see the lie. Not an error (DoS).
+    /// Lying announced address is a skip, not an error. §2.4 MUST, §2.7 skip (DoS).
     #[test]
-    fn a_lying_announced_address_is_detectable_without_being_an_error() {
+    fn a_lying_announced_address_is_a_skip_and_not_an_error() {
         let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
         let built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
-        let (_real, epk, md) = SchemeId2::announcement_to_bytes(&built);
+        let (real, epk, md) = SchemeId2::announcement_to_bytes(&built);
 
         let lie: [u8; 20] = core::array::from_fn(|i| 0xa0 ^ (i as u8));
+        assert_ne!(
+            lie, real,
+            "the lie must actually differ, or this tests nothing"
+        );
         let parsed = SchemeId2::announcement_from_bytes(&lie, &epk, &md).unwrap();
 
         let scanner = SchemeId2::bind(&tracking, &meta).unwrap();
-        let m = SchemeId2::scan(&scanner, &parsed).expect("still ours -- the tag decides");
-        assert_ne!(
-            m.stealth_address, parsed.stealth_address,
-            "and §2.8 can see the lie"
+        assert!(
+            SchemeId2::scan(&scanner, &parsed).is_none(),
+            "the view tag still matches -- it is a function of `ss` and the lie did not touch \
+             `ct` -- so the address comparison is the only thing that can reject this, and \
+             §2.4 requires it to"
         );
-        assert_eq!(
-            m.stealth_address, built.stealth_address,
-            "the derived address is the truth"
-        );
+
+        // A skip and not an error: `announce()` is permissionless, so anyone can publish this
+        // and a scan that aborted on it would be a DoS. The honest announcement still matches.
+        let honest = SchemeId2::announcement_from_bytes(&real, &epk, &md).unwrap();
+        let m = SchemeId2::scan(&scanner, &honest).expect("the scan carries on");
+        assert_eq!(m.stealth_address, built.stealth_address);
     }
 
     /// `bind` caches the recomputed `ek`, then a payment round-trips.
@@ -939,16 +959,16 @@ mod tests {
             (
                 96,
                 1088,
-                8,
                 1,
-                "518b4b3184372741d90ccdeaf29d1ea32b73da56f7badce066612526617a11dc",
+                1,
+                "6c4606126d8456e0b8b323ce093d03ec2f6acfc9797fd06f48319d27475dd6b7",
             ),
             (
                 128,
                 33,
-                1096,
+                1089,
                 2,
-                "25df977bb2a67c6089cd109ebbbdd0a1c0d3cc28e548ba12ccd3094573e79e27",
+                "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca",
             ),
         ];
 

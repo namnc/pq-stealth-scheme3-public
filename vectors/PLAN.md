@@ -55,7 +55,7 @@ implemented.
 | V1-04 | reduction MUST reject `base = n` | `base = n_secp256k1` | `counter = 1` | accepted as valid; some libraries reduce mod n silently and return 0 |
 | V1-05 | `base = n − 1` is **valid** | `base = n − 1` | `counter = 0` | rejected — an off-by-one in the bound loses a legitimate payment |
 | V1-06 | the counter byte is a single byte appended | a `base` forced to counter 1 | a pinned 32-byte output | `u32` or `u64` counter encoding; ASCII `"1"` |
-| V1-07 | `view_tag = SHA256(DS_viewtag ‖ ss)[0]` | a fixed `ss` | one byte | **taking other than `[0]` alone**; taking `[24..32]`; or the leading bytes of `H(ss)` instead of a separate digest |
+| V1-07 | `view_tag = SHA256(DS_viewtag ‖ ss)[0]` | a fixed `ss` | one byte | **the superseded eight-byte width**, `[0..8]`, which matches nothing a conforming sender emits; taking `[31]` instead of `[0]`; or the leading byte of `H(ss)` instead of a separate digest |
 
 ## 3. §2 — schemeId 2
 
@@ -70,7 +70,7 @@ implemented.
 | V2-07 | tag MUST be `0x02`/`0x03` **only** | a `0x05`-tagged encoding of the same point | error at decode | **accepted.** The RustCrypto `sec1` stack canonicalises `0x05` to the same point, so one key gets two on-chain encodings and an attacker picks which recipients see. The two reference implementations **disagreed on this** |
 | V2-08 | 33 bytes of right length can still be a non-point | `0x02 ‖ 32 × 0xff` | error at decode | accepted, then a curve operation on garbage |
 | V2-09 | `address = keccak256(uncompressed(pk)[1..])[12..32]` | a `stealth_pk` | 20 bytes, plus its EIP-55 form | including the `0x04` prefix in the hash; taking `[0..20]` |
-| V2-10 | announcement is `ct` in `ephemeralPubKey`, `view_tag` (8 B) in `metadata` | the sender above | the two field byte strings, 1 088 and 8 | the two fields swapped — which is §3's convention and is wrong here; or a one-byte `metadata`, which no scheme in the specification emits |
+| V2-10 | announcement is `ct` in `ephemeralPubKey`, `view_tag` (1 B) in `metadata` | the sender above | the two field byte strings, 1 088 and 1 | the two fields swapped — which is §3's convention and is wrong here; or an eight-byte `metadata`, the superseded width, which no scheme in the specification emits any more |
 | V2-11 | view-tag mismatch → **skip** | a foreign well-formed `ct` | not mine, no error | an error, which per §2.5 aborts the whole scan |
 | V2-12 | malformed `ct` → **skip at the entry point** | `ct` of 1 087, 0 and 1 089 bytes | not mine, no error, ×3 | an error. Both references are layered so the entry point converts it; an implementation exposing the inner routine as its scanning API inherits the wrong behaviour |
 | V2-13 | the derived key controls the derived address | the vector above | `spend_key_controls` true, **as a key-to-address relation** | asserting only that bytes were produced — a derivation can be self-consistent and wrong |
@@ -91,8 +91,8 @@ Everything in §3 above applies. These are the additions.
 | V3-06a | `ct` is bound in | two announcements with the same `epk` and `ss_ec` but different `ct` | different `ss` | the same `ss` — the case SP 800-227 section 4.6.3's argument turns on |
 | V3-06b | `viewing_pk_ec` is bound in | the same `ss_ec` reached against two recipients' registered keys | different `ss` | the same `ss`, which is the identity binding absent from the old IKM |
 | V3-07 | `epk` MUST be bound in | the same first contact with the parity byte flipped `0x02`↔`0x03` | a **different** `ss` | the same `ss` — the flipped point has the same x-coordinate, so without `epk` in the IKM this is a replay with a different-looking announcement |
-| V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 096 in `metadata`, 1 129 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]`. **This shape is byte-identical to a schemeId 5 first contact** — §6 declares the collision, so a fixture asserting the two differ would assert the reversed order |
-| V3-08a | the view tag is `metadata[0..8]` | a real payment, and a foreign announcement | matched; skipped | comparing against the first eight bytes of `ct` — a scanner that misses **every** payment to it, silently, reporting a clean empty scan. Worse than the one-byte case, which matched 1 in 256 and left a symptom to chase |
+| V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 089 in `metadata`, 1 122 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]`. **This shape is byte-identical to a schemeId 5 first contact** — §6 declares the collision, so a fixture asserting the two differ would assert the reversed order |
+| V3-08a | the view tag is `metadata[0]` | a real payment, and a foreign announcement | matched; skipped | comparing against the first byte of `ct` — a scanner that agrees 1 time in 256 by coincidence, so it misses most payments to it and finds the occasional one. An intermittent fault, and harder to chase than a clean empty scan |
 
 > **V3-05 and V3-06 are marked `provisional` in the generated files.** §2.9's domain separator
 > string is new in this document and **no outside implementation has adopted it** — this project's

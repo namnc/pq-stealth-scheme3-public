@@ -217,7 +217,7 @@ def cases():
     # while accepting a shape its scanner refuses, and nothing about the sizes would look wrong.
     # The pairs below are read off §6's wire table row by row, and this harness needs a node --
     # so `cargo test` is silent about them and only a real run against a node is evidence.
-    WIRE = {2: (1088, 8), 3: (33, 1096)}
+    WIRE = {2: (1088, 1), 3: (33, 1089)}
     for i, c in enumerate(got):
         where = f"{INPUT.name} case {i}"
         missing = [k for k in ("scheme_id", "stealth_address", "spend_key", "epk_field",
