@@ -39,11 +39,12 @@ floor does not cover, so a shift there lands squarely on the published ratio.
 So `measure.py` pins the compiler version, the optimizer settings and solc's target EVM,
 **asserts what the build actually used rather than what `foundry.toml` declares**, and refuses
 to measure on a mismatch. The receipt names the toolchain beside the hardfork. What the
-optimizer alone is worth is in the harness's own docstring, measured by turning it off.
+optimizer alone is worth is measured rather than guessed, and recorded in `measure.py` beside
+the constants it justifies.
 
 ## The field lengths are READ, not retyped
 
-`CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203 and
+`CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203
 rather than from any constant that produced it, and asserts them against §6.
 
 **The payload table is DERIVED from §6's wire model rather than hand-listed, and that

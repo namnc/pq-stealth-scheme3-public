@@ -329,7 +329,7 @@ def main() -> int:
         r = subprocess.run([sys.executable, str(TOOL), str(root), str(root)],
                            capture_output=True, text=True)
         case("a second positional exits 2", r.returncode, 2)
-    # An INLINE marker — one check_examples' anchored grammar never recognises, so its
+    # An INLINE marker — one the anchored grammar never recognises, so its
     # fenced block is never re-run — must confer no exemption: the two parsers sharing one
     # grammar is what makes "generated span" mean "authenticated span".
     rc, out = run_with_doc(

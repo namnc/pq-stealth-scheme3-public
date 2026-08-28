@@ -1,6 +1,6 @@
 # `payment` — what a whole stealth payment costs, and whether the key works
 
-**A payment is three transactions, and §7 measures one of them.**
+**A payment is three transactions, and §6 measures one of them.**
 
 ```
 1. announce(schemeId, stealthAddress, ephemeralPubKey, metadata)
@@ -9,12 +9,12 @@
 ```
 
 `harness/announcement` measures (1) — the transaction whose size the whole ladder is an
-argument about. It is not what a payment costs, which a reader of §7 could reasonably
+argument about. It is not what a payment costs, which a reader of §6 could reasonably
 assume; this harness exists to close that gap.
 
-**(3) is the reason this exists.** Its gas is uninteresting; its *succeeding* is not. schemeIds 2
-and 3 both claim the derived address is an ordinary EOA and the derived key an ordinary secp256k1
-scalar, and this harness is what checks that against an EVM. `cast send --private-key <derived>`
+**(3) is the reason this exists.** Its gas is uninteresting; its *succeeding* is not. schemeId 3
+claims the derived address is an ordinary EOA and the derived key an ordinary secp256k1 scalar,
+and this harness is what checks that against an EVM. `cast send --private-key <derived>`
 either works or it does not, and the node decides, not us.
 
 ## Run it
@@ -77,9 +77,8 @@ seed, and announce. That reproduces the exact `epk_field` and `metadata` behind 
 announcement gas of `69 300` and the whole-payment gas of `111 300`, which matters more than it
 looks: under EIP-7623 the figure depends on the ciphertext's ZERO-BYTE COUNT, so a different
 seed gives a different number and a reader comparing against one would conclude the receipt was
-wrong. A tree carrying the demonstration
-crate does all of this with `--emit-payment-json`; a tree carrying only the per-payment library
-does it in about fifteen lines against that library's own API.
+wrong. `emit_payment_json` above does exactly this and takes no input, which is the next
+section.
 
 ## About the private keys in `payment.json`
 

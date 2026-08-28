@@ -1,53 +1,16 @@
 #!/usr/bin/env python3
-"""Registration cost, measured as real first-time `registerKeys` transactions.
+"""Registration cost, measured as real first-time `registerKeys` transactions against the
+canonical ERC-6538 registry's DEPLOYED runtime bytecode.
 
-WHAT IS MEASURED, AND AGAINST WHAT
-----------------------------------
-§6's registration table prices the one-time ERC-6538 `registerKeys` call whose calldata is
-the meta-address. Its cost is dominated by STORAGE, and how much storage depends on how the
-registry lays the value out — which the specification does not specify and MUST NOT assume.
-So this harness measures no model and no recompilation: it installs the **canonical
-ERC-6538 registry's deployed runtime bytecode** — read off Ethereum mainnet at
-`0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` with `eth_getCode`, committed beside this file
-in `deployed_bytecode.hex` — into anvil with `anvil_setCode`, and reads `gasUsed` off real
-transaction receipts. The bytecode's SHA-256 is pinned below and checked at every run, so a
-swapped file fails before it measures anything; a reader re-derives the file itself with one
-`eth_getCode` against any mainnet node.
-
-Compiling the registry's source here instead would measure this machine's compiler
-settings. The deployed artifact is the thing every wallet actually pays, so the deployed
-artifact is what is priced.
-
-FIRST REGISTRATION, DISTINCT REGISTRANTS
-----------------------------------------
-Every row is a FIRST registration: each row sends from its own fresh account, so every
-storage slot written goes zero → nonzero, which is the cost a new recipient pays and the
-table's "registered once" framing. Rows may share a `schemeId`, so
-sending them from one account would overwrite one entry three times — nonzero → nonzero,
-a different and cheaper operation that is not the row's claim.
-
-THE PAYLOAD: A WORST-CASE CALLDATA CONVENTION, STATED
-------------------------------------------------------
-Payloads are nonzero-filled bytes (`1 + i % 255`) of exactly the meta-address lengths
-`tools/derive_sizes.py` re-derives from FIPS 203 — read from there, not
-retyped, so a wire change cannot leave this harness measuring a shape the document no
-longer specifies. The fill moves the two cost components differently, and saying which is
-the point. STORAGE — the dominant component — depends on byte values only through
-all-zero 32-byte slots (an SSTORE writing zero is cheaper); real key material produces
-one with probability ~2^-256, so the storage side prices a real registration exactly.
-CALLDATA does depend on byte values: each zero byte is charged 12 gas less, and real key
-material has one in roughly 256 bytes. So each figure is an UPPER BOUND that a real
-registration undercuts by about 59 gas at schemeId 3's 1 250 bytes, derived per row by
-`tools/derive_sizes.py` rather than estimated here — the same worst-case
-token convention as the announcement harness, with its consequence stated rather than
-rounded away.
-
-Run:
     python3 measure.py                # boots its own anvil, prints the table
     python3 measure.py --json         # rewrites measured.json
-    python3 measure.py --rpc-url URL  # against an already-running node (must allow anvil_setCode)
+    python3 measure.py --rpc-url URL  # an already-running node, which must allow anvil_setCode
 
 Requires `anvil` and `cast` (Foundry) on PATH.
+
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
+file, and is deliberately NOT repeated here. It used to be in both places: the two
+copies drifted, and every stale claim this directory has carried was carried twice.
 """
 
 import argparse
@@ -96,7 +59,7 @@ def free_port():
 
 
 def blob(n):
-    """Nonzero payload bytes — see the module docstring for why values end there."""
+    """Nonzero payload bytes — see README.md for why byte values end up mattering."""
     return "0x" + "".join(f"{1 + (i % 255):02x}" for i in range(n))
 
 

@@ -230,8 +230,9 @@ def main(argv: list[str]) -> int:
     if unknown or len(args) > 1:
         print(f"usage error: unexpected argument(s) {' '.join(unknown or args[1:])}",
               file=sys.stderr)
-        print("usage: check_measured.py [root] [--all]   # --all sweeps the specs and "
-              "README too; the bare form covers the docs directory and AUDIT.md",
+        print("usage: check_measured.py [root] [--all]   # both sweep the same documents "
+              "-- the ERC, the root README and each harness's; --all REPORTS an untraced "
+              "figure where the bare form FAILS on it",
               file=sys.stderr)
         print(__doc__)
         return 2
@@ -465,15 +466,15 @@ def main(argv: list[str]) -> int:
             pattern_re = r"(?<![\d])(?<!\d )\b(\d{1,3}(?: \d{3})+|\d{5,})\b"
             # The elision exemption below applies ONLY inside the GENERATED SPANS of the
             # transcript files — the fenced bodies that follow an `<!-- output-of: ... -->`
-            # marker, which are exactly the bytes check_examples re-runs and compares. The
-            # filename alone is too wide a scope: a transcript file's
+            # marker, which are exactly the bytes an example-checker re-runs and compares.
+            # The filename alone is too wide a scope: a transcript file's
             # headings and explanations are hand-written, so a figure there must face the
             # sweep like any other prose. The token walk-back inside the span is the belt
             # on top of the scope.
             generated_spans: list[tuple[int, int]] = []
             if doc.name.startswith("transcripts-"):
-                # The marker grammar is EXACTLY check_examples' MARKER — full-line,
-                # anchored — because that checker is what authenticates a span's content:
+                # The marker grammar is full-line and anchored, matching the example-checker
+                # that authenticates a span's content exactly, because:
                 # a marker form it does not recognise is a span it never re-runs, and an
                 # exemption there would be an exemption on hand-written bytes.
                 for gm in re.finditer(

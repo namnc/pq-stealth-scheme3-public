@@ -1,67 +1,16 @@
 #!/usr/bin/env python3
 """Announcement cost, measured as real standalone transactions.
 
-WHY THIS EXISTS
----------------
-The figures this replaces were measured with `gasleft()` around a call made from
-a Foundry test contract. That frame is not the frame a wallet pays in:
-
-  * a test contract reaches the announcer with `CALL`, so it pays EIP-2929 cold
-    account access (2 600) plus caller-side argument copy;
-  * a standalone transaction executes no `CALL` at all, and EIP-2929 seeds
-    `accessed_addresses` with `tx.to`, so there is no cold charge to pay.
-
-Measured here, the test-frame "execution" figure was ~2.1x the real one.  Because
-the EIP-7623 floor binds on the post-quantum schemes (where execution is not
-charged at all) and does not bind on the classical baseline (where it is), the
-whole of that error landed on the denominator of every published ratio.
-
-So this harness sends real transactions to a real deployed announcer on anvil and
-reads `gasUsed` off the receipt.  **Total transaction gas needs no convention** --
-it is the number a wallet's balance actually moves by.
-
-TWO NUMBERS, AND HOW EACH IS OBTAINED
--------------------------------------
-1. `total`      -- straight off the receipt.  Ground truth, no arithmetic.
-2. `execution`  -- not directly observable when the floor binds, because the
-   transaction then pays `21000 + 10*tokens` regardless of what the EVM did.
-
-   Recovered with a probe: the same call with an **all-zero** payload of the
-   same length.  Execution gas is a function of calldata *length*, not of byte
-   values (LOG data is 8/byte regardless; memory expansion and CALLDATACOPY are
-   length-driven), while the EIP-7623 token count is not -- a zero byte is 1
-   token, a nonzero byte is 4.  So the zero variant escapes the floor and
-   exposes execution, at identical execution cost.
-
-   That is an assumption, so it is **validated, not asserted**: wherever the floor
-   binds on neither variant, execution is recoverable from both and the two must
-   agree exactly. This run fails if they do not -- the check is unconditional, not
-   a flag. How many rows that covers is printed rather than assumed; with one
-   post-quantum scheme shipping it is the classical baseline alone.
-
-THE ANNOUNCER HERE IS COMPILED, AND THAT IS A DEPENDENCE WORTH PINNING
------------------------------------------------------------------------
-`harness/registration` measures the canonical registry's DEPLOYED bytecode, read
-off mainnet, precisely so no compiler setting can move its figures.  This harness
-cannot do that -- ERC-5564's announcer is measured here as a local build -- so the
-execution figures are a function of the toolchain as well as of the EVM, and the
-dependence is not small.  Measured, with the optimizer turned off and nothing else
-changed: the classical baseline's execution goes 5 143 -> 6 471 and its TOTAL
-28 067 -> 29 395, which moves the published ratio from 2.47x to 2.36x.  The
-classical row is the denominator and it is the one row the EIP-7623 floor does not
-cover, so the whole error lands on the ratio.
-
-So the toolchain is pinned below and RECORDED IN THE RECEIPT beside the hardfork,
-for exactly the reason the hardfork is: a silent bump reprices everything and a
-receipt that does not name what produced it cannot say so.
-
-Run:
     python3 measure.py                # boots its own anvil, prints the table
     python3 measure.py --json         # rewrites measured.json
     python3 measure.py --rpc-url URL  # against an already-running node
 
-Requires `anvil` and `cast` (Foundry) on PATH, plus `forge` to obtain the
-announcer bytecode from ../../contracts.
+Needs `anvil`, `cast` and `forge` on PATH; `forge` builds the announcer from
+`../../contracts`. Exits 1 if any self-check fails.
+
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
+file, and is deliberately NOT repeated here. It used to be in both places: the two
+copies drifted, and every stale claim this directory has carried was carried twice.
 """
 
 import argparse
@@ -101,6 +50,13 @@ HARDFORK = "prague"
 # What the announcer must be built with. `contracts/foundry.toml` DECLARES these; the check
 # below asserts what the build ACTUALLY used, which is the pair that can disagree -- a machine
 # with a different solc on PATH, a profile override, a stale artifact.
+#
+# WHY PIN AT ALL, measured rather than assumed: `harness/registration` prices the registry's
+# DEPLOYED bytecode, so no compiler setting can reach it; this announcer is a local build, so
+# every one of them does. Turn the optimizer off and change nothing else and the classical
+# baseline's execution goes 5 143 -> 6 471, its TOTAL 28 067 -> 29 395, and the published ratio
+# 2.47x -> 2.36x. The classical row is the denominator and the one row the EIP-7623 floor does
+# not cover, so the whole shift lands there.
 #
 # `EVM_VERSION` must equal `HARDFORK`: solc targeting one EVM while anvil executes another is
 # a measurement of neither, and nothing else in this file would notice.
@@ -154,8 +110,8 @@ CLASSICAL = ("classical (ERC-5564 schemeId 1)", 1, 33, 1)
 def cases():
     """`(name, schemeId, epk_len, metadata_len)` for every row §6's wire table has.
 
-    Order: the classical baseline first, then the ladder in `schemeId` order, so the printed
-    table reads the way §7's does.
+    Order: the classical baseline first, then the rest in `schemeId` order, so the printed
+    table reads the way §6's does.
     """
     out = [CLASSICAL]
     for name, (epk_len, md_len) in derive_sizes.SHAPES.items():
@@ -183,7 +139,7 @@ def blob(n, fill):
 
     `fill='nonzero'` reproduces the pattern the Foundry fixture used
     (`1 + i % 255`, never zero) so the token count is the worst case.
-    `fill='zero'` is the execution probe described in the module docstring.
+    `fill='zero'` is the execution probe README.md describes.
     """
     if fill == "zero":
         return "0x" + "00" * n
@@ -460,8 +416,8 @@ def main():
                     "note on STEALTH in measure.py)",
             "hardfork": HARDFORK,
             # The announcer is BUILT here rather than read off chain, so the execution
-            # figures depend on this as much as on the hardfork. See the docstring for
-            # what the optimizer alone is worth.
+            # figures depend on this as much as on the hardfork. What the optimizer alone
+            # is worth is measured beside the constants above.
             "toolchain": tc,
             "intrinsic_gas": INTRINSIC,
             "self_check": "pass" if not problems else problems,

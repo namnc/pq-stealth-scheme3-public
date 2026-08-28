@@ -203,27 +203,17 @@ DS_VIEWTAG = b"pq-stealth/view-tag/v1"
 # ML-KEM-768, from a third-party implementation, OPTIONAL
 # --------------------------------------------------------------------------------------
 #
-# `kyber-py` if it is installed, `None` otherwise. Optional on purpose: this repository
-# otherwise has no external dependency at all, and a generator that cannot run from a bare
-# checkout is one a reviewer cannot run either -- and a check nobody can run is a check
-# that reports nothing. Rows needing a KEM are
-# emitted when it is present and RECORDED AS ABSENT WITH THE REASON when it is not, so the
-# plan-coverage invariant holds either way.
+# `kyber-py` if it is installed, `None` otherwise. OPTIONAL on purpose: nothing else here has
+# an external dependency, and a generator a reviewer cannot run from a bare checkout is a check
+# that reports nothing. Rows needing a KEM are emitted when it is present and recorded as absent
+# WITH THE REASON when it is not, so the plan-coverage invariant holds either way.
 #
-# WHY A THIRD-PARTY IMPLEMENTATION IS THE RIGHT ORACLE and not a convenience:
+# A third-party implementation is the right oracle rather than a convenience: the standalone
+# rule forbids importing the code the vectors validate, and this one is trusted for exactly the
+# tuples it reproduces from NIST's ACVP file -- `acvp_selftest()` below, run every time.
 #
-#   * the standalone rule forbids importing the code the vectors validate -- OURS. A Python
-#     implementation is necessarily a different implementation from the Rust we ship, which is
-#     the property the rule is actually about.
-#   * the trust question has an ANSWER rather than an assurance. It is not trusted because it
-#     is popular; it is trusted for exactly the tuples it reproduces from NIST's ACVP file,
-#     and `acvp_selftest()` below is that check, run every time the generator runs.
-# `PQSA_NO_KEM=1` forces the absent branch. A TEST SEAM, and it exists because the suite has
-# to cover BOTH worlds on one machine: with the library, the KEM-bearing rows are emitted and
-# carry round-trip evidence; without it, they are recorded as absent with the reason. A suite
-# that could only test whichever world the runner happened to be in would have one branch
-# permanently unexercised -- and the absent branch is the one a bare checkout takes, so it is
-# the one a reviewer sees first.
+# `PQSA_NO_KEM=1` forces the absent branch, so one machine can exercise both worlds. The absent
+# branch is the one a bare checkout takes, so it is the one a reviewer meets first.
 if os.environ.get("PQSA_NO_KEM") == "1":                    # pragma: no cover - env dependent
     _ML_KEM_768 = None
 else:
@@ -296,12 +286,11 @@ def acvp_selftest(tier1: dict) -> list[str]:
             bad.append(f"encaps tcId {c['tcId']}: ct disagrees with ACVP")
         if ss.hex() != c["k"]:
             bad.append(f"encaps tcId {c['tcId']}: ss disagrees with ACVP")
-    # DECAPSULATION, deliberately. Without it a KEM with correct
-    # keygen and encapsulation for the sampled cases, and a subtly wrong decapsulation path,
-    # would pass the advertised oracle -- while `V2-11` and `V2-13` are emitted THROUGH
-    # decapsulation. Five of these cases are `modified ciphertext`, which is IMPLICIT REJECTION
-    # against NIST's own expected secret: the property the ladder is shaped around, and this
-    # is its only external check.
+    # DECAPSULATION, deliberately. Without it a KEM with correct keygen and encapsulation for
+    # the sampled cases, and a subtly wrong decapsulation path, would pass the advertised
+    # oracle. Five of these cases are `modified ciphertext`, which is IMPLICIT REJECTION
+    # against NIST's own expected secret -- the behaviour §2.4's required address comparison
+    # rests on, the subject of fixture V3-14, and this is its only external check.
     for c in tier1.get("decapsulation", []):
         ss = kem_decaps_expanded(bytes.fromhex(c["dk"]), bytes.fromhex(c["c"]))
         if ss.hex() != c["k"]:

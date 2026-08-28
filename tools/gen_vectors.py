@@ -52,15 +52,12 @@ GROUPS = ("1", "2.9")
 GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
 
-# THE WITHDRAWN-ROW RULE, restated here because this file SHIPS and the coverage checker
-# does not: a row whose CLAIM cell is struck through or says "no vector -- deliberately" is
-# not a fixture. A reader should still see it, and a generator must neither emit it (that
-# resurrects a requirement that no longer exists) nor report it missing (that demands a
-# fixture for one). These two patterns are a SECOND COPY of `check_vector_coverage`'s -- the
-# same trade the WAVES table makes, for the same reason: that checker pulls in tools about
-# our own documents and stays in the authoring tree, so importing it here would break the
-# shipped generator. `tools/test-gen-vectors.py` asserts the copies agree, pattern for
-# pattern and row for row over the real plan, wherever both files are present.
+# THE WITHDRAWN-ROW RULE: a row whose CLAIM cell is struck through or says "no vector --
+# deliberately" is not a fixture. A reader should still see it, and a generator must neither
+# emit it (that resurrects a requirement that no longer exists) nor report it missing (that
+# demands a fixture for one). These patterns are a deliberate second copy of the coverage
+# checker's, which stays out of a shipped tree; `tools/test-gen-vectors.py` asserts the two
+# agree where both are present and says SKIPPED where they are not.
 #
 # WITHDRAWN_CELL is case-sensitive and claim-cell-scoped on purpose: a live row's failure
 # column may legitimately say "the withdrawn rule", and matching case-insensitively anywhere
@@ -82,8 +79,8 @@ def claim_cell(line: str) -> str:
 # Read off §2.9 rather than remembered: a remembered `pq-stealth/hybrid/v1` — a string
 # that appears nowhere in the specification — would derive every V3 row under the wrong
 # constant. `tools/test-gen-vectors.py` checks that every constant below is quoted in the
-# specification -- through an authoring-side gate when present, announced as SKIPPED when
-# not -- because "I shortened it" is not a failure a reader of the emitted JSON can see.
+# specification, and says SKIPPED where the gate that does it is absent, because "I
+# shortened it" is not a failure a reader of the emitted JSON can see.
 DS_HYBRID = b"pq-stealth/hybrid-payment/v1"
 # WHY A ROW IS `provisional`, in one place because it was in three and they drifted.
 #
@@ -774,8 +771,8 @@ def main(argv: list[str]) -> int:
             print(f"  §{g}: {len(body)}/{len(slots)} slot(s) written to {f.name}")
         entry = {"sha256": hashlib.sha256(blob).hexdigest(),
                  "rows_in_plan": len(want), "rows_present": len(body)}
-        # Only stated when nonzero, so wave 1's entries -- whose groups have no such rows --
-        # keep their exact committed bytes.
+        # Only stated when nonzero, so a group with no such rows keeps its exact committed
+        # bytes.
         if len(want) != len(slots):
             entry["rows_withdrawn_or_reserved"] = len(want) - len(slots)
         manifest[f.name] = entry

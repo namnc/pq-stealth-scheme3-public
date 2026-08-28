@@ -338,7 +338,7 @@ def main() -> int:
         case("and it is VIEW_TAG_BYTES long, not one", len(vp.view_tag(tag_ss)),
              vp.VIEW_TAG_BYTES)
 
-        # §1's offset digest, which every derived address in the ladder depends on.
+        # §1's offset digest, which every derived address depends on.
         base, scalar, counter = vp.h_of_ss(bytes.fromhex(v1["V1-01"]["given"]["ss"]))
         case("the offset digest matches V1-01", base.hex(), v1["V1-01"]["expect"]["base"])
         case("and its reduction needs no retry, as the row states",

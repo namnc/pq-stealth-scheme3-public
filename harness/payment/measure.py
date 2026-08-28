@@ -5,55 +5,12 @@
     python3 measure.py --json         # rewrites measured.json
     python3 measure.py --rpc-url URL  # against an already-running node
 
-Needs `anvil`, `cast` and `forge` on PATH, and `cargo`. Exits 1 if any self-check fails.
+Needs `anvil`, `cast` and `forge` on PATH, and `cargo`. Reads `payment.json` from this
+directory; it derives nothing itself. Exits 1 if any self-check fails.
 
-WHY THIS EXISTS SEPARATELY FROM `harness/announcement`
-------------------------------------------------------
-
-That harness measures ONE transaction: the ERC-5564 `announce()` call. It is the
-transaction whose size the whole ladder is an argument about -- but it is not what a
-payment costs, and a reader of §7's figures might reasonably assume otherwise. A payment is three transactions:
-
-  1. `announce(schemeId, stealthAddress, ephemeralPubKey, metadata)`   -- measured there
-  2. a value transfer to `stealthAddress`                              -- measured only here
-  3. a spend FROM `stealthAddress`, signed with the derived key        -- measured only here
-
-(2) and (3) are the same for every scheme, because the derived address is an ordinary EOA and the
-key is an ordinary secp256k1 scalar -- which is exactly the claim schemeIds 2 and 3 make, and a
-claim of that shape is only establishable against a chain. Measuring them is therefore worth more
-as a DEMONSTRATION than as a cost: (3) succeeding is proof that the key a recipient derives
-controls the address a sender paid, established against an EVM rather than against our own
-assertion.
-
-WHAT IT DOES NOT ESTABLISH
---------------------------
-
-A local node is not mainnet, and this measures gas rather than price. (2) and (3) are also
-uninteresting as gas -- a transfer to a cold account and an ordinary send -- so the numbers below
-matter mostly as a denominator: they are what the announcement's cost should be compared against
-when someone asks whether a post-quantum stealth payment is expensive.
-
-INPUT
------
-
-Derivations are NOT done here. This harness does not implement the scheme and must not: the
-reference implementation does, and a second implementation in the measuring tool is a second
-thing that can be wrong. It reads `payment.json`, and this schema is the whole contract between
-the two — validated here before anything is spent:
-
-    {"cases": [{"scheme_id": 2, "stealth_address": "0x..", "spend_key": "0x..",
-                "epk_field": "0x..", "metadata": "0x.."}]}
-
-**Where that file comes from depends on the tree.** One carrying the end-to-end demonstration
-crate emits it with one command against that crate, and the emitter there refuses any seed but
-the hard-coded demonstration one. A tree carrying only the per-payment library has no such
-emitter and no such refusal: the reader derives these fields themselves, and the guarantee below
-is then theirs to uphold rather than a check that has already run.
-
-`spend_key` is a secret and this is the one context where printing one is acceptable: every value
-in that file is meant to derive from a hard-coded demonstration seed, on a throwaway local chain,
-where the addresses hold nothing but anvil's play money. **It MUST NOT be generated from a real
-seed.** That sentence is the requirement in every tree; only some trees have a tool enforcing it.
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
+file, and is deliberately NOT repeated here. It used to be in both places: the two
+copies drifted, and every stale claim this directory has carried was carried twice.
 """
 from __future__ import annotations
 
