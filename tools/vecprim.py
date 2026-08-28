@@ -102,17 +102,6 @@ GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
 G = (GX, GY)
 
 Point = tuple[int, int] | None
-
-
-def is_on_curve(pt: Point) -> bool:
-    if pt is None:
-        return True
-    x, y = pt
-    if not (0 <= x < P and 0 <= y < P):
-        return False
-    return (y * y - x * x * x - 7) % P == 0
-
-
 def add(a: Point, b: Point) -> Point:
     """Affine addition. Slow and clear; correctness is the only requirement here."""
     if a is None:
@@ -189,32 +178,27 @@ def decode_compressed(b: bytes) -> Point:
 def address_of(pt: Point) -> bytes:
     """The Ethereum address: `keccak256(uncompressed(pk)[1..])[12..32]`.
 
-    The `[1..]` drops the `0x04` tag, and V2-09's `wrong` column names including it as the
-    likely error. `[12..32]` and not `[0..20]` -- the other named error.
+    The `[1..]` drops the `0x04` tag; including it is the likely error, and `[12..32]` rather
+    than `[0..20]` is the other. The fixture that named both went with schemeId 2 -- see the
+    record in `vectors/PLAN.md` -- so `tools/test-gen-vectors.py` is what holds this to a
+    published answer now.
     """
     return keccak256(encode_uncompressed(pt)[1:])[12:]
 
 
 def eip55(addr20: bytes) -> str:
-    """The EIP-55 mixed-case checksum form, which V2-09 asks for alongside the raw bytes."""
+    """The EIP-55 mixed-case checksum form. Held to a published address by the self-test."""
     low = addr20.hex()
     h = keccak256(low.encode()).hex()
     return "0x" + "".join(
         c.upper() if c.isalpha() and int(h[i], 16) >= 8 else c for i, c in enumerate(low)
     )
-
-
 # --------------------------------------------------------------------------------------
 # The derivations of §1 and §5, from the specification text
 # --------------------------------------------------------------------------------------
 
 DS_OFFSET = b"pq-stealth/offset/v1"
 DS_VIEWTAG = b"pq-stealth/view-tag/v1"
-
-# §5's canonical KEM name for the deployed path. `kem_id` wraps it with its length.
-KEM_NAME = b"ML-KEM-768"
-
-
 # --------------------------------------------------------------------------------------
 # ML-KEM-768, from a third-party implementation, OPTIONAL
 # --------------------------------------------------------------------------------------
@@ -247,12 +231,6 @@ else:
         from kyber_py.ml_kem import ML_KEM_768 as _ML_KEM_768
     except ImportError:                                     # pragma: no cover
         _ML_KEM_768 = None
-
-KEM_ABSENT = ("kyber-py is not installed, so rows needing an ML-KEM round trip cannot be "
-              "built. Install it and re-run; the row is recorded rather than synthesised "
-              "because a fabricated ct or ss in a conformance fixture would pass.")
-
-
 def have_kem() -> bool:
     """Whether an ML-KEM implementation is available to this process."""
     return _ML_KEM_768 is not None
@@ -281,19 +259,6 @@ def kem_encaps(ek: bytes, m: bytes) -> tuple[bytes, bytes]:
     assert len(m) == 32, f"m is 32 bytes, got {len(m)}"
     ss, ct = _ML_KEM_768._encaps_internal(ek, m)
     return ct, ss
-
-
-def kem_decaps(dz: bytes, ct: bytes) -> bytes:
-    """`ML-KEM.Decaps(dk, ct)` -> `ss`. NEVER fails: implicit rejection, per §1.
-
-    A ciphertext addressed to somebody else yields a pseudorandom secret and no error. That is
-    the property the whole ladder is shaped around, so it is stated here where an implementer
-    of the generator will read it, not only in the specification.
-    """
-    _ek, dk = kem_keygen(dz)
-    return _ML_KEM_768.decaps(dk, ct)
-
-
 def kem_decaps_expanded(dk: bytes, ct: bytes) -> bytes:
     """`ML-KEM.Decaps(dk, ct)` from the EXPANDED 2 400-byte key.
 
@@ -342,10 +307,6 @@ def acvp_selftest(tier1: dict) -> list[str]:
         if ss.hex() != c["k"]:
             bad.append(f"decaps tcId {c['tcId']} ({c['reason']}): ss disagrees with ACVP")
     return bad
-DS_KEYGEN = b"pq-stealth/keygen/v1"
-DS_SENDER = b"pq-stealth/sender-seed/v1"
-
-
 def reduce_to_scalar(base: bytes) -> tuple[int, int]:
     """§1's counter-based reduction. Returns `(scalar, counter)`.
 
@@ -394,88 +355,3 @@ def view_tag(ss: bytes) -> bytes:
     separate digest.
     """
     return hashlib.sha256(DS_VIEWTAG + ss).digest()[:VIEW_TAG_BYTES]
-
-
-def hkdf_sha256(ikm: bytes, info: bytes, length: int, salt: bytes = b"") -> bytes:
-    """HKDF-SHA256, RFC 5869, with an **absent** salt by default.
-
-    §5's keygen derivation is HKDF and legitimately has an `info` parameter -- which is worth
-    saying here because §2.9's and §3's combiners are a direct `SHA3-256` hash and have none,
-    and conflating the two is the kind of error that propagates to every document quoting either.
-    """
-    import hmac
-    prk = hmac.new(salt or b"\x00" * 32, ikm, hashlib.sha256).digest()
-    out, block, counter = b"", b"", 1
-    while len(out) < length:
-        block = hmac.new(prk, block + info + bytes([counter]), hashlib.sha256).digest()
-        out += block
-        counter += 1
-    return out[:length]
-
-
-def keygen_seed(master: bytes, scheme_id: int, rung: bytes, j: int, length: int) -> bytes:
-    """§5's keygen-seed derivation, per V6-01.
-
-    `ikm = keygen_master`, **salt absent**, `info = DS ‖ u64be(schemeId) ‖ u64be(|rung|) ‖ rung
-    ‖ u64be(j)`, and `L` is the seed length rather than a fixed 32.
-
-    > **The parameter placement is the whole function.** Passing the master as the
-    > SALT with an empty IKM is the opposite of what §5 specifies -- which is `ikm =
-    > keygen_master(32)` and `salt = absent` -- and yields a V6-01 seed starting `fac38ad9`
-    > where the committed one starts `0b696cff`. An implementation making that swap fails the
-    > vector, and one following a vector generated that way would derive different recovery
-    > keys: seed-only recovery restores meta-addresses that never held funds and cannot see
-    > the ones that do. V6-01's own `wrong` column names "a supplied salt" as an error.
-    """
-    info = (DS_KEYGEN
-            + scheme_id.to_bytes(8, "big")
-            + len(rung).to_bytes(8, "big")
-            + rung
-            + j.to_bytes(8, "big"))
-    return hkdf_sha256(master, info, length)
-
-
-def kem_id(name: bytes = KEM_NAME) -> bytes:
-    """§5's `kem_id` for a bare KEM: `u64be(|name|) || name`.
-
-    Structural rather than a flat label, because a wrapper embeds the identifier of what it
-    wraps rather than replacing it, and every component is length-prefixed so that no two
-    nestings serialise alike. Only the bare form is needed here; the deployed path is
-    `u64be(10) || "ML-KEM-768"`, 18 bytes.
-    """
-    return len(name).to_bytes(8, "big") + name
-
-
-def announce_seed(master: bytes, scheme_id: int, rung: bytes, i: int, length: int,
-                  kem: bytes | None = None) -> bytes:
-    """§5's announce-seed derivation.
-
-    ```
-    seed_i = SHAKE256(DS || master(32) || u64be(i)
-                      || u64be(schemeId) || u64be(|rung|) || rung
-                      || u64be(|kem_id|) || kem_id, n)
-    ```
-
-    The rung is bound as well as the `schemeId`, and binding the id alone is **not
-    sufficient**: the three schemeId 6 levels share an id and a seed length, so one master and
-    counter would give all three the byte-identical KEM message. **And the KEM is bound as
-    well as the rung**, because the same rung over two KEMs is two different things that MUST
-    NOT share a seed stream, and naming a wrapper does not distinguish them.
-
-    > **Two transpositions matter here, and V6-05 pins both.** Appending `i` LAST where §5
-    > puts it immediately after `master`, or omitting
-    > `kem_id` **entirely** -- either alone changes every announce seed: a sender
-    > following §5 and a sender making the swap draw different ephemeral keys and
-    > different KEM messages from the same master and index, so a conformance vector generated
-    > that way would fail every conforming implementation while passing itself.
-    >
-    > A string-shape gate cannot catch either: every constant here
-    > is quoted correctly from the specification, and the ORDER is what carries the claim.
-    """
-    return hashlib.shake_256(
-        DS_SENDER + master + i.to_bytes(8, "big")
-        + scheme_id.to_bytes(8, "big")
-        + len(rung).to_bytes(8, "big") + rung
-        + len(kem_id() if kem is None else kem).to_bytes(8, "big")
-        + (kem_id() if kem is None else kem)
-    ).digest(length)

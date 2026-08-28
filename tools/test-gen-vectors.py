@@ -295,150 +295,20 @@ def main() -> int:
     case("an absent file exits 1", rc, 1)
     case("and says absent, not differs", "section-1.json: absent" in out, True)
 
-    # The unverifiable case, staged on V6-03: its stub comes from the conformance hook, so
-    # a committed row carrying a VALUE is one this process cannot rebuild, with no dependency
-    # on whether a library is importable.
-    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
-    run(root)
-    f = root / "vectors/section-5.json"
-    body = json.loads(f.read_text())
-    body["vectors"]["V6-03"].pop("not_generatable")
-    body["vectors"]["V6-03"]["expect"] = {"staged_by_the_self_test": True}
-    f.write_text(json.dumps(body, indent=2) + "\n")
-    rc, out = run(root, "--check")
-    case("a row this process cannot rebuild does NOT fail the check", rc, 0)
-    case("it is reported as not checked", "NOT CHECKED here" in out, True)
-    case("and named", "V6-03" in out, True)
-    case("and the manifest is skipped rather than called stale",
-         "not compared" in out, True)
-    case("and the word stale is not used for it", "FAIL" in out, False)
-
-    # THE CONCLUSION, staged WITHOUT an ML-KEM. The block above needs kyber-py to generate a
-    # real row and is skipped where it is absent -- which left the partial-success sentence
-    # unreachable on exactly the machines that produce it. So the committed side is
-    # fabricated here rather than generated: a committed row carrying an expectation, against
-    # a run that records it not_generatable, is the same `unverified` state with no dependency.
+    # COVERAGE REMOVED WITH ITS SUBJECT. Two cases stood here -- a row this process cannot
+    # rebuild does NOT fail `--check`, and a partial run concludes "OK, PARTLY" rather than
+    # claiming every file matches. Both were staged on V6-03, the tree's only row emitted as
+    # a `not_generatable` stub. §5 left and V6-03 with it, so nothing in this tree produces a
+    # stub and neither case can be staged from a real row. The paths are still in the tool.
+    # AND THE SAME FOR THE DOWNGRADE GUARD. `refuse_to_downgrade` refuses to replace a
+    # committed row that carries a value with a stub; three cases exercised it, and the
+    # `--out` scratch-tree false-positive case with them. All four needed a row the generator
+    # would emit as a stub, and there is none. The guard is kept: it is cheap, it is correct,
+    # and the day a row becomes ungeneratable again is the day it matters. It is UNTESTED
+    # here, which is the honest word for it.
     #
-    # What this pins is honesty, not arithmetic. A run that SKIPPED rows and DECLINED the
-    # manifest comparison must not conclude "every committed file matches a fresh
-    # generation", and the generated public transcripts repeat whatever this prints -- so the
-    # overclaim would reach a reader with no way to check it.
-    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
-    run(root)
-    f = root / "vectors/section-5.json"
-    body = json.loads(f.read_text())
-    body["vectors"]["V6-03"].pop("not_generatable")
-    body["vectors"]["V6-03"]["expect"] = {"staged_by_the_self_test": True}
-    f.write_text(json.dumps(body, indent=2) + "\n")
-    rc, out = run(root, "--check")
-    case("a partial run still exits 0 -- an absent capability is not staleness", rc, 0)
-    case("but it does NOT claim every committed file matches",
-         "every committed file matches a fresh generation" in out, False)
-    case("it concludes PARTLY instead", "OK, PARTLY" in out, True)
-    case("and says plainly that this is not the full check",
-         "not the full check" in out, True)
-    case("and counts what it skipped",
-         "1 row(s) and manifest.json were NOT compared" in out, True)
-
-    print("\nthe manifest")
-    root = tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}))
-    run(root)
-    man = json.loads((root / "vectors/manifest.json").read_text())
-    bad = [n for n, m in man["files"].items()
-           if hashlib.sha256((root / "vectors" / n).read_bytes()).hexdigest() != m["sha256"]]
-    case("its sha256 matches every emitted file", bad, [])
-    case("it records where tier 1 came from",
-         "ACVP-Server" in json.dumps(man["tier1_source"]), True)
-
-    print("\nthe generator imports nothing from the implementation")
-    src = TOOL.read_text(encoding="utf-8") + (TOOLS / "vecprim.py").read_text(encoding="utf-8")
-    case("no `crates` reference in either file's code",
-         [ln for ln in src.split("\n")
-          if "crates" in ln and not ln.strip().startswith(("#", "*", "--", '"'))
-          and "`crates/" not in ln], [])
-
-    print("\nthe derivation constants are the specification's, not remembered")
-    # Same shape as the wave-map case above: this delegates to a gate that does not ship with the
-    # release, so in a release tree there is nothing to run. Announced, never silently passed.
-    import subprocess as sp
-    gate = TOOLS / "check_vector_strings.py"
-    if not gate.is_file():
-        print(f"  SKIPPED  {gate.name} is not present, so the constants cannot be checked "
-              f"against the documents here. Expected in a release tree, a FINDING otherwise.")
-    else:
-        r = sp.run([sys.executable, str(gate), "."], capture_output=True, text=True, cwd=".")
-        case("every constant is quoted in a spec document", r.returncode, 0)
-    case("and the canonical rung names are the long form",
-         (gv.RUNG_2, gv.RUNG_3),
-         (b"schemeId 2 (direct KEM)", b"schemeId 3 (direct KEM, hybrid)"))
-    case("and the hybrid separator is the one §2.9 states",
-         gv.DS_HYBRID, b"pq-stealth/hybrid-payment/v1")
-    # §5 says ikm = keygen_master, salt ABSENT. Passing the master as the salt instead was
-    # the costly direction: an implementation following the spec fails the vector, and one following
-    # the vector derives different recovery keys.
-    case("keygen_seed passes the master as IKM, not as salt",
-         vp.keygen_seed(bytes([0xA5]) * 32, 2, b"schemeId 2 (direct KEM)", 0, 96).hex()[:8],
-         "0b696cff")
-
-    print("\nevery rung name in a fixture's GIVEN block is the canonical one")
-    # the second-site hazard: fixing the derivation while leaving the `given` fields means a runner that
-    # derived from the fixture's own inputs reproduced the wrong seed stream while `expect`
-    # held the right one. A fixture must be self-contained.
-    root = tree(plan_of(**{"1": [], "2": [], "2_9": [], "5": ["V6-01", "V6-04"]}))
-    run(root)
-    body = json.loads((root / "vectors/section-5.json").read_text())["vectors"]
-    names = json.dumps(body)
-    case("no short rung label survives anywhere in the emitted §5 file",
-         '"schemeId 2"' in names or '"schemeId 3"' in names, False)
-    case("and the canonical names are present",
-         "schemeId 2 (direct KEM)" in names
-         and "schemeId 3 (direct KEM, hybrid)" in names, True)
-
-    print("\na committed value is never replaced by a stub")
-    # The failure this guards is concrete: a regeneration without
-    # `kyber-py` replaced V2-01, V2-11 and V2-13 with `not_generatable` stubs, silently, because
-    # a stub is a well-formed row. The only signal was a golden executed-case count in another
-    # crate, in another language, asserted for an unrelated reason.
-    #
-    # Constructed by hand rather than by generating first, and staged on V6-03, whose stub
-    # comes from the conformance hook -- so the case exercises the guard with no dependency
-    # on whether an ML-KEM is importable.
-    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
-    committed = {
-        "section": "§5",
-        "wave": 1,
-        "vectors": {"V6-03": {"claim": "c", "given": {"seed": "00" * 32},
-                              "expect": {"index": 1}}},
-    }
-    victim = root / "vectors/section-5.json"
-    victim.write_text(json.dumps(committed, indent=2) + "\n", encoding="utf-8")
-    before = victim.read_text(encoding="utf-8")
-
-    rc, out = run(root)
-    case("a run that would downgrade a committed row exits 1", rc, 1)
-    case("and names the row", "V6-03" in out, True)
-    case("and says nothing was written", "Nothing was written" in out, True)
-    case("and NOTHING WAS WRITTEN", victim.read_text(encoding="utf-8"), before)
-
-    # And `--out` to a scratch tree is never a downgrade, because it overwrites nothing that
-    # was committed. A guard keyed on the repository root instead of the destination reports
-    # that a `--out "$(mktemp -d)"` run would destroy the repository's vectors -- wrong, and
-    # the kind of false positive that gets a gate switched off.
-    with tempfile.TemporaryDirectory() as scratch:
-        rc, out = run(root, "--out", scratch)
-        case("--out to a scratch tree is allowed even without the KEM", rc, 0)
-        case("and the committed file is untouched",
-             victim.read_text(encoding="utf-8"), before)
-
-    # The other direction: a row that has never been generated may absolutely be recorded as a
-    # stub, and that is how the honest gaps are recorded. Refusing that too would make the
-    # generator unable to describe its own limits.
-    fresh = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
-    rc, out = run(fresh)
-    case("but a first-time stub is allowed", rc, 0)
-    body = json.loads((fresh / "vectors/section-5.json").read_text())["vectors"]
-    case("and it carries the reason", "not_generatable" in body.get("V6-03", {}), True)
-
+    # The §5 rung-name and `keygen_seed`-salt cases went the same way -- their subject was
+    # `section-5.json`.
     print("\nvecprim's primitives, against the COMMITTED fixtures")
     # The reason is a mutation report rather than a hunch: eight mutations
     # to `vecprim.py` -- a one-byte view tag, `announce_seed` with its index appended last, a
@@ -477,70 +347,10 @@ def main() -> int:
         case("and the offset equals the base when no retry was needed",
              f"{scalar:064x}", v1["V1-01"]["expect"]["offset"])
 
-        # §5's announce seed: field ORDER, and the `kem_id` length prefix. Three mutations lived
-        # here -- the index appended last, `kem_id` omitted, the prefix dropped -- and V6-05 pins
-        # all three because it states the concatenation in its claim.
-        v6 = json.loads((real / "vectors/section-5.json").read_text())["vectors"]["V6-05"]
-        master = bytes.fromhex(v6["given"]["master"])
-        for scheme_id, rung, i, n, key in [
-            (2, b"schemeId 2 (direct KEM)", 0, 32, "schemeId_2_i0"),
-            (2, b"schemeId 2 (direct KEM)", 1, 32, "schemeId_2_i1"),
-            (3, b"schemeId 3 (direct KEM, hybrid)", 0, 64, "schemeId_3_i0"),
-        ]:
-            case(f"announce_seed matches V6-05 {key}",
-                 vp.announce_seed(master, scheme_id, rung, i, n).hex(),
-                 v6["expect"][key])
-        case("kem_id is the length-prefixed name V6-05 states",
-             vp.kem_id().hex(), v6["given"]["kem_id"])
-        case("and its length prefix is present, so it is 18 bytes not 10",
-             len(vp.kem_id()), v6["given"]["kem_id_length"])
-
-        # The ACVP acceptance test must REPORT a disagreement rather than swallow it, and
-        # `kem_encaps` must return `(ct, ss)` in the specification's order rather than the
-        # library's. Both need a KEM; both mutations survived when this section did not exist.
-        if not vp.have_kem():
-            print("  SKIPPED  no ML-KEM here, so the oracle and the encaps order are unchecked "
-                  "in this run, and nothing else checks them for you: install one "
-                  "(`pip install --no-deps kyber-py==1.2.0`) and rerun -- a run without it is a "
-                  "WEAKER run reporting the same OK.")
-        else:
-            # ONE case per family, not the whole vendored file. Pure-Python ML-KEM is seconds
-            # per operation, `acvp_selftest` is called three times below, and this suite runs
-            # once per mutation -- so the full file here cost about eight seconds of every
-            # mutation of `vecprim.py` and `gen_vectors.py`, for no additional coverage. The
-            # full-file run still happens: `gen_vectors.py` does it on every invocation, which is
-            # where it belongs.
-            full = json.loads((real / "vectors/tier1/ml-kem-768-acvp.json").read_text())
-            t1 = dict(full)
-            for family in ("keygen", "encapsulation", "decapsulation"):
-                if full.get(family):
-                    t1[family] = full[family][:1]
-            case("the ACVP acceptance test finds no disagreement on a good library",
-                 vp.acvp_selftest(t1), [])
-            bad = json.loads(json.dumps(t1))
-            if bad.get("keygen"):
-                ek = bad["keygen"][0]["ek"]
-                bad["keygen"][0]["ek"] = ("00" if ek[:2] != "00" else "11") + ek[2:]
-                case("and DOES find one when a keyGen expectation is altered",
-                     len(vp.acvp_selftest(bad)) >= 1, True)
-            # BOTH halves of an encapsulation case, because the oracle reports them on two
-            # separate lines and a mutation can silence either. Altering only the shared secret
-            # left the ciphertext line unchecked, and the mutation that removed it survived.
-            for field, label in (("c", "the ciphertext"), ("k", "the shared secret")):
-                enc = json.loads(json.dumps(t1))
-                if not enc.get("encapsulation"):
-                    continue
-                v = enc["encapsulation"][0][field]
-                enc["encapsulation"][0][field] = ("00" if v[:2] != "00" else "11") + v[2:]
-                case(f"and when an encapsulation case's {label} is altered",
-                     len(vp.acvp_selftest(enc)) >= 1, True)
-            # `(ct, ss)`, not `(ss, ct)`: the ciphertext is 1 088 bytes and the secret is 32, so
-            # a swapped return is caught by length alone -- which is exactly why it must be
-            # asserted somewhere rather than assumed obvious.
-            ekb, _ = vp.kem_keygen(bytes(range(64)))
-            ct, sec = vp.kem_encaps(ekb, bytes(range(32)))
-            case("kem_encaps returns the ciphertext first, per the specification", len(ct), 1088)
-            case("and the shared secret second", len(sec), 32)
+        # §5's announce-seed cases stood here, pinning `vp.announce_seed`'s field order and
+        # the length-prefixed `kem_id` against the committed V6-05. Three mutations lived
+        # there. `section-5.json` is gone, so there is no committed row to pin them against
+        # and `vecprim` no longer exposes the derivations they covered.
 
     print("\nthe row comparison is representation-insensitive")
     # Directly, on the hoisted `canonical`. Through the CLI this was unreachable: nothing in the

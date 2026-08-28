@@ -479,14 +479,20 @@ under 3 coexists with no migration.
 `python3 tools/gen_vectors.py --check --wave 1`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
-**Thirty-seven rows pin this rung**, and they are four groups rather than one, which is worth
-stating because a reader expecting a single `schemeId 3` file will not find one:
+**Nineteen rows pin this rung**, in two groups rather than one, which is worth stating
+because a reader expecting a single `schemeId 3` file will not find one:
 
 | group | rows | what it pins |
 |---|---|---|
 | `vectors/section-1.json` | 7 | §1 — the offset derivation, the counter-reduction retry, the big-endian reading, the view tag |
-| `vectors/section-2.json` | 13 | §2's shared half — everything from `ss` onward, which this rung shares byte-for-byte with the ML-KEM-only variant |
-| `vectors/section-2_9.json` | 12 | this rung's own four deltas — the 128-byte keygen seed, the 1 250-byte meta-address, the 64-byte announce seed and the combiner, and the wire mapping |
+| `vectors/section-2_9.json` | 12 | §2 — the 128-byte keygen seed, the delegation window scan, the 1 250-byte meta-address, the combiner and its bindings, and the wire mapping |
+
+**What these rows do NOT cover is recorded in `vectors/PLAN.md`, not left to be inferred.**
+The set was reduced with this document, and eight rules stated here lost their only fixture
+in the process — among them that a view-tag mismatch is a skip *and decapsulation does not
+fail*, which is the implicit-rejection behaviour §2.4 and §1 both rest on. The plan names
+each one and where this document states it. An implementer should read that table as part of
+the suite.
 
 ## Reference implementation
 

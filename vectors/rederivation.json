@@ -17,21 +17,15 @@
     "V3-06b",
     "V3-07",
     "V3-08",
-    "V3-08a",
-    "V6-01",
-    "V6-04",
-    "V6-05"
+    "V3-08a"
   ],
   "bytes_disagree": [],
   "outcome_only": [
     "V3-01",
     "V3-02",
     "V3-02a",
-    "V3-03",
-    "V6-02"
+    "V3-03"
   ],
-  "ungeneratable": [
-    "V6-03"
-  ],
+  "ungeneratable": [],
   "absent": []
 }

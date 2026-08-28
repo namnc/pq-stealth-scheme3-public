@@ -42,14 +42,15 @@ cargo test --workspace
 ```
 
 ```bash
-pip install --no-deps kyber-py==1.2.0     # an ML-KEM independent of the Rust one
 python3 tools/gen_vectors.py --check --wave 1
 ```
 
 The fixtures are generated from `tools/vecprim.py`, which imports nothing from the reference
-implementation — so what the crates are tested against does not come from the crates. Without
-`kyber-py` the check still runs and reports the rows it could not rebuild rather than passing
-over them.
+implementation — so what the crates are tested against does not come from the crates. No row
+needs a live ML-KEM: the ciphertexts come from NIST's own ACVP file, vendored at
+`vectors/tier1/`. Installing `kyber-py` (`pip install --no-deps kyber-py==1.2.0`) is optional
+and adds one thing — an acceptance test of that vendored file against an independent
+implementation, reported at the top of the run.
 
 ```bash
 python3 tools/check_measured.py

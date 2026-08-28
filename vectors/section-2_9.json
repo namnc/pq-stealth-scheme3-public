@@ -15,7 +15,7 @@
         "outcome": "outputs, then errors for 96 and 127"
       },
       "wrong": {
-        "note": "accepting schemeId 2's 96-byte seed"
+        "note": "padding or truncating to 128 rather than rejecting; or accepting 96 bytes, which is a well-formed seed for a scheme with no EC half and is the likeliest port"
       }
     },
     "V3-02": {

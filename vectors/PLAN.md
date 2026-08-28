@@ -74,6 +74,15 @@ implemented.
 > schemeId 2, because a re-homed row is a **new value** that the blinded re-derivation
 > (`rederivation.json`) has never witnessed, and quietly adding unwitnessed rows to a set
 > whose whole claim is independent witness is a worse trade than a stated gap.
+>
+> **§5's seed-derivation group went in the same pass, and for a different reason.** Its five
+> rows pinned `keygen_seed` and `announce_seed` — the HKDF and SHAKE256 field orders, the
+> length-prefixed `kem_id`, and index advance on a rejected seed. **This specification states
+> none of them**: `keygen_seed`, `announce_seed`, `SHAKE256` and `kem_id` appear nowhere in
+> it. A fixture with no normative sentence behind it is the thing §1 of this plan says gets
+> deleted rather than argued about, so it was. Their subject is how a wallet derives many
+> schemes' keys from one master, which is a wallet concern rather than a wire-format one; if
+> it returns to this document, the rows return with it.
 
 | id | claim | given | expect | wrong |
 |---|---|---|---|---|
@@ -89,17 +98,6 @@ implemented.
 | V3-07 | `epk` MUST be bound in | the same first contact with the parity byte flipped `0x02`↔`0x03` | a **different** `ss` | the same `ss` — the flipped point has the same x-coordinate, so without `epk` in the IKM this is a replay with a different-looking announcement |
 | V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 089 in `metadata`, 1 122 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]` — the same length as the right answer, so no length check distinguishes it |
 | V3-08a | the view tag is `metadata[0]` | a real payment, and a foreign announcement | matched; skipped | comparing against the first byte of `ct` — a scanner that agrees 1 time in 256 by coincidence, so it misses most payments to it and finds the occasional one. An intermittent fault, and harder to chase than a clean empty scan |
-
-## 6a. §5 — seed derivation
-
-| id | claim | given | expect | wrong |
-|---|---|---|---|---|
-| V6-01 | `keygen_seed(schemeId, rung, j) = HKDF(keygen_master, absent salt, "pq-stealth/keygen/v1" ‖ u64be(schemeId) ‖ u64be(\|rung\|) ‖ rung ‖ u64be(j), L)`, **with `j = 0` on the normal path** | one `keygen_master`, schemeIds 2 and 3 | a 96-byte and a 128-byte seed | a fixed `L = 32`; a supplied salt; omitting the scheme name, which collides two schemes sharing a `schemeId` |
-| V6-02 | two schemes' keys from one master are **independent** | the seeds of V6-01 | no shared bytes, and neither recoverable from the other | deriving one from the other, or reusing one keygen seed under two `schemeId`s |
-| V6-03 | an `ephemeral_seed` that is not a valid scalar advances the index | **a chosen seed injected through the conformance hook, not a searched `master`** | the announcement uses index `i+1`; index `i` never reappears | failing hard; or retrying index `i`, which breaks the injectivity of the seed stream |
-| V6-04 | a rejected keygen seed advances the index of **that (`schemeId`, `rung`) pair and no other**, and does not change `keygen_master` | a `keygen_master` and one rung whose index-0 seed fails the scalar or delegation test, with a second rung of the same `schemeId` already registered | index 1 accepted; **every other scheme's keygen seed unchanged** | drawing a fresh `keygen_master`, which changes a funded scheme's keys |
-| V6-05 | `announce_seed = SHAKE256(DS ‖ master(32) ‖ u64be(i) ‖ u64be(schemeId) ‖ u64be(\|rung\|) ‖ rung ‖ u64be(\|kem_id\|) ‖ kem_id, n)`, **in exactly that field order**, with `kem_id = u64be(\|name\|) ‖ name` = 18 B for `"ML-KEM-768"` | one `master`, schemeId 2 at index 0 and 1, schemeId 3 at index 0 | three seeds of the specified lengths, and the schemeId 3 seed's 32/32 split | **appending `i` last instead of placing it after `master`**, and **omitting `kem_id`** — two errors this repository's own generator once made, each of which yields a well-formed seed that no conforming implementation reproduces. Also: an unprefixed `kem_id`, or naming a wrapper instead of what it wraps |
-
 
 ## 7. Deliverables, in order
 

@@ -46,7 +46,7 @@ TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 # Which plan groups belong to which wave. Kept in step with
 # `check_vector_coverage.WAVES`, and `tools/test-gen-vectors.py` asserts the two agree -- two
 # copies of a pacing decision is one too many, and the test is what stops them drifting.
-WAVES = {1: ("1", "2.9", "5")}
+WAVES = {1: ("1", "2.9")}
 
 GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
@@ -84,21 +84,6 @@ def claim_cell(line: str) -> str:
 # specification -- through an authoring-side gate when present, announced as SKIPPED when
 # not -- because "I shortened it" is not a failure a reader of the emitted JSON can see.
 DS_HYBRID = b"pq-stealth/hybrid-payment/v1"
-
-# §5's canonical scheme names, quoted from the document. Shortening them changes every
-# derived seed, which is why they are named constants and why they are gated.
-RUNG_2 = b"schemeId 2 (direct KEM)"
-RUNG_3 = b"schemeId 3 (direct KEM, hybrid)"
-HOOK = ("A rejection cannot be reached by choosing inputs -- it needs a seed injected past the "
-        "derivation, which is a harness hook and not a fixture. The plan records V1-08 as "
-        "deliberately absent for the same reason and says so in terms.")
-
-
-# §5's rung name for schemeId 2, as `V6-01`'s `given` block states it. Named once so the
-# `wrong` column cannot silently use a different one — the drift a single definition
-# exists to prevent.
-RUNG_2_NAME = b"schemeId 2 (direct KEM)"
-
 # WHY A ROW IS `provisional`, in one place because it was in three and they drifted.
 #
 # The distinction that is easy to lose: "agreed" means two INDEPENDENT implementations
@@ -231,147 +216,6 @@ def group_1() -> dict[str, dict]:
         },
     }
     return v
-
-
-# --------------------------------------------------------------------------------------
-# §5 -- seed derivation. HKDF and SHAKE256 only.
-# --------------------------------------------------------------------------------------
-
-def group_5() -> dict[str, dict]:
-    v: dict[str, dict] = {}
-    master = bytes([0xA5]) * 32
-    # The CANONICAL names of §5, not shortened labels -- both halves, keygen and announce.
-    s2 = vp.keygen_seed(master, 2, RUNG_2, 0, 96)
-    s3 = vp.keygen_seed(master, 3, RUNG_3, 0, 128)
-    v["V6-01"] = {
-        "claim": "keygen_seed(schemeId, rung, j) with j = 0 on the normal path",
-        "provisional": True,
-        "provisional_because": PROVISIONAL_WHY,
-        "given": {"keygen_master": hx(master),
-                  "rungs": [{"schemeId": 2, "rung": RUNG_2.decode(), "L": 96},
-                            {"schemeId": 3, "rung": RUNG_3.decode(), "L": 128}]},
-        "expect": {"seed_schemeId_2": hx(s2), "seed_schemeId_3": hx(s3)},
-        "wrong": {
-            # A `fixed_L_32` generated with `b"schemeId 2"` -- the SHORTENED name --
-            # changes TWO variables and is byte-identical to the first 32 bytes of
-            # `shortened_rung_name`.
-            # The label says "a fixed L = 32" and the value MUST test only that -- a value
-            # generated with a shortened rung name as well would change two variables at once.
-            #
-            # The single-variable value exposes something a conflation would hide. HKDF-Expand is
-            # counter-based, so its L = 32 output is a PREFIX of its L = 96 output for the same
-            # info -- the right seed's first 32 bytes. **"L = 32 always" is therefore not
-            # detectable by comparing content at all**; it is detectable only by LENGTH. An
-            # implementation making that error fails the 96-byte check in `keygen`, never a
-            # byte comparison, and a fixture implying otherwise misdirects the implementer it
-            # is written for. `length_is_the_only_signal` records that.
-            "fixed_L_32": hx(vp.keygen_seed(master, 2, RUNG_2_NAME, 0, 32)),
-            "length_is_the_only_signal": (
-                "the value above is the RIGHT seed's first 32 bytes -- HKDF-Expand is "
-                "counter-based, so a short L is a prefix and not a different string. This "
-                "error is caught by the seed-length check and by nothing else"
-            ),
-            "rung_name_omitted": hx(vp.keygen_seed(master, 2, b"", 0, 96)),
-            "shortened_rung_name": hx(vp.keygen_seed(master, 2, b"schemeId 2", 0, 96)),
-            "note": "a fixed L = 32; a supplied salt; omitting the scheme name, which "
-                    "collides two schemes sharing a schemeId",
-        },
-    }
-    # V6-02: independence. Asserted as a measurement over the emitted seeds rather than as
-    # prose, so a runner can check it without trusting this comment.
-    shared = max(
-        (n for n in range(8, 33)
-         if any(s2[i:i + n] in s3 for i in range(len(s2) - n + 1))),
-        default=0,
-    )
-    v["V6-02"] = {
-        "claim": "two schemes' keys from one master are independent",
-        "provisional": True,
-        "given": {"seeds": "the two of V6-01"},
-        "expect": {"longest_shared_run_bytes": shared,
-                   "assertion": "no run of 8 bytes or more appears in both"},
-        "wrong": {"note": "deriving one from the other, or reusing one keygen seed under two "
-                          "schemeIds"},
-    }
-    # V6-03 and V6-04 need a REJECTION to occur, and a rejection cannot be constructed by
-    # choosing inputs: it needs a seed injected past the derivation, which is a harness hook
-    # rather than a fixture. Same shape as V1-08, which the plan records as deliberately
-    # absent for the same reason and says so in terms.
-    v["V6-03"] = {
-        "claim": "an ephemeral_seed that is not a valid scalar advances the index",
-        "provisional": True,
-        "not_generatable": HOOK,
-    }
-    # V6-04's second half IS derivable, and it is the half that matters: a rule that drew a
-    # fresh keygen_master on rejection would change a FUNDED
-    # scheme's keys. So the fixture pins that advancing one rung's index leaves every other
-    # rung's seed byte-identical, and records that the trigger needs the hook.
-    master = bytes([0xA5]) * 32
-    a0 = vp.keygen_seed(master, 2, RUNG_2, 0, 96)
-    a1 = vp.keygen_seed(master, 2, RUNG_2, 1, 96)
-    b0 = vp.keygen_seed(master, 3, RUNG_3, 0, 128)
-    v["V6-04"] = {
-        "claim": "a rejected keygen seed advances the index of that (schemeId, rung) pair and "
-                 "no other, and does not change keygen_master",
-        "provisional": True,
-        "partially_generatable": HOOK + " What IS pinned below is the consequence rather than "
-                                        "the trigger, and it is the half a fresh-master rule "
-                                        "gets wrong.",
-        # The canonical names, not the short labels -- in `given` as well as in the
-        # derivation. A `given` block carrying the short names while `expect` held seeds from
-        # the long ones would hand a runner the wrong seed stream:
-        # the long name gives 0b696cff, the short one 6ad22ee3.
-        "given": {"keygen_master": hx(master),
-                  "rung_a": RUNG_2.decode(), "rung_b": RUNG_3.decode()},
-        "expect": {"rung_a_index_0": hx(a0), "rung_a_index_1": hx(a1),
-                   "rung_b_index_0": hx(b0),
-                   "assertion": "rung_a's index-1 seed differs from its index-0 seed, and "
-                                "rung_b's index-0 seed is unchanged by either"},
-        "wrong": {"note": "drawing a fresh keygen_master, which changes a funded scheme's keys"},
-    }
-    # V6-05: §5's ANNOUNCE seed. §5 specifies two derivations, and each needs its own
-    # fixture -- a correction to one half prompts no check of the other. A derivation with no
-    # fixture is a derivation nothing can disagree with.
-    #
-    # The `wrong` column is computed, not described: both entries are the actual digests the
-    # two errors produce, so a runner can tell which mistake an implementation made rather than
-    # only that it made one.
-    a_i0 = vp.announce_seed(master, 2, RUNG_2, 0, 32)
-    a_i1 = vp.announce_seed(master, 2, RUNG_2, 1, 32)
-    b_i0 = vp.announce_seed(master, 3, RUNG_3, 0, 64)
-    wrong_order = hashlib.shake_256(
-        vp.DS_SENDER + master + (2).to_bytes(8, "big")
-        + len(RUNG_2).to_bytes(8, "big") + RUNG_2 + (0).to_bytes(8, "big")
-        + len(vp.kem_id()).to_bytes(8, "big") + vp.kem_id()).digest(32)
-    wrong_no_kem = hashlib.shake_256(
-        vp.DS_SENDER + master + (0).to_bytes(8, "big") + (2).to_bytes(8, "big")
-        + len(RUNG_2).to_bytes(8, "big") + RUNG_2).digest(32)
-    v["V6-05"] = {
-        "claim": "announce_seed's field order is exactly DS || master || i || schemeId || "
-                 "|rung| || rung || |kem_id| || kem_id, and kem_id is length-prefixed",
-        "provisional": True,
-        "provisional_because": PROVISIONAL_WHY,
-        "given": {"master": hx(master),
-                  "kem_id": hx(vp.kem_id()), "kem_id_length": len(vp.kem_id()),
-                  "draws": [{"schemeId": 2, "rung": RUNG_2.decode(), "i": 0, "n": 32},
-                            {"schemeId": 2, "rung": RUNG_2.decode(), "i": 1, "n": 32},
-                            {"schemeId": 3, "rung": RUNG_3.decode(), "i": 0, "n": 64}]},
-        "expect": {"schemeId_2_i0": hx(a_i0), "schemeId_2_i1": hx(a_i1),
-                   "schemeId_3_i0": hx(b_i0),
-                   "schemeId_3_split": {"ephemeral_seed": hx(b_i0[:32]),
-                                        "encap_seed": hx(b_i0[32:])},
-                   "indices_give_different_seeds": a_i0 != a_i1},
-        "wrong": {
-            "index_appended_last": hx(wrong_order),
-            "kem_id_omitted": hx(wrong_no_kem),
-            "note": "the two transpositions this row exists to forbid. Each yields "
-                    "a well-formed seed of the right length that no conforming implementation "
-                    "reproduces, so a sender using one draws a different ephemeral key and a "
-                    "different KEM message from the same master and index",
-        },
-    }
-
-    return v
 def group_2_9(t1: dict) -> dict[str, dict]:
     v: dict[str, dict] = {}
     en = t1["encapsulation"][0]
@@ -392,7 +236,9 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     v["V3-01"] = {"claim": "keygen seed is 128 B",
                   "given": {"lengths": [128, 96, 127]},
                   "expect": {"outcome": "outputs, then errors for 96 and 127"},
-                  "wrong": {"note": "accepting schemeId 2's 96-byte seed"}}
+                  "wrong": {"note": "padding or truncating to 128 rather than rejecting; or "
+                                    "accepting 96 bytes, which is a well-formed seed for a "
+                                    "scheme with no EC half and is the likeliest port"}}
     spending_seed = bytes([0x11]) * 32
     offsets = [0, 40, 47, 5, 16, 20]
     planted = {}
@@ -517,8 +363,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     return v
 
 
-BUILDERS = {"1": lambda t1: group_1(), "5": lambda t1: group_5(),
-            "2.9": group_2_9}
+BUILDERS = {"1": lambda t1: group_1(), "2.9": group_2_9}
 
 
 def canonical(row) -> str:
