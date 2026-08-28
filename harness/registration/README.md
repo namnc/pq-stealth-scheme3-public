@@ -5,7 +5,8 @@ row of §6's registration table.
 
 ## What it runs against: the canonical deployment, not a recompilation
 
-The measured object is the
+Registration cost depends on how the registry lays the value out, which the
+specification does not specify and MUST NOT assume. So the measured object is the
 **canonical ERC-6538 registry's deployed runtime bytecode** — read off Ethereum mainnet
 at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` with `eth_getCode`, committed as
 [`deployed_bytecode.hex`](deployed_bytecode.hex), SHA-256-pinned in `measure.py` and
