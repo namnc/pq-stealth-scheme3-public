@@ -208,15 +208,15 @@ def cases():
     # Widths come from §6's wire table for the scheme named in the case, so a payload of the wrong
     # length for its own `schemeId` fails here rather than being priced.
     #
-    # **The two schemes put different things in the same two fields, and that is the whole reason
-    # the table is keyed by `schemeId`.** schemeId 2 carries the KEM ciphertext in
-    # `ephemeralPubKey` and the bare view tag in `metadata`; schemeId 3 carries the EC ephemeral
-    # point in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`. Both payloads total within
-    # 33 bytes of each other, so a table with the two schemes transposed still looks plausible: a
-    # transposed schemeId 2 would REJECT the reference implementation's own conforming output
-    # while accepting a shape its scanner refuses, and nothing about the sizes would look wrong.
-    # The pairs below are read off §6's wire table row by row, and this harness needs a node --
-    # so `cargo test` is silent about them and only a real run against a node is evidence.
+    # **The table stays keyed by `schemeId` although one scheme ships**, because what a scheme
+    # puts in each of the two fields is its own choice and not a property of the widths: schemeId
+    # 3 carries the EC ephemeral point in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`,
+    # and a scheme that carried a KEM ciphertext in `ephemeralPubKey` instead would total within
+    # 33 bytes of it. A key on the widths alone would accept either as the other. The KEM-only
+    # scheme that made this concrete left with the export; the key is what remains of it, and it
+    # is the part worth keeping.
+    # The pair below is read off §6's wire table, and this harness needs a node -- so
+    # `cargo test` is silent about it and only a real run against a node is evidence.
     WIRE = {3: (33, 1089)}
     for i, c in enumerate(got):
         where = f"{INPUT.name} case {i}"

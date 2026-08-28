@@ -59,15 +59,6 @@ INTRINSIC = 21_000
 # retired figures it has been told about, so a figure typed by hand into prose was outside both.
 # That is the same gap in a different place -- rule #54 requires a committed harness for every
 # quoted number, and a number nothing compares against the harness is only nominally covered.
-# Scope of the prose sweep. The `docs` directory is wave 1's explanation and every figure in
-# it comes from the announcement harness, so it is a GATE. The specifications additionally quote schemeId 6
-# cost figures that come from a model this repository does not carry, and sweeping them is a
-# REPORT rather than a gate until those are traced -- `--all` does that.
-#
-# The distinction is not cosmetic. Turning the specs green today would mean marking eleven
-# figures exempt without having traced any of them, which converts an open question into a
-# silenced one. The count is asserted below instead, so it cannot drift unnoticed in either
-# direction.
 # THE DEFAULT SWEEP IS THE DOCUMENTS THAT SHIP, and it did not used to be. It was
 # `docs/*.md` and `AUDIT.md`, from a tree that had both; this one has neither, so the bare
 # invocation -- the one the README tells a reader to run -- swept nothing and reported "all 0
@@ -79,36 +70,30 @@ INTRINSIC = 21_000
 # widen the gate. `--all` no longer widens the scope -- both tuples are the same set now --
 # and what it still changes is the verdict: it REPORTS untraced figures against an expected
 # count, where the bare run FAILS on them.
-GAS_DOCS = ("docs/*.md", "AUDIT.md", "spec/ERC-*.md", "README.md")
+#
+# EACH HARNESS'S README IS IN SCOPE, and was not. Those files quote the receipts their own
+# harness produced, which is the shortest possible path from a measurement to a reader, and
+# nothing checked them: `harness/payment/README.md` quoted an announcement at 69 510 and a
+# payment at 111 510 for as long as it took nobody to notice, both superseded by 210 gas when
+# the view tag narrowed to one byte, and both sitting beside the receipt that disagreed.
+#
+# THE SWEEP ONLY SEES A FIGURE THE WORD "gas" IS NEAR, which is the second half of how those
+# two survived: the sentence quoting them never used the word, so widening the file scope
+# alone would not have caught them. That is a real limit and it is stated rather than
+# discovered -- prose that quotes a receipt should say `gas` next to it, and prose that does
+# not is outside this gate whatever directory it lives in.
+GAS_DOCS = ("docs/*.md", "AUDIT.md", "spec/ERC-*.md", "README.md",
+            "harness/*/README.md")
 GAS_DOCS_ALL = GAS_DOCS
 
 # What `--all` finds today, asserted so that the gap is a number rather than a memory. A DROP
 # is as much a finding as a rise: it means a figure was removed or marked, and either wants
 # saying in a commit message.
-# ZERO, deliberately. Closing the count took no measurement at all -- it took
-# classifying each figure and saying which kind it is:
-#
-#   ONE external, and its provenance claim was false ON THAT DAY. ZKNOX's published NTT figure
-#   said it had been "verified by `harness/ntt`'s `Zknox.t.sol` to be the same transform over
-#   the same ring"; no such harness existed in this repository then, so the verification claim
-#   went with the citation. (Step 9c later committed the harness and its receipt, and the
-#   figure is receipt-backed now -- the marker era for it is over, and the claim is true again.)
-#
-#   NINE withdrawn as figures. Six installation costs, three CRS-hoisted ones, all quoted to
-#   seven significant figures -- the format of something measured -- from a cost model this
-#   repository does not contain. And one keccak-permutation figure that said "measured here",
-#   which was simply false; it is two significant figures now, which is what an
-#   order-of-magnitude claim is entitled to. The ARGUMENT they were cited for survives without
-#   them, scoped to its architecture: where a deployment persists expanded matrices on
-#   chain, a per-key `rho` makes that artifact per key — per payment, for this scheme —
-#   while the global CRS permits one shared artifact; no ratio for the effect is quotable
-#   without the model. Restoring the figures means committing the model.
-#
-#   TWO external, from a cited post that measured its own verifiers. "Measured at" became
-#   "published at", because the first phrasing reads as ours.
-#
-#   ONE already superseded in prose, which now carries the machine marker its own sentence
-#   claimed.
+# ZERO, and in this tree trivially so: every document the sweep covers is a gate, so a figure
+# that is neither a receipt nor marked fails the bare run before it can be reported here. The
+# audit that first drove this count to zero was done in the multi-scheme tree and classified
+# thirteen figures one by one -- external, withdrawn, superseded. None of those figures came to
+# this export, so the inventory did not travel with the constant; the rule did.
 #
 # A RISE IS A FINDING. A drop is too: it means a figure was removed or classified, and either is
 # worth a sentence in the commit that did it.
@@ -324,7 +309,7 @@ def main(argv: list[str]) -> int:
     # because the alternative is a list of harnesses that a third one gets left out of.
     allowed: set[int] = set()
     # Membership alone is not a claim check: with every receipt number in ONE set,
-    # schemeId 2's total vouches for a sentence about schemeId 3 — both numbers are
+    # the registration total vouches for a sentence about an announcement — both numbers are
     # receipts, both resulting claims false. So numbers are ALSO collected per scheme,
     # and a figure whose surrounding prose names a scheme must come from that scheme's
     # own receipts.
@@ -373,8 +358,8 @@ def main(argv: list[str]) -> int:
         in one paragraph each stay vouched by the other's receipt. A markdown
         table row binds to its first cell's schemeId (an em-dash first cell with
         "classical" in the row is the baseline row). A per-scheme document's
-        subject is additive on both sets — a comparison "against schemeId 2"
-        inside scheme-3.md quotes scheme 3's figure on a line naming scheme 2.
+        subject is additive on both sets — a comparison "against schemeId 1"
+        inside scheme-3.md quotes scheme 3's figure on a line naming scheme 1.
         "classical" is the schemeId 1 baseline's name, additive only. Empty bound
         = unbound; an unbound figure faces only the membership test. Residual,
         stated: inside a per-scheme document a figure misassigned between a row's
@@ -407,8 +392,8 @@ def main(argv: list[str]) -> int:
         subject = {int(dm.group(1))} if dm else set()
         line = lines[line_no]
 
-        # A table row's first cell IS its scheme claim: `| **2** | ... | 67 970 |`
-        # assigns the row's figures to schemeId 2 whatever the prose around the
+        # A table row's first cell IS its scheme claim: `| **3** | ... | 69 360 |`
+        # assigns the row's figures to schemeId 3 whatever the prose around the
         # table says, and `| 4, 5 (memo) | ... |` assigns them to BOTH named
         # schemes. The cell must be lone digits (bold markers and a parenthetical
         # aside ignored) so a byte column like `| 1 096 B |` binds nothing.
@@ -444,7 +429,7 @@ def main(argv: list[str]) -> int:
                 break
             last = mm
         # A mention BEFORE the figure is the claim the figure belongs to; with no
-        # preceding mention ("costs 67 970 gas under schemeId 2") the whole named
+        # preceding mention ("costs 69 360 gas under schemeId 3") the whole named
         # set vouches.
         bound = (match_ids(last) if last else found) | subject
         return bound, found | subject
@@ -624,8 +609,10 @@ def main(argv: list[str]) -> int:
                         continue
                 if n not in allowed:
                     line = text[: m.start()].count("\n") + 1
-                    if sweep_all and not str(doc).endswith(tuple(("docs/scheme-2.md",
-                                                                 "docs/scheme-3.md"))):
+                    # No `docs/` tier here, so this downgrades every miss. It is what
+                    # separates `--all`'s report from the bare run's gate, and nothing else
+                    # does now that both tuples name the same files.
+                    if sweep_all:
                         untraced += 1
                         print(f"  UNTRACED {doc.relative_to(root)}:{line}: {m.group(1)}")
                         continue

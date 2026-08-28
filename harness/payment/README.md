@@ -67,16 +67,17 @@ all of it — three constants and one counter, with no file to obtain:
 
 ```
 keygen seed      seed[i] = (i * 7 + 3 + salt) mod 256,  salt = 0
-                 96 bytes for schemeId 2, 128 bytes for schemeId 3   (§2.1, and §2.9's delta)
+                 128 bytes for schemeId 3                           (§2.1)
 sender master    [0x5a; 32]
 sender counter   0, the first draw
 ```
 
 Feed the keygen seed to `keygen`, resume a sender at that master and counter, draw one announce
 seed, and announce. That reproduces the exact `epk_field` and `metadata` behind the committed
-`69 510` and `111 510`, which matters more than it looks: under EIP-7623 the figure depends on
-the ciphertext's ZERO-BYTE COUNT, so a different seed gives a different number and a reader
-comparing against one would conclude the receipt was wrong. A tree carrying the demonstration
+announcement gas of `69 300` and the whole-payment gas of `111 300`, which matters more than it
+looks: under EIP-7623 the figure depends on the ciphertext's ZERO-BYTE COUNT, so a different
+seed gives a different number and a reader comparing against one would conclude the receipt was
+wrong. A tree carrying the demonstration
 crate does all of this with `--emit-payment-json`; a tree carrying only the per-payment library
 does it in about fifteen lines against that library's own API.
 

@@ -402,6 +402,13 @@ mod tests {
     use super::*;
 
     /// Stand-in so §5 can be tested without a scheme crate. `NAME` is bound into the seed.
+    ///
+    /// **The `schemeId 2` and `schemeId 6` names in this module are ARBITRARY KDF INPUTS, not
+    /// schemes this tree carries.** They exercise the generic derivation -- that the id, the
+    /// name and the index each change the output -- and their bytes are pinned by the golden
+    /// answers below, so renaming them to something this export does ship would move every
+    /// pinned seed. Left as they are for that reason, and said here so a reader does not go
+    /// looking for a specification that is not in this repository.
     struct Scheme2;
 
     impl Scheme2 {

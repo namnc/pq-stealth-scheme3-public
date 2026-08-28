@@ -1,6 +1,6 @@
 {
   "harness": "announcement",
-  "what": "total transaction gas for one ERC-5564 announce(), by scheme; the schemeId 6 rows are nonconforming wire-shape probes (schemeId 2 stand-in address, see the stand-in note on STEALTH)",
+  "what": "total transaction gas for one ERC-5564 announce(), by scheme, each row sending the same real derived stealth address (see the note on STEALTH in measure.py)",
   "hardfork": "prague",
   "intrinsic_gas": 21000,
   "self_check": "pass",

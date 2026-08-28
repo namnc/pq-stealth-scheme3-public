@@ -33,10 +33,11 @@ TWO NUMBERS, AND HOW EACH IS OBTAINED
    token, a nonzero byte is 4.  So the zero variant escapes the floor and
    exposes execution, at identical execution cost.
 
-   That is an assumption, so it is **validated, not asserted**: on the two schemes
-   where the floor binds on neither variant, execution is recoverable from both
-   and the two must agree exactly. This run fails if they do not -- the check is
-   unconditional, not a flag.
+   That is an assumption, so it is **validated, not asserted**: wherever the floor
+   binds on neither variant, execution is recoverable from both and the two must
+   agree exactly. This run fails if they do not -- the check is unconditional, not
+   a flag. How many rows that covers is printed rather than assumed; with one
+   post-quantum scheme shipping it is the classical baseline alone.
 
 Run:
     python3 measure.py                # boots its own anvil, prints the table
@@ -69,7 +70,7 @@ CONTRACTS = ROOT / "contracts"
 # scheme ids and a superseded view-tag width while looking complete, which is the classic
 # way a payload table rots without anything failing.
 #
-# `tools/derive_sizes.py` already owns these lengths, re-derives them from FIPS 203 and FIPS 204
+# `tools/derive_sizes.py` already owns these lengths, re-derives them from FIPS 203
 # rather than from any constant that produced them, and asserts them against §6. Reading them
 # from there means a wire change cannot leave the gas figures measuring a payload the document
 # no longer specifies -- the failure mode a moving wire model makes routine.
@@ -79,7 +80,7 @@ import derive_sizes  # noqa: E402
 # anvil's first default account. Public, published in anvil's own banner.
 DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
-# A REAL derived stealth address (schemeId 2's), not a decorative constant.
+# A REAL derived stealth address, not a decorative constant.
 #
 # NOT `0x0000000000000000000000000000000000C0FFEE`: cute, and **three
 # nonzero bytes where a real address has twenty**. Under EIP-7623 a zero calldata byte costs one
@@ -92,19 +93,20 @@ DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 # for looks is a fixture nobody checks. A ratio computed against it understated the cost of every scheme the floor
 # binds on, which is all of them except the classical baseline.
 #
-# This value is `SchemeId2`'s derived address from the demonstration seed -- an output of the
-# scheme rather than a number someone typed, so it has a real address's byte distribution by
-# construction rather than by anyone's judgement.
-#
-# For the schemeId 6 rows it is additionally a STAND-IN, and those rows are nonconforming
-# wire-shape probes: the section 4.6 address mapping is an open decision, no conforming
-# schemeId 6 announcement can exist until it closes, and every substitute address -- this
-# one included -- is individually forbidden by section 4.4. The transactions are real and
-# their widths are the wire table's, so the rows price the calldata shape a future
-# announcement would have; they price no emission section 4 permits, because none is
-# expressible. The receipt's `what` field and the documents quoting these rows state the
-# same boundary.
+# The value was derived by the KEM-only scheme that this single-scheme export does not
+# carry, from the demonstration seed -- an output of a scheme rather than a number someone
+# typed. That provenance CANNOT BE REPRODUCED HERE, and saying so is the point: what the
+# constant is relied on for is its byte distribution, which is checkable from the value
+# itself and is asserted below, not its lineage, which is not.
 STEALTH = "0x6dbb67f21b650304b5f459833188f52db07c2b43"
+# The property every row actually depends on, checked rather than described: twenty bytes, and
+# a zero-byte count a real address plausibly has (a random one carries none about 92% of the
+# time). Under EIP-7623 each zero byte is three tokens cheaper, so a fixture drifting toward
+# zeros silently cheapens every row -- which is precisely what the decorative address did.
+_STEALTH_BYTES = bytes.fromhex(STEALTH[2:])
+assert len(_STEALTH_BYTES) == 20 and _STEALTH_BYTES.count(0) <= 1, (
+    f"STEALTH must be a byte-realistic 20-byte address: got {len(_STEALTH_BYTES)} bytes "
+    f"with {_STEALTH_BYTES.count(0)} zero byte(s)")
 SIG = "announce(uint256,address,bytes,bytes)"
 
 INTRINSIC = 21_000
@@ -246,9 +248,9 @@ def measure(url, announcer):
             "payload_bytes": epk_len + meta_len,
         }
 
-        # Pass 1: send, and record only what the receipt says. Every row sends
-        # STEALTH, the schemeId 6 rows included -- see the stand-in note on that
-        # constant: for scheme 6 these are nonconforming wire-shape probes.
+        # Pass 1: send, and record only what the receipt says. Every row sends the
+        # same STEALTH constant -- see the note on it for why a real derived address
+        # rather than a decorative one.
         for fill in ("nonzero", "zero"):
             calldata = run(
                 [
@@ -386,15 +388,16 @@ def main():
         for p in problems:
             print("  ! " + p)
     else:
-        print("self-check: OK (probe validated on the two non-floor schemes; "
-              "every receipt re-derived from the EIP-7623 rule)")
+        n_val = sum(1 for r in results if not r["nonzero"]["floor_binds"])
+        print(f"self-check: OK (probe validated on the {n_val} row(s) where the floor "
+              f"binds on neither variant; every receipt re-derived from the EIP-7623 rule)")
 
     if args.json:
         out = {
             "harness": "announcement",
-            "what": "total transaction gas for one ERC-5564 announce(), by scheme; "
-                    "the schemeId 6 rows are nonconforming wire-shape probes "
-                    "(schemeId 2 stand-in address, see the stand-in note on STEALTH)",
+            "what": "total transaction gas for one ERC-5564 announce(), by scheme, "
+                    "each row sending the same real derived stealth address (see the "
+                    "note on STEALTH in measure.py)",
             "hardfork": "prague",
             "intrinsic_gas": INTRINSIC,
             "self_check": "pass" if not problems else problems,

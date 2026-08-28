@@ -7,6 +7,7 @@ has only the release; the rule here is the number and its harness together, and 
 Not a Foundry project. It drives `anvil` and `cast` directly, because **the thing being measured
 cannot be observed from inside a Foundry test**:
 
+<!-- gas-external: EIP-2929's COLD_ACCOUNT_ACCESS_COST, a protocol constant, not a receipt -->
 * a test contract reaches the announcer with `CALL`, so it pays EIP-2929 cold account access
   (2 600) plus caller-side argument copy;
 * a standalone announcement transaction executes no `CALL` at all, and EIP-2929 seeds
@@ -27,25 +28,10 @@ python3 measure.py --rpc-url URL  # against an already-running node
 
 Needs `anvil`, `cast` and `forge` on PATH. Exits 1 if any self-check fails.
 
-## The schemeId 6 rows are probes, not announcements
-
-**schemeId 6 is the PQ-spending scheme, and this tree may not carry the document that specifies
-it** — this harness measures every scheme the project has, and a single-scheme export ships the
-harness whole rather than a sliced copy whose receipts would no longer match its own numbers.
-
-No conforming schemeId 6 announcement can exist, for a reason stated here rather than cited:
-the mapping from a one-time key to the 20-byte `stealthAddress` is an open decision in that
-scheme's specification, and that specification individually forbids every substitute address. The
-schemeId 6 rows here are therefore **nonconforming wire-shape probes**: the transaction is real
-and its widths are the registry's, but its `stealthAddress` argument is schemeId 2's derived
-address as a byte-realistic stand-in (the same constant every row sends). The rows price the
-calldata shape a future announcement would have; they price no emission that scheme permits. The
-receipt's `what` field and the documents quoting these rows state the same boundary.
-
 ## The field lengths are READ, not retyped
 
 `CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203 and
-FIPS 204 rather than from any constant that produced it, and asserts them against §6.
+rather than from any constant that produced it, and asserts them against §6.
 
 **The payload table is DERIVED from §6's wire model rather than hand-listed, and that
 choice is load-bearing**: a hand-maintained list here can carry superseded scheme ids and a

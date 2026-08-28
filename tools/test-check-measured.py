@@ -296,7 +296,7 @@ def main() -> int:
         (root / "harness/ntt").mkdir(parents=True)
         (root / "harness/ntt/measured.json").write_text(json.dumps({
             "harness": "ntt",
-            "cases": [{"name": "forward NTT per polynomial, *Mul (the schemeId 6 ring row)",
+            "cases": [{"name": "forward NTT per polynomial, *Mul (a synthetic row)",
                        "marginal_gas": 177_810}],
         }), encoding="utf-8")
         (root / "docs").mkdir()

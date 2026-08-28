@@ -9,7 +9,7 @@ pragma solidity ^0.8.28;
 /// carried without any protocol change: the cost is data availability, not type.
 ///
 /// Canonical deployment: ERC-5564 defines this at a singleton address. Nothing
-/// here needs redeploying for schemeId 2 or 3.
+/// here needs redeploying for any schemeId.
 contract ERC5564Announcer {
     event Announcement(
         uint256 indexed schemeId,

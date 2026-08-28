@@ -34,6 +34,7 @@ python3 harness/registration/measure.py           # boots its own anvil, prints 
 python3 harness/registration/measure.py --json    # rewrites measured.json
 ```
 
+<!-- gas-external: 20 000 is EIP-2200's SSTORE_SET_GAS, a protocol constant, not a receipt -->
 Requires `anvil` and `cast` (Foundry) on PATH. The self-check asserts every payload
 length against the size model and that every figure is large enough to have actually
 stored its slots (a first registration cannot cost less than 20 000 gas per fresh slot

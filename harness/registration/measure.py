@@ -29,7 +29,7 @@ a different and cheaper operation that is not the row's claim.
 THE PAYLOAD: A WORST-CASE CALLDATA CONVENTION, STATED
 ------------------------------------------------------
 Payloads are nonzero-filled bytes (`1 + i % 255`) of exactly the meta-address lengths
-`tools/derive_sizes.py` re-derives from FIPS 203 and FIPS 204 — read from there, not
+`tools/derive_sizes.py` re-derives from FIPS 203 — read from there, not
 retyped, so a wire change cannot leave this harness measuring a shape the document no
 longer specifies. The fill moves the two cost components differently, and saying which is
 the point. STORAGE — the dominant component — depends on byte values only through
@@ -157,7 +157,7 @@ def rows():
     """`(name, schemeId, meta_len, key)` per row of §6's registration table.
 
     Lengths come from `derive_sizes.REGISTRATION_RATIOS`, which re-derives them from
-    FIPS 203 and FIPS 204 and asserts them against §6/§4.2.
+    FIPS 203 and asserts them against §6/§4.2.
     """
     out = []
     for (label, (meta_len, _ratio)), key in zip(
