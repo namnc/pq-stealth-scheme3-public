@@ -20,11 +20,7 @@ const DS_SENDER: &[u8] = b"pq-stealth/sender-seed/v1";
 const KEM_NAME: &[u8] = b"ML-KEM-768";
 
 /// View-tag width in bytes. §1.
-///
-/// Compared in full. ML-KEM implicit rejection returns a pseudorandom secret (no error) for
-/// a foreign ciphertext, so this tag is how a scanner decides "ours". At 1 byte, 1 in 256
-/// foreign announcements look like hits and force a chain-state query (§9).
-pub const VIEW_TAG_BYTES: usize = 8;
+pub const VIEW_TAG_BYTES: usize = 1;
 
 /// Recoverable failure. A scan miss is [`Option::None`], because `announce()` is
 /// permissionless and an error path would be a DoS (§2.5).
