@@ -113,11 +113,13 @@ value, `"pq-stealth/hybrid-payment/v1"`, and names the output `ss`.
 5. **`epk` MUST be bound into the KDF.** Without it, flipping the compressed parity byte yields the
 same ECDH x-coordinate and therefore the same payment secret.
 
-**The IKM is the combiner NIST SP 800-227 puts forward**
-A broken ML-KEM implementation is exactly the failure this scheme hedges, so a combiner without
-that preservation property hedges less than it appears to. The combiner NIST puts forward
-instead is `H(K1, K2, c1, c2, ek1, ek2, domain_sep)`, and the **inputs** map onto it one for
-one:
+**The IKM is the combiner NIST SP 800-227 puts forward, with this document's field names —
+all six fields, not the shorter `ss_ec ‖ ss_pq ‖ epk`.** The reason is not tidiness: a combiner
+over the two shared secrets alone is not known to deliver the property the hybrid exists for —
+that the composite secret survives one component being broken while the other is sound. A
+broken ML-KEM implementation is exactly the failure this scheme hedges, so a combiner without
+that preservation property hedges less than it appears to. That combiner is
+`H(K1, K2, c1, c2, ek1, ek2, domain_sep)`, and the **inputs** map onto it one for one:
 
 | NIST input | here | why |
 |---|---|---|
