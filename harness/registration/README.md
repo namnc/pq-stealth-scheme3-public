@@ -5,15 +5,11 @@ row of §6's registration table.
 
 ## What it runs against: the canonical deployment, not a recompilation
 
-Registration cost depends on how the registry lays the value out, which the
-specification does not specify and MUST NOT assume. So the measured object is the
+For precision, the measured object is the
 **canonical ERC-6538 registry's deployed runtime bytecode** — read off Ethereum mainnet
 at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` with `eth_getCode`, committed as
 [`deployed_bytecode.hex`](deployed_bytecode.hex), SHA-256-pinned in `measure.py` and
-checked at every run — installed into anvil with `anvil_setCode`. Compiling the
-registry's source here would measure this machine's compiler settings; the deployed
-artifact is what every wallet actually pays. A reader re-derives the file with one
-`eth_getCode` against any mainnet node.
+checked at every run — installed into anvil with `anvil_setCode`.
 
 ## Conventions, each stated because each moves the number
 
@@ -21,11 +17,13 @@ artifact is what every wallet actually pays. A reader re-derives the file with o
   zero -> nonzero -- the "registered once" cost.
 * **Nonzero payload of the exact derived length — a worst-case calldata convention,
   stated.** Lengths are read from `tools/derive_sizes.py` (re-derived from FIPS 203/204),
-  not retyped. Byte values reach *storage* cost only through all-zero 32-byte slots, which
-  real key material produces with probability ~2^-256 — but each zero byte in *calldata*
-  is charged 12 gas less, and real key material has one in roughly 256 bytes. Each figure
-  is therefore an upper bound that a real registration undercuts by a few hundred gas at
-  schemeId 3's 1 250 bytes.
+  not retyped. Byte values reach *storage* cost only through an all-zero 32-byte slot,
+  which real key material gives with probability 2^-256 per full slot — but each zero byte
+  in *calldata* is charged 12 gas less on the standard EIP-7623 path these rows take, and
+  real key material has one zero byte in roughly 256. Each figure is therefore an upper
+  bound, and by an amount that is arithmetic rather than a guess: **about 59 gas** at
+  schemeId 3's 1 250 bytes. `tools/derive_sizes.py` derives it per row, so it is a figure
+  with a generator rather than a figure in a sentence.
 * **Prague hardfork, pinned.** Same reason as the announcement harness: anvil's default
   would silently reprice everything on a toolchain bump.
 

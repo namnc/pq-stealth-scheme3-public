@@ -46,12 +46,12 @@ implemented.
 ## 3. §2.9 — schemeId 3 (hedged EC half)
 
 > **What left with schemeId 2, named rather than dropped quietly.** This set was written as a
-> delta on a KEM-only rung that no longer ships, and its thirteen rows went with it. **Five
+> delta on a KEM-only scheme that no longer ships, and its thirteen rows went with it. **Five
 > were already covered here** by a schemeId 3 equivalent: the keygen-seed length rejection
 > (V3-01), the 65-offset delegation window scan (V3-02), the meta-address encoding (V3-03),
 > the SEC1 `0x02`/`0x03` tag rule (V3-03), and the announcement's wire shape (V3-08).
 >
-> **Eight rules the specification still states for this rung lost their only fixture, and
+> **Eight rules the specification still states for this scheme lost their only fixture, and
 > have been re-homed as V3-09 to V3-16.** The gap is recorded rather than erased because
 > the re-homed rows differ in one respect from every row above them, stated in the next
 > paragraph:

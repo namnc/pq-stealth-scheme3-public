@@ -91,26 +91,26 @@ def main() -> int:
     case("and names the shape", "shape (33, 1090) totals 1123" in out, True)
 
     # Two rows sharing a shape is legal ONLY if declared; one appearing quietly is what this
-    # catches. §5's recognition rule would go stale and nothing else would say so. One rung
-    # ships, so the mutation adds the second -- the detector is what a future rung walks into.
+    # catches. §5's recognition rule would go stale and nothing else would say so. One scheme
+    # ships, so the mutation adds the second -- the detector is what a future scheme walks into.
     ADD = ('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n',
            '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n'
-           '    "a second rung":            (SEC1_COMPRESSED,  VIEW_TAG + CT),\n')
+           '    "a second scheme":            (SEC1_COMPRESSED,  VIEW_TAG + CT),\n')
     QUOTE = ('    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n',
              '    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n'
-             '    "a second rung":            (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n')
+             '    "a second scheme":            (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n')
     rc, out = run(QUOTE, ADD)
     case("an undeclared shape collision exits 1", rc, 1)
     case("and names both rows", "UNDECLARED shape collision" in out
-         and "schemeId 3 announcement" in out and "a second rung" in out, True)
+         and "schemeId 3 announcement" in out and "a second scheme" in out, True)
 
     rc, out = run(QUOTE,
                   ('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n',
                    '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n'
-                   '    "a second rung":            (CT,               VIEW_TAG),\n'),
+                   '    "a second scheme":            (CT,               VIEW_TAG),\n'),
                   ("DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []",
                    'DECLARED_SHAPE_COLLISIONS = [("schemeId 3 announcement", '
-                   '"a second rung")]'))
+                   '"a second scheme")]'))
     case("a declared collision that is not one exits 1", rc, 1)
     case("and says the two are not the same shape", "the same shape and they are" in out, True)
 
@@ -124,6 +124,25 @@ def main() -> int:
     case("a wrong registration ratio exits 1", rc, 1)
     case("and names the schemeId and both ratios",
          "18.9" in out and "18.8" in out, True)
+
+    # The figure this replaced -- "a few hundred gas" -- survived being re-pointed at a
+    # payload five times smaller than the one it was calibrated for, because prose carries no
+    # check. These cases are what make the replacement falsifiable rather than merely newer.
+    rc, out = run(('REGISTRATION_OVERSTATEMENT = {"1": 3, "3": 59}',
+                   'REGISTRATION_OVERSTATEMENT = {"1": 3, "3": 300}'))
+    case("a documented overstatement that is not the derived one exits 1", rc, 1)
+    case("and names both", "59" in out and "300" in out, True)
+
+    # The EIP-7623 side of it, which is where the 12 comes from. If the token prices stop
+    # being load-bearing the figure is a constant wearing a derivation.
+    rc, out = run(("EIP_7623_TOKENS_PER_ZERO_BYTE = 1", "EIP_7623_TOKENS_PER_ZERO_BYTE = 2"))
+    case("a wrong zero-byte token price exits 1", rc, 1)
+    case("and the derived overstatement moves with it", "~  39 gas" in out, True)
+
+    # And the odds, which are the other input.
+    rc, out = run(("ZERO_BYTE_ODDS = 256", "ZERO_BYTE_ODDS = 128"))
+    case("wrong odds for a zero byte exit 1", rc, 1)
+    case("and the derived overstatement doubles", "~ 117 gas" in out, True)
 
     print("\nthe delegation window counts -- (len - 32 + 1), not (len / 32)")
     # The scan is over the WHOLE delegated object. `96 / 32 = 3` is the wrong answer that

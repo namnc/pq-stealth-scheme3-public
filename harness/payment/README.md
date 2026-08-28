@@ -43,7 +43,7 @@ the file before it spends anything.
 
 ## The `payment.json` contract
 
-One object, one `cases` array, one entry per rung to measure:
+One object, one `cases` array, one entry per scheme to measure:
 
 ```json
 {"cases": [{"scheme_id": 3,

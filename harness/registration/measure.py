@@ -37,7 +37,8 @@ all-zero 32-byte slots (an SSTORE writing zero is cheaper); real key material pr
 one with probability ~2^-256, so the storage side prices a real registration exactly.
 CALLDATA does depend on byte values: each zero byte is charged 12 gas less, and real key
 material has one in roughly 256 bytes. So each figure is an UPPER BOUND that a real
-registration undercuts by a few hundred gas at schemeId 3's 1 250 bytes — the same worst-case
+registration undercuts by about 59 gas at schemeId 3's 1 250 bytes, derived per row by
+`tools/derive_sizes.py` rather than estimated here — the same worst-case
 token convention as the announcement harness, with its consequence stated rather than
 rounded away.
 

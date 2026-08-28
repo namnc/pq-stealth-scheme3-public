@@ -12,7 +12,7 @@ a Foundry test contract. That frame is not the frame a wallet pays in:
     `accessed_addresses` with `tx.to`, so there is no cold charge to pay.
 
 Measured here, the test-frame "execution" figure was ~2.1x the real one.  Because
-the EIP-7623 floor binds on the post-quantum rungs (where execution is not
+the EIP-7623 floor binds on the post-quantum schemes (where execution is not
 charged at all) and does not bind on the classical baseline (where it is), the
 whole of that error landed on the denominator of every published ratio.
 
@@ -33,7 +33,7 @@ TWO NUMBERS, AND HOW EACH IS OBTAINED
    token, a nonzero byte is 4.  So the zero variant escapes the floor and
    exposes execution, at identical execution cost.
 
-   That is an assumption, so it is **validated, not asserted**: on the two rungs
+   That is an assumption, so it is **validated, not asserted**: on the two schemes
    where the floor binds on neither variant, execution is recoverable from both
    and the two must agree exactly. This run fails if they do not -- the check is
    unconditional, not a flag.
@@ -83,13 +83,13 @@ DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 #
 # NOT `0x0000000000000000000000000000000000C0FFEE`: cute, and **three
 # nonzero bytes where a real address has twenty**. Under EIP-7623 a zero calldata byte costs one
-# token and a nonzero one costs four, and on every post-quantum rung the floor binds -- so the
+# token and a nonzero one costs four, and on every post-quantum scheme the floor binds -- so the
 # decorative address made each of those rows cheaper than the transaction it claimed to price, by
 # 51 tokens and therefore **510 gas**.
 #
 # A second harness measuring the same transaction with a real address disagrees by 480:
 # the arithmetic is right, the FIXTURE is not, and a fixture chosen
-# for looks is a fixture nobody checks. A ratio computed against it understated the cost of every rung the floor
+# for looks is a fixture nobody checks. A ratio computed against it understated the cost of every scheme the floor
 # binds on, which is all of them except the classical baseline.
 #
 # This value is `SchemeId2`'s derived address from the demonstration seed -- an output of the
@@ -248,7 +248,7 @@ def measure(url, announcer):
 
         # Pass 1: send, and record only what the receipt says. Every row sends
         # STEALTH, the schemeId 6 rows included -- see the stand-in note on that
-        # constant: for rung 6 these are nonconforming wire-shape probes.
+        # constant: for scheme 6 these are nonconforming wire-shape probes.
         for fill in ("nonzero", "zero"):
             calldata = run(
                 [
@@ -312,7 +312,7 @@ def check(results):
 
         # THE VALIDATION. Where execution is recoverable from both variants they
         # must agree, which is what licenses reading execution off the probe on
-        # the rungs where only the probe escapes the floor.
+        # the schemes where only the probe escapes the floor.
         if not nz["floor_binds"]:
             if nz["execution_gas"] != z["execution_gas"]:
                 problems.append(
@@ -386,7 +386,7 @@ def main():
         for p in problems:
             print("  ! " + p)
     else:
-        print("self-check: OK (probe validated on the two non-floor rungs; "
+        print("self-check: OK (probe validated on the two non-floor schemes; "
               "every receipt re-derived from the EIP-7623 rule)")
 
     if args.json:

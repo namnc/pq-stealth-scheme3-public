@@ -98,7 +98,7 @@ hybrid_combine(DS, ss_ec, ss_pq, epk, ct, viewing_pk_ec, ek)
     = SHA3-256(DS ‖ ss_ec ‖ ss_pq ‖ epk ‖ ct ‖ viewing_pk_ec ‖ ek)               32 B
 ```
 
-The caller supplies the domain separator `DS` and names the output; §2.4 gives this rung's
+The caller supplies the domain separator `DS` and names the output; §2.4 gives this scheme's
 value, `"pq-stealth/hybrid-payment/v1"`, and names the output `ss`.
 1. **`ss_ec` MUST be the x-coordinate alone**, 32 bytes, big-endian.
 2. **The domain separator is the FIRST input, then the six fields.** An implementation MUST
@@ -112,7 +112,7 @@ value, `"pq-stealth/hybrid-payment/v1"`, and names the output `ss`.
 same ECDH x-coordinate and therefore the same payment secret.
 
 **The IKM is the combiner NIST SP 800-227 puts forward**
-A broken ML-KEM implementation is exactly the failure this rung hedges, so a combiner without
+A broken ML-KEM implementation is exactly the failure this scheme hedges, so a combiner without
 that preservation property hedges less than it appears to. The combiner NIST puts forward
 instead is `H(K1, K2, c1, c2, ek1, ek2, domain_sep)`, and the **inputs** map onto it one for
 one:
@@ -172,7 +172,7 @@ window of it equals `spending_seed`.**
 if any 32-byte window of (viewing_ec ‖ dk) equals spending_seed:  reject
 ```
 
-The reason is specific to this rung. The tracking key **is** those 96 bytes, so
+The reason is specific to this scheme. The tracking key **is** those 96 bytes, so
 `spending_seed` appearing anywhere inside them places the master spending key verbatim inside
 the object handed to a scanning service, and that service can then spend. This is
 reproducible end to end against a real payment. A prefix comparison is insufficient because
@@ -274,7 +274,7 @@ if address(stealth_pk) ≠ announcement.stealthAddress:  not ours, skip
 ```
 
 As the view tag is a
-function of `ss`, it cannot be computed before decapsulation and the ECDH. This rung
+function of `ss`, it cannot be computed before decapsulation and the ECDH. This scheme
 therefore has **no prefilter ahead of the KEM**: one ECDH and one ML-KEM-768 decapsulation are
 paid on **every** announcement, on input that anyone can publish, and that is the floor.
 
@@ -404,13 +404,16 @@ Prague — and re-derives from `harness/registration/measured.json`:
 We installs the **canonical ERC-6538 registry's deployed
 runtime bytecode** — read off mainnet at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538`,
 SHA-256-pinned, committed beside the harness — and reads `gasUsed` off the receipts. 
-So each figure is an upper bound that a real
-registration undercuts by a few hundred gas, not an exact cost.
+So each figure is an upper bound rather than an
+exact cost, and the gap is arithmetic: the payload is all-nonzero by convention, real key
+material carries about one zero byte in 256, and a zero calldata byte costs 12 gas less on
+the standard EIP-7623 path these rows take — some 59 gas at 1 250 B, derived per row by
+`tools/derive_sizes.py`.
 
 Registration is once per recipient
 per `schemeId`, not once per payment, so an 18.9x calldata multiple on a single lifetime
 transaction is a different kind of cost from the announcement multiple — which is why the two
-tables are separate. The 18.9x above **is** a comparison against the classical rung, and is
+tables are separate. The 18.9x above **is** a comparison against the classical scheme, and is
 meant as one; what it is not is a per-payment figure, and reading it as one is the single way
 to get this table wrong.
 
@@ -425,7 +428,7 @@ it with the derived key — and commits the receipts at `harness/payment/measure
 **The funding transfer is exactly the 21 000 intrinsic**, because a native-ETH transfer to an
 EOA carries empty calldata and touches no contract. The same is true of the sweep. So for
 native ETH there is nothing above intrinsic to measure on either side of the announcement,
-and the announcement is the whole of this rung's cost above a classical transfer. **For any
+and the announcement is the whole of this scheme's cost above a classical transfer. **For any
 other asset it is not**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
 neither is measured by this harness, and neither figure is quoted anywhere in this document.
 
@@ -437,10 +440,10 @@ linkable to its key deanonymises every payment without decryption.
 
 **A delegated scanner learns the recipient's entire payment graph.** It cannot spend. It sees
 every payment, their timing and their count. **That is the cost of delegating discovery — the
-tracking key — and it is the only grain this rung has.** A per-payment rung offers no finer
+tracking key — and it is the only grain this scheme has.** A per-payment scheme offers no finer
 one: the tracking key is all-or-nothing over the recipient's whole payment history.
 
-**This rung expires at a CRQC.** Spending is secp256k1, so once a CRQC exists the rung is not a
+**This scheme expires at a CRQC.** Spending is secp256k1, so once a CRQC exists the scheme is not a
 usable scheme whatever its announcement layer does: the funds are already gone by the
 paragraph above. It follows that **the EC half is not post-quantum protection of anything** —
 by the time the quantum adversary arrives there is nothing left for it to protect.
@@ -479,7 +482,7 @@ under 3 coexists with no migration.
 `python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
-**Twenty-seven rows pin this rung**, in two groups rather than one, which is worth stating
+**Twenty-seven rows pin this scheme**, in two groups rather than one, which is worth stating
 because a reader expecting a single `schemeId 3` file will not find one:
 
 | group | rows | what it pins |
@@ -501,7 +504,7 @@ and an implementer should read both files as part of the suite.
 ## Reference implementation
 
 **schemeId 3 is implemented alongside this document**, in `crates/per-payment` over
-`crates/kem`, `crates/ec` and `crates/core`. Those four crates are the closure of this rung's
+`crates/kem`, `crates/ec` and `crates/core`. Those four crates are the closure of this scheme's
 dependencies: nothing else is needed to derive a key, build an announcement or scan for one.
 
 The announcement-gas harness that produced §7's measured row is `harness/announcement/`,

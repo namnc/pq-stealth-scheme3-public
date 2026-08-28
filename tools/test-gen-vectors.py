@@ -306,7 +306,7 @@ def main() -> int:
     # and the day a row becomes ungeneratable again is the day it matters. It is UNTESTED
     # here, which is the honest word for it.
     #
-    # The §5 rung-name and `keygen_seed`-salt cases went the same way -- their subject was
+    # The §5 scheme-name and `keygen_seed`-salt cases went the same way -- their subject was
     # `section-5.json`.
     print("\nvecprim's primitives, against the COMMITTED fixtures")
     # The reason is a mutation report rather than a hunch: eight mutations

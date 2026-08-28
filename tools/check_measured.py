@@ -195,7 +195,7 @@ def _cell_schemes(cell: str) -> set[int]:
 
 # Numbers that are not gas and would otherwise have to be exempted one at a time: byte counts,
 # years, section sizes, hardfork-independent constants. Read from the size model rather than
-# listed, so adding a rung does not mean editing a denylist here.
+# listed, so adding a scheme does not mean editing a denylist here.
 def _not_gas() -> set[int]:
     """Every number the SIZE model already accounts for, so it needs no gas provenance.
 
@@ -340,7 +340,7 @@ def main(argv: list[str]) -> int:
             sids = {sid} if isinstance(sid, int) else set()
             # A receipt's NAME may declare coverage beyond its schemeId field:
             # "memo (schemeIds 4, 5)" is ONE measurement of a wire identical on
-            # both rungs, and it vouches for both — the declaration is part of
+            # both schemes, and it vouches for both — the declaration is part of
             # the committed measurement artifact, not this tool's inference.
             for nm in re.finditer(r"schemeIds?\s+(\d)(?:\s*(?:,|and|/|or)\s*(\d))*",
                                   str(c.get("name", ""))):
@@ -359,7 +359,7 @@ def main(argv: list[str]) -> int:
                         for s in sids:
                             by_scheme.setdefault(s, set()).add(v[k])
     # A DIFFERENCE between two receipts is as re-derivable as either receipt, and prose that
-    # compares two rungs quotes one -- "1 600 more gas" is 69 060 - 67 460. Allowed, and computed
+    # compares two schemes quotes one -- "1 600 more gas" is 69 060 - 67 460. Allowed, and computed
     # here rather than exempted by hand, so it stays true when a measurement moves.
     allowed |= {a - b for a in allowed for b in allowed if a > b}
 

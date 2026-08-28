@@ -1,6 +1,6 @@
 //! schemeId 3 (ECDH + ML-KEM), one announcement per payment.
 //!
-//! The rung is specified in §2; §1 gives the offset and view-tag derivation it shares with
+//! The scheme is specified in §2; §1 gives the offset and view-tag derivation it shares with
 //! anything else built on ERC-5564. Spending is secp256k1 ECDSA. What the hybrid does and
 //! does not give is in §7.
 //!
@@ -38,7 +38,7 @@ pub struct MetaAddress {
 pub struct Master {
     /// Scalar every one-time key is offset from.
     pub spending_seed: Bytes32,
-    /// Viewing scalar. Always `Some` here. The `Option` is left from a KEM-only rung that
+    /// Viewing scalar. Always `Some` here. The `Option` is left from a KEM-only scheme that
     /// does not ship in this tree; collapsing it removes a `Malformed` path that nothing
     /// can now reach, and is a change to the public type rather than a trim.
     pub viewing_ec_seed: Option<Bytes32>,
@@ -726,7 +726,7 @@ mod tests {
             S::announcement_to_bytes(&ann)
         }
 
-        // §5's wire table for the rung, then the two properties the receipt rests on.
+        // §5's wire table for the scheme, then the two properties the receipt rests on.
         let (keygen_len, epk_w, meta_w, zeros) = (128usize, 33usize, 1089usize, 2usize);
         let want = "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca";
 

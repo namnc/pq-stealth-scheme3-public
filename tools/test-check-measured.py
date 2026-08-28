@@ -357,7 +357,7 @@ def main() -> int:
     rc, out = run_with_audit(real, "priced in gas above.\n\nan index of 99 999 entries.\n")
     case("but two lines away, across the wrap, is out of scope", rc, 0)
 
-    # A DERIVED figure: prose comparing two rungs quotes their difference. The prose
+    # A DERIVED figure: prose comparing two schemes quotes their difference. The prose
     # names the schemes the numbers actually come from (cases[1] is schemeId 3,
     # cases[0] the classical baseline) — a delta attributed to schemes it was not
     # computed from is exactly what the scheme-binding check rejects.

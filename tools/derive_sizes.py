@@ -58,7 +58,7 @@ ANNOUNCE_ERC = {
 }
 
 # §5's shape is the PAIR of field lengths, not the total, and the distinction is
-# load-bearing: two rungs can share a total and still be distinguishable, because one puts
+# load-bearing: two schemes can share a total and still be distinguishable, because one puts
 # `ct` in `ephemeralPubKey` and the other in `metadata`. Modelling the total alone would
 # call that a collision.
 #
@@ -102,6 +102,36 @@ REGISTRATION_RATIOS = {
     "1": (META_CLASSICAL, "1.0"),
     "3": (1_250, "18.9"),
 }
+
+# WHAT THE WORST-CASE CALLDATA CONVENTION OVERSTATES BY, derived rather than described.
+#
+# `harness/registration` registers an ALL-NONZERO payload, which is stated as a worst case.
+# Real key material is not all-nonzero, so every registration figure is an upper bound --
+# and the size of the gap is arithmetic, not a judgement call. It lived in prose as "a few
+# hundred gas" while the largest row was several times longer than this scheme's 1 250 B;
+# at 1 250 B it is an order of magnitude smaller, and prose is where that kind of drift
+# survives a resize. Rule #54: the figure gets a generator.
+#
+# EIP-7623 prices calldata in tokens -- a zero byte is one, a nonzero byte is four.
+# Registration is STORAGE-dominated, so the standard path binds (the 7623 floor sits an
+# order of magnitude below these receipts) and a token costs 4 gas there. A byte that turns
+# out to be zero therefore costs (4 - 1) * 4 gas less, and one byte in 256 of real key
+# material is zero.
+#
+# Storage is NOT part of this: a payload byte reaches SSTORE's zero-value price only through
+# an all-zero 32-byte slot, which real key material gives with probability 2**-256 per full
+# slot. The one exception is a payload whose length is not a multiple of 32 -- schemeId 3's
+# 1 250 B leaves a 2-byte tail sharing its slot with 30 bytes of zero padding, so that slot
+# is all-zero with probability 2**-16. Worth about 0.3 gas in expectation, which is why it
+# is a note and not a term.
+EIP_7623_TOKEN_GAS_STANDARD = 4
+EIP_7623_TOKENS_PER_NONZERO_BYTE = 4
+EIP_7623_TOKENS_PER_ZERO_BYTE = 1
+ZERO_BYTE_SAVING = ((EIP_7623_TOKENS_PER_NONZERO_BYTE - EIP_7623_TOKENS_PER_ZERO_BYTE)
+                    * EIP_7623_TOKEN_GAS_STANDARD)
+ZERO_BYTE_ODDS = 256
+# What the documents quote, per schemeId, in gas. Checked below, not trusted.
+REGISTRATION_OVERSTATEMENT = {"1": 3, "3": 59}
 
 
 def main() -> int:
@@ -173,6 +203,19 @@ def main() -> int:
         print(f"  schemeId {name:<16}{size:>6} B   {derived:>6}x   spec {quoted:>6}x   {mark}")
         if derived != quoted:
             bad.append(f"schemeId {name} registration ratio: derived {derived} "
+                       f"!= quoted {quoted}")
+
+    print(f"\nwhat the all-nonzero registration payload overstates by: a zero calldata "
+          f"byte is\n  {ZERO_BYTE_SAVING} gas cheaper on EIP-7623's standard path, and "
+          f"1 byte in {ZERO_BYTE_ODDS} of real key material is zero")
+    for name, (size, _) in REGISTRATION_RATIOS.items():
+        derived = round(size / ZERO_BYTE_ODDS * ZERO_BYTE_SAVING)
+        quoted = REGISTRATION_OVERSTATEMENT[name]
+        mark = "ok" if derived == quoted else "MISMATCH"
+        print(f"  schemeId {name:<16}{size:>6} B   ~{derived:>4} gas   "
+              f"docs ~{quoted:>4} gas   {mark}")
+        if derived != quoted:
+            bad.append(f"schemeId {name} registration overstatement: derived {derived} "
                        f"!= quoted {quoted}")
 
     # The tracking key is the SEED pair, not the expanded decapsulation key. Stated because

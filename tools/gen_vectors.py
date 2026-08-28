@@ -365,7 +365,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     # ----------------------------------------------------------------------------------
     # V3-09..V3-16 -- RE-HOMED from the schemeId 2 set, which this tree no longer ships.
     #
-    # Eight rules §2 states for THIS rung had their only fixture in that set and lost it
+    # Eight rules §2 states for THIS scheme had their only fixture in that set and lost it
     # with it; `vectors/PLAN.md` names each and where §2 states it. These rows put them
     # back. They are NEW VALUES and are listed under `absent` in
     # `vectors/rederivation.json`: the blinded re-derivation predates them and witnessed
@@ -791,7 +791,7 @@ def main(argv: list[str]) -> int:
     mf = dest / "manifest.json"
     merged: dict[str, dict] = dict(manifest)
     # The runner is named CONDITIONALLY, because this manifest ships into trees that do not
-    # carry one: a single-rung export drops the conformance crate, and a `_what` naming it
+    # carry one: a single-scheme export drops the conformance crate, and a `_what` naming it
     # unconditionally would point a reader at a package their tree does not contain. What is
     # true in every tree is the generator's own `--check`.
     man = (json.dumps({"_what": "sha256 per emitted file. the conformance runner verifies "

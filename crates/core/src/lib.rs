@@ -1,7 +1,7 @@
 //! Shared scheme interface: [`StealthScheme`], errors, §5 seed derivation, the delegation guard.
 //!
 //! Protocol: `spec/ERC-VVVV-schemeid3.md` (§1 vocabulary, §5 seeds). This crate does not
-//! implement a rung.
+//! implement a scheme.
 //!
 //! [`SenderState`] derives announce seeds and increments an index. Reusing a seed repeats
 //! the KEM ciphertext and the stealth address. [`StealthScheme::announce`] still takes raw
@@ -112,7 +112,7 @@ pub trait StealthScheme {
     ///
     /// # Errors
     ///
-    /// [`Error::Malformed`] on a meta-address this rung does not accept, [`Error::Kem`] on
+    /// [`Error::Malformed`] on a meta-address this scheme does not accept, [`Error::Kem`] on
     /// encapsulation failure, [`Error::SeedRejected`] if this seed's derived material is
     /// unusable (retry with the next index).
     fn announce(meta: &Self::Meta, seed: &[u8]) -> Result<Self::Announcement, Error>;
@@ -192,7 +192,7 @@ const DS_KEYGEN: &[u8] = b"pq-stealth/keygen/v1";
 /// HKDF-SHA256(
 ///     ikm  = keygen_master,
 ///     salt = absent,          // RFC 5869: HashLen zero bytes, not "skip Extract"
-///     info = "pq-stealth/keygen/v1" ‖ u64be(schemeId) ‖ u64be(|rung|) ‖ rung ‖ u64be(j),
+///     info = "pq-stealth/keygen/v1" ‖ u64be(schemeId) ‖ u64be(|scheme_name|) ‖ scheme_name ‖ u64be(j),
 ///     L    = KEYGEN_SEED_BYTES)
 /// ```
 ///
@@ -205,18 +205,18 @@ const DS_KEYGEN: &[u8] = b"pq-stealth/keygen/v1";
 pub fn keygen_seed(
     master: &[u8],
     scheme_id: u64,
-    rung: &[u8],
+    scheme_name: &[u8],
     j: u64,
     length: usize,
 ) -> Result<Vec<u8>, Error> {
     if master.len() != 32 || length == 0 || length > 255 * 32 {
         return Err(Error::Malformed);
     }
-    let mut info = Vec::with_capacity(DS_KEYGEN.len() + 24 + rung.len());
+    let mut info = Vec::with_capacity(DS_KEYGEN.len() + 24 + scheme_name.len());
     info.extend_from_slice(DS_KEYGEN);
     info.extend_from_slice(&scheme_id.to_be_bytes());
-    info.extend_from_slice(&(rung.len() as u64).to_be_bytes());
-    info.extend_from_slice(rung);
+    info.extend_from_slice(&(scheme_name.len() as u64).to_be_bytes());
+    info.extend_from_slice(scheme_name);
     info.extend_from_slice(&j.to_be_bytes());
 
     // RFC 5869 absent salt = HashLen zeros. `None` and `Some(&[0u8; 32])` agree; a test pins it.
@@ -257,7 +257,7 @@ impl SenderState {
         self._counter
     }
 
-    /// Draw the next announce seed for rung `S` and advance the counter.
+    /// Draw the next announce seed for scheme `S` and advance the counter.
     ///
     /// The seed binds both [`StealthScheme::SCHEME_ID`] and [`StealthScheme::NAME`].
     ///
@@ -302,20 +302,20 @@ impl SenderState {
     }
 
     /// Counter-advancing draw without a [`StealthScheme`] bound (tests and [`Self::draw_seed_untyped`]).
-    fn draw(&mut self, scheme_id: u64, rung: &str, n: usize) -> Result<Vec<u8>, Error> {
+    fn draw(&mut self, scheme_id: u64, scheme_name: &str, n: usize) -> Result<Vec<u8>, Error> {
         let i = self._counter;
         // Do not wrap: a wrapped counter reuses index 0.
         self._counter = i.checked_add(1).ok_or(Error::CounterExhausted)?;
         Ok(announce_seed(
             &self._master,
             scheme_id,
-            rung.as_bytes(),
+            scheme_name.as_bytes(),
             i,
             n,
         ))
     }
 
-    /// Untyped draw. A wrong `rung` string or `n` silently selects a different seed stream
+    /// Untyped draw. A wrong `scheme_name` string or `n` silently selects a different seed stream
     /// and still advances the counter. Prefer [`Self::draw_seed`].
     ///
     /// # Errors
@@ -324,15 +324,15 @@ impl SenderState {
     pub fn draw_seed_untyped(
         &mut self,
         scheme_id: u64,
-        rung: &str,
+        scheme_name: &str,
         n: usize,
     ) -> Result<Vec<u8>, Error> {
-        self.draw(scheme_id, rung, n)
+        self.draw(scheme_id, scheme_name, n)
     }
 
     #[cfg(test)]
-    fn draw_seed_for(&mut self, scheme_id: u64, rung: &str, n: usize) -> Vec<u8> {
-        self.draw(scheme_id, rung, n)
+    fn draw_seed_for(&mut self, scheme_id: u64, scheme_name: &str, n: usize) -> Vec<u8> {
+        self.draw(scheme_id, scheme_name, n)
             .expect("the counter is not exhausted")
     }
 }
@@ -362,18 +362,18 @@ pub fn reject_if_spending_key_is_delegated(
 ///
 /// ```text
 /// SHAKE256(DS || master(32) || u64be(i)
-///          || u64be(schemeId) || u64be(|rung|) || rung
+///          || u64be(schemeId) || u64be(|scheme_name|) || scheme_name
 ///          || u64be(|kem_id|) || kem_id, n)
 /// ```
-fn announce_seed(master: &Bytes32, scheme_id: u64, rung: &[u8], i: u64, n: usize) -> Vec<u8> {
+fn announce_seed(master: &Bytes32, scheme_id: u64, scheme_name: &[u8], i: u64, n: usize) -> Vec<u8> {
     let kem_id = kem_id(KEM_NAME);
-    let mut input = Vec::with_capacity(DS_SENDER.len() + 32 + 8 * 4 + rung.len() + kem_id.len());
+    let mut input = Vec::with_capacity(DS_SENDER.len() + 32 + 8 * 4 + scheme_name.len() + kem_id.len());
     input.extend_from_slice(DS_SENDER);
     input.extend_from_slice(master);
     input.extend_from_slice(&i.to_be_bytes());
     input.extend_from_slice(&scheme_id.to_be_bytes());
-    input.extend_from_slice(&(rung.len() as u64).to_be_bytes());
-    input.extend_from_slice(rung);
+    input.extend_from_slice(&(scheme_name.len() as u64).to_be_bytes());
+    input.extend_from_slice(scheme_name);
     input.extend_from_slice(&(kem_id.len() as u64).to_be_bytes());
     input.extend_from_slice(&kem_id);
     let mut out = vec![0u8; n];
@@ -402,17 +402,17 @@ mod tests {
     use super::*;
 
     /// Stand-in so §5 can be tested without a scheme crate. `NAME` is bound into the seed.
-    struct Rung2;
+    struct Scheme2;
 
-    impl Rung2 {
+    impl Scheme2 {
         const SCHEME_ID: u64 = 2;
         const NAME: &'static str = "schemeId 2 (direct KEM)";
         const ANNOUNCE_SEED_BYTES: usize = 32;
     }
 
-    fn seed(scheme_id: u64, rung: &str, i: u64, n: usize) -> Vec<u8> {
+    fn seed(scheme_id: u64, scheme_name: &str, i: u64, n: usize) -> Vec<u8> {
         let master: Bytes32 = [0xA5; 32];
-        announce_seed(&master, scheme_id, rung.as_bytes(), i, n)
+        announce_seed(&master, scheme_id, scheme_name.as_bytes(), i, n)
     }
 
     /// V6-05 known answers (transcribed; this crate has no JSON dependency).
@@ -420,20 +420,20 @@ mod tests {
     fn announce_seed_matches_v6_05() {
         assert_eq!(
             hexlify(&seed(
-                Rung2::SCHEME_ID,
-                Rung2::NAME,
+                Scheme2::SCHEME_ID,
+                Scheme2::NAME,
                 0,
-                Rung2::ANNOUNCE_SEED_BYTES
+                Scheme2::ANNOUNCE_SEED_BYTES
             )),
             "e5764131fba56a8f9c468cb223447a3a82aa712d6307ec1bdc43ec8d521e8d83",
             "schemeId 2, index 0"
         );
         assert_eq!(
             hexlify(&seed(
-                Rung2::SCHEME_ID,
-                Rung2::NAME,
+                Scheme2::SCHEME_ID,
+                Scheme2::NAME,
                 1,
-                Rung2::ANNOUNCE_SEED_BYTES
+                Scheme2::ANNOUNCE_SEED_BYTES
             )),
             "41dc0bdd28960bc71f01faf1fce12cb3299f01dbb3be8f5da2d99bdcfc79a3df",
             "schemeId 2, index 1 -- a different index MUST give a different seed"
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn the_index_is_not_appended_last() {
         let wrong = "c16df0c3b3391be833173fe20b7aab90665a5d9ba2c3f4f15b2e59b624035c1c";
-        let got = hexlify(&seed(Rung2::SCHEME_ID, Rung2::NAME, 0, 32));
+        let got = hexlify(&seed(Scheme2::SCHEME_ID, Scheme2::NAME, 0, 32));
         assert_ne!(
             got, wrong,
             "the index must sit immediately after master, not at the end"
@@ -520,9 +520,9 @@ mod tests {
         );
     }
 
-    /// `NAME` is bound in: two rungs with the same id must not share a seed stream.
+    /// `NAME` is bound in: two schemes with the same id must not share a seed stream.
     #[test]
-    fn the_rung_name_is_bound_not_only_the_id() {
+    fn the_scheme_name_is_bound_not_only_the_id() {
         let a = seed(6, "schemeId 6 (Spirit, level 2)", 0, 32);
         let b = seed(6, "schemeId 6 (Spirit, level 3)", 0, 32);
         assert_ne!(a, b);
@@ -618,19 +618,19 @@ mod tests {
     }
 
     const MASTER: [u8; 32] = [0xa5; 32];
-    const RUNG_2: &[u8] = b"schemeId 2 (direct KEM)";
-    const RUNG_3: &[u8] = b"schemeId 3 (direct KEM, hybrid)";
+    const SCHEME_2: &[u8] = b"schemeId 2 (direct KEM)";
+    const SCHEME_3: &[u8] = b"schemeId 3 (direct KEM, hybrid)";
 
     /// V6-01 known answers (RustCrypto HKDF vs the Python generator).
     #[test]
     fn v6_01_the_keygen_seed_derivation() {
-        let s2 = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
+        let s2 = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
         assert_eq!(
             hexlify(&s2),
             "0b696cffccb35f947f0a245c65c563ceeefc415406534ca37da186bcca9ea1fb             fd491387b7599e89f6d34cda416fc5378734521ced761fecea8e44b0bd7f5857             66ce9eaf5eb476f87034f1edc214b73578dde25b26457ebc3308adddabf9c23d"
                 .replace(' ', "")
         );
-        let s3 = keygen_seed(&MASTER, 3, RUNG_3, 0, 128).unwrap();
+        let s3 = keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap();
         assert_eq!(
             hexlify(&s3),
             "42bd3c7fd29ccc42e9f8a655995fbfd4699b7f53daf62c9142f591908ccbb03d             a9c53cfc18d95955ed3222013bce036a8e6d2fe790d614f3ab86b8cb187c4b89             447412f0c3d2978d6b1c1b1830907c82c214f889af40478f2b84efe79e9d15e1             a4cb056acf428e47138a6520c4494ec7b3c244082e7d31f44ad1f24327a2fd6c"
@@ -638,13 +638,13 @@ mod tests {
         );
     }
 
-    /// V6-01: short L is a prefix; a shortened or omitted rung name is a different seed.
+    /// V6-01: short L is a prefix; a shortened or omitted scheme name is a different seed.
     #[test]
     fn v6_01_the_named_wrong_answers_are_wrong() {
-        let right = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
+        let right = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
 
         // HKDF-Expand: shorter L is a prefix of longer L for the same info.
-        let fixed_l = keygen_seed(&MASTER, 2, RUNG_2, 0, 32).unwrap();
+        let fixed_l = keygen_seed(&MASTER, 2, SCHEME_2, 0, 32).unwrap();
         assert_eq!(
             fixed_l[..],
             right[..32],
@@ -662,21 +662,21 @@ mod tests {
         );
         assert_ne!(right, short_name);
 
-        let no_rung = keygen_seed(&MASTER, 2, b"", 0, 96).unwrap();
+        let no_scheme = keygen_seed(&MASTER, 2, b"", 0, 96).unwrap();
         assert_eq!(
-            hexlify(&no_rung),
+            hexlify(&no_scheme),
             "005e8c19ecb81e79d6ec2aa462411502f50ddd67f6f6959052e3ac3401e3d8f3             0152d1f09f669a92d07494269843c1359d70ad9ca32a85c0bfb2cf1c9602f926             53deac9a25b9c639a8ab5bf00918c8e824a14b2462525cf0c130ba7bb0aa140a"
                 .replace(' ', "")
         );
-        assert_ne!(right, no_rung);
+        assert_ne!(right, no_scheme);
     }
 
-    /// V6-04: advancing `j` for one (schemeId, rung) pair leaves the others alone.
+    /// V6-04: advancing `j` for one (schemeId, scheme_name) pair leaves the others alone.
     #[test]
     fn v6_04_a_rejection_advances_one_index_and_leaves_the_others() {
-        let a0 = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
-        let a1 = keygen_seed(&MASTER, 2, RUNG_2, 1, 96).unwrap();
-        let b0 = keygen_seed(&MASTER, 3, RUNG_3, 0, 128).unwrap();
+        let a0 = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
+        let a1 = keygen_seed(&MASTER, 2, SCHEME_2, 1, 96).unwrap();
+        let b0 = keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap();
 
         assert_eq!(
             hexlify(&a1),
@@ -684,21 +684,21 @@ mod tests {
                 .replace(' ', "")
         );
         assert_ne!(a0, a1, "the index moved the seed");
-        assert_eq!(b0, keygen_seed(&MASTER, 3, RUNG_3, 0, 128).unwrap());
-        assert_ne!(b0[..96], a1[..], "and the two rungs never collide");
+        assert_eq!(b0, keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap());
+        assert_ne!(b0[..96], a1[..], "and the two schemes never collide");
     }
 
     /// `Hkdf::new(None, …)` equals `Some(&[0u8; 32])`.
     #[test]
     fn keygen_seed_matches_an_explicit_zero_salt() {
-        let info_free = keygen_seed(&MASTER, 2, RUNG_2, 0, 96).unwrap();
+        let info_free = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
         let explicit = {
             let hk = hkdf::Hkdf::<sha2::Sha256>::new(Some(&[0u8; 32]), &MASTER);
             let mut info = Vec::new();
             info.extend_from_slice(DS_KEYGEN);
             info.extend_from_slice(&2u64.to_be_bytes());
-            info.extend_from_slice(&(RUNG_2.len() as u64).to_be_bytes());
-            info.extend_from_slice(RUNG_2);
+            info.extend_from_slice(&(SCHEME_2.len() as u64).to_be_bytes());
+            info.extend_from_slice(SCHEME_2);
             info.extend_from_slice(&0u64.to_be_bytes());
             let mut out = vec![0u8; 96];
             hk.expand(&info, &mut out).unwrap();
@@ -711,20 +711,20 @@ mod tests {
     #[test]
     fn keygen_seed_rejects_out_of_range_inputs() {
         assert!(matches!(
-            keygen_seed(&MASTER, 2, RUNG_2, 0, 0),
+            keygen_seed(&MASTER, 2, SCHEME_2, 0, 0),
             Err(Error::Malformed)
         ));
         assert!(matches!(
-            keygen_seed(&MASTER, 2, RUNG_2, 0, 255 * 32 + 1),
+            keygen_seed(&MASTER, 2, SCHEME_2, 0, 255 * 32 + 1),
             Err(Error::Malformed)
         ));
-        assert!(keygen_seed(&MASTER, 2, RUNG_2, 0, 255 * 32).is_ok());
+        assert!(keygen_seed(&MASTER, 2, SCHEME_2, 0, 255 * 32).is_ok());
         assert!(matches!(
-            keygen_seed(&[0xa5; 31], 2, RUNG_2, 0, 96),
+            keygen_seed(&[0xa5; 31], 2, SCHEME_2, 0, 96),
             Err(Error::Malformed)
         ));
         assert!(matches!(
-            keygen_seed(&[0xa5; 33], 2, RUNG_2, 0, 96),
+            keygen_seed(&[0xa5; 33], 2, SCHEME_2, 0, 96),
             Err(Error::Malformed)
         ));
     }

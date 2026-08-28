@@ -18,7 +18,7 @@ payment costs, and a reader of §7's figures might reasonably assume otherwise. 
   2. a value transfer to `stealthAddress`                              -- measured only here
   3. a spend FROM `stealthAddress`, signed with the derived key        -- measured only here
 
-(2) and (3) are the same for every rung, because the derived address is an ordinary EOA and the
+(2) and (3) are the same for every scheme, because the derived address is an ordinary EOA and the
 key is an ordinary secp256k1 scalar -- which is exactly the claim schemeIds 2 and 3 make, and a
 claim of that shape is only establishable against a chain. Measuring them is therefore worth more
 as a DEMONSTRATION than as a cost: (3) succeeding is proof that the key a recipient derives
@@ -205,14 +205,14 @@ def cases():
     # wire shape reaches it and produces a measurement stamped `"self_check": "pass"`. A harness
     # that measures the wrong shape and reports success is worse than one that refuses to run.
     #
-    # Widths come from §6's wire table for the rung named in the case, so a payload of the wrong
+    # Widths come from §6's wire table for the scheme named in the case, so a payload of the wrong
     # length for its own `schemeId` fails here rather than being priced.
     #
-    # **The two rungs put different things in the same two fields, and that is the whole reason
+    # **The two schemes put different things in the same two fields, and that is the whole reason
     # the table is keyed by `schemeId`.** schemeId 2 carries the KEM ciphertext in
     # `ephemeralPubKey` and the bare view tag in `metadata`; schemeId 3 carries the EC ephemeral
     # point in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`. Both payloads total within
-    # 33 bytes of each other, so a table with the two rungs transposed still looks plausible: a
+    # 33 bytes of each other, so a table with the two schemes transposed still looks plausible: a
     # transposed schemeId 2 would REJECT the reference implementation's own conforming output
     # while accepting a shape its scanner refuses, and nothing about the sizes would look wrong.
     # The pairs below are read off §6's wire table row by row, and this harness needs a node --
@@ -228,7 +228,7 @@ def cases():
         sid = c["scheme_id"]
         if sid not in WIRE:
             print(f"usage error: {where} names schemeId {sid}, and this harness prices the "
-                  f"per-payment rungs {sorted(WIRE)}", file=sys.stderr)
+                  f"per-payment schemes {sorted(WIRE)}", file=sys.stderr)
             raise SystemExit(2)
         for field, want in (("stealth_address", 20), ("spend_key", 32),
                             ("epk_field", WIRE[sid][0]), ("metadata", WIRE[sid][1])):
@@ -322,7 +322,7 @@ def check(results):
                        f"({r['fund_gas']}), which cannot happen -- the measurement is wrong")
         # A transfer to an account with no code and no prior balance is the intrinsic cost plus
         # EIP-2929's cold-account access and the new-account charge. Anything far above it means
-        # the derived address is NOT an empty EOA, which would contradict the whole rung.
+        # the derived address is NOT an empty EOA, which would contradict the whole scheme.
         if r["fund_gas"] > 40_000:
             bad.append(f"schemeId {r['scheme_id']}: funding cost {r['fund_gas']}, too high for "
                        f"an empty EOA -- the derived address may have code")
@@ -341,7 +341,7 @@ def table(results):
     lines = [
         "whole-payment gas, Prague, local node",
         "",
-        f"{'rung':<10}{'announce':>10}{'fund':>9}{'spend':>9}{'total':>10}"
+        f"{'scheme':<10}{'announce':>10}{'fund':>9}{'spend':>9}{'total':>10}"
         f"{'announce %':>12}",
     ]
     for r in results:
@@ -350,8 +350,8 @@ def table(results):
                      f"{r['spend_gas']:>9}{r['total_gas']:>10}{pct:>11.1f}%")
     lines += [
         "",
-        "`fund` and `spend` are identical work for every rung -- the derived address is an",
-        "ordinary EOA and the derived key an ordinary scalar -- so the rungs differ only in the",
+        "`fund` and `spend` are identical work for every scheme -- the derived address is an",
+        "ordinary EOA and the derived key an ordinary scalar -- so the schemes differ only in the",
         "first column. The spend SUCCEEDING is the point: it is the EVM agreeing that the key",
         "the recipient derived controls the address the sender paid.",
     ]
