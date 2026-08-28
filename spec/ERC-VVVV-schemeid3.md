@@ -65,6 +65,25 @@ H(ss)      = SHA256("pq-stealth/offset/v1" || ss), reduced to a valid scalar
 view_tag   = SHA256("pq-stealth/view-tag/v1" || ss)[0]                     1 B
 ```
 
+Scalar reduction MUST use one shared counter-based procedure for sender and recipient. If the
+two diverge on the rare retry path, funds become unspendable -- so the procedure is given in
+full rather than described:
+
+```
+base = SHA256("pq-stealth/offset/v1" || ss)
+for counter in 0, 1, 2, ... 256:
+    candidate = base                                       if counter == 0
+              = SHA256("pq-stealth/offset/v1" || base || u8(counter))   otherwise
+    if 0 < candidate < n_secp256k1:  H(ss) = candidate; stop
+fail
+```
+
+Convention: **every 32-byte digest above MUST be interpreted as a 256-bit unsigned integer in
+big-endian order (uNbe)**, most significant byte first -- both for the comparison
+`0 < candidate < n_secp256k1` and for the scalar that results. `u8(counter)` is a single byte,
+and an implementation MUST fail rather than continue past `counter = 256`. Both sides run this
+identical procedure.
+
 #### 1.1 The hybrid combiner
 
 schemeId 3 derives its **per-payment secret** by combining an ECDH shared secret with the
