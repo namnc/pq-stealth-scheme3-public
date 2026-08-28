@@ -35,7 +35,10 @@ rather than from any constant that produced it, and asserts them against §6.
    intrinsic and every calldata byte, so no convention needs stating: it is the number a
    wallet's balance moves by.
 2. **`execution`** — not directly observable when the floor binds, because the transaction then
-   pays `21000 + 10·tokens` regardless of what the EVM did.
+   pays `21000 + 10·tokens` regardless of what the EVM did. Recovered from a second send of
+   the same call with an all-zero payload of the same length, which executes identically and
+   escapes the floor: `measure.py`'s `blob()` states why that holds, and `check()` tests it on
+   every row rather than assuming it.
 
 ## What the self-check covers
 

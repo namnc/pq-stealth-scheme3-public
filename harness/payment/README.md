@@ -52,12 +52,10 @@ address fails at the node rather than in a comparison here.
 
 ### The demonstration seed
 
-```
-keygen seed      seed[i] = (i * 7 + 3 + salt) mod 256,  salt = 0
-                 128 bytes for schemeId 3                           (§2.1)
-sender master    [0x5a; 32]
-sender counter   0, the first draw
-```
+Stated in full -- three constants and one counter -- under **THE DEMONSTRATION SEED** at the
+top of `measure.py`, beside the input it describes and together with the reason the committed
+figures depend on it. Not repeated here: two copies of a seed is how a receipt quietly stops
+being reproducible.
 
 The private keys in `payment.json` are real private keys but it is acceptable in this
 context: every value is meant to derive from a hard-coded demonstration seed,

@@ -18,3 +18,7 @@ Requires `anvil` and `cast` (Foundry) on PATH. The self-check asserts every payl
 length against the size model and that every figure is large enough to have actually
 stored its slots (a first registration cannot cost less than 20 000 gas per fresh slot
 touched); `--json` refuses to write receipts that fail it.
+
+The conventions that move these figures -- a first registration with a fresh registrant per
+row, an all-nonzero payload and the upper bound that implies, the pinned Prague fork -- are
+stated in `measure.py` at the point each one is applied.
