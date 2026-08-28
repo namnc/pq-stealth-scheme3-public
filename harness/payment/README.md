@@ -52,10 +52,9 @@ address fails at the node rather than in a comparison here.
 
 ### The demonstration seed
 
-Stated in full -- three constants and one counter -- under **THE DEMONSTRATION SEED** at the
+Stated under **THE DEMONSTRATION SEED** at the
 top of `measure.py`, beside the input it describes and together with the reason the committed
-figures depend on it. Not repeated here: two copies of a seed is how a receipt quietly stops
-being reproducible.
+figures depend on it.
 
 The private keys in `payment.json` are real private keys but it is acceptable in this
 context: every value is meant to derive from a hard-coded demonstration seed,
