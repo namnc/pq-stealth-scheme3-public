@@ -68,11 +68,19 @@ INTRINSIC = 21_000
 # figures exempt without having traced any of them, which converts an open question into a
 # silenced one. The count is asserted below instead, so it cannot drift unnoticed in either
 # direction.
-# AUDIT.md is in the GATE, not the report, and that is the point of putting it here: it is the
-# first document an external auditor reads, so a figure in it that no harness re-derives is
-# the worst instance of the defect this tool exists for.
-GAS_DOCS = ("docs/*.md", "AUDIT.md")
-GAS_DOCS_ALL = ("docs/*.md", "AUDIT.md", "spec/ERC-*.md", "README.md")
+# THE DEFAULT SWEEP IS THE DOCUMENTS THAT SHIP, and it did not used to be. It was
+# `docs/*.md` and `AUDIT.md`, from a tree that had both; this one has neither, so the bare
+# invocation -- the one the README tells a reader to run -- swept nothing and reported "all 0
+# unmarked gas figures quoted in prose are receipts". A gate whose scope has emptied still
+# says OK, which is the failure this file exists to prevent, occurring inside it.
+#
+# `AUDIT.md` stays in the tuple. It does not ship here, and a glob that matches nothing costs
+# nothing; what it buys is that a tree which reintroduces it does not have to remember to
+# widen the gate. `--all` no longer widens the scope -- both tuples are the same set now --
+# and what it still changes is the verdict: it REPORTS untraced figures against an expected
+# count, where the bare run FAILS on them.
+GAS_DOCS = ("docs/*.md", "AUDIT.md", "spec/ERC-*.md", "README.md")
+GAS_DOCS_ALL = GAS_DOCS
 
 # What `--all` finds today, asserted so that the gap is a number rather than a memory. A DROP
 # is as much a finding as a rise: it means a figure was removed or marked, and either wants

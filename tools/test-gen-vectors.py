@@ -129,7 +129,7 @@ def main() -> int:
     case("and the message says silence is the worse outcome",
          "silence about a row" in out, True)
 
-    print("\nthe wave map may not drift from the coverage checker's")
+    print("\nthe group list may not drift from the coverage checker's")
     # SKIPPED, LOUDLY, when the coverage checker is absent. This suite ships in the release and
     # that checker does not -- it pulls in two more tools that are about our own documents -- so
     # in a release tree the cross-check has nothing to compare against.
@@ -141,18 +141,13 @@ def main() -> int:
     try:
         import check_vector_coverage as cvc  # noqa: E402
     except ModuleNotFoundError as e:
-        print(f"  SKIPPED  the coverage checker is not present ({e.name}), so the wave maps "
+        print(f"  SKIPPED  the coverage checker is not present ({e.name}), so the group "
+              f"lists "
               f"cannot be compared here. This is expected in a release tree and a FINDING in "
               f"the authoring one.")
     else:
-        case("both tools agree on wave 1's groups",
-             set(gv.WAVES[1]), set(cvc.WAVES["1"]))
-        case("both tools agree on wave 2's groups",
-             set(gv.WAVES[2]), set(cvc.WAVES["2"]))
-        case("both tools agree on wave 3's groups",
-             set(gv.WAVES[3]), set(cvc.WAVES["3"]))
-        case("neither tool has a wave the other lacks",
-             set(str(w) for w in gv.WAVES), set(cvc.WAVES))
+        case("both tools agree on the group list",
+             set(gv.GROUPS), set().union(*(set(v) for v in cvc.WAVES.values())))
         # The withdrawn-row rule is the second deliberate copy, and it gets the same
         # treatment: the compiled patterns must be identical, and the two claim-cell
         # readers -- mdscan on one side, the generator's blank-the-code-spans split on the
@@ -202,20 +197,24 @@ def main() -> int:
     case("a live row mentioning 'withdrawn' in its failure column is NOT skipped",
          rc == 1 and "§1 V1-92" in out, True)
 
-    print("\nthe manifest is merged across waves, not replaced")
-    root = tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}))
+    print("\nthe manifest is replaced, not merged")
+    # This case is INVERTED from what it asserted while the generator ran one wave at a time.
+    # A partial run had to carry the rest of the committed manifest over; a total run must
+    # not, because the only thing a carried entry can be is a file that stopped shipping.
+    # That is not hypothetical: `section-2.json` and `section-5.json` outlived both files in
+    # the committed manifest, and `--check` passed, because it verifies files that are
+    # present rather than names that are listed.
+    root = tree(plan_of(**{"1": ["V1-01"], "2_9": []}))
     foreign = {"_what": "x", "tier1_source": [],
                "files": {"section-99.json": {"sha256": "f" * 64, "rows_in_plan": 1,
                                              "rows_present": 1}}}
     (root / "vectors/manifest.json").write_text(json.dumps(foreign), encoding="utf-8")
     rc, out = run(root)
     man = json.loads((root / "vectors/manifest.json").read_text())
-    case("another wave's entry survives a regeneration",
-         "section-99.json" in man["files"], True)
-    case("and this wave's entries are written beside it",
-         "section-1.json" in man["files"], True)
-    case("and the files are ordered by name, not by which wave ran last",
-         list(man["files"]), sorted(man["files"]))
+    case("an entry for a file that no longer ships does NOT survive",
+         "section-99.json" in man["files"], False)
+    case("and this run's entries are written", "section-1.json" in man["files"], True)
+    case("and the files are ordered by name", list(man["files"]), sorted(man["files"]))
 
     print("\nthe vendored NIST file is required, never substituted")
     rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}), tier1=None))
@@ -367,7 +366,8 @@ def main() -> int:
 
     print("\nusage")
     case("an unknown flag exits 2", run(tree(plan_of(**{"1": []})), "--bogus")[0], 2)
-    case("an unknown wave exits 2", run(tree(plan_of(**{"1": []})), "--wave", "9")[0], 2)
+    case("the withdrawn --wave flag is now just an unknown flag",
+         run(tree(plan_of(**{"1": []})), "--wave", "1")[0], 2)
     with tempfile.TemporaryDirectory() as t:
         case("a tree with no plan exits 2",
              subprocess.run([sys.executable, str(TOOL), t],

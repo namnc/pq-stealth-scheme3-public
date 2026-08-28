@@ -42,7 +42,7 @@ cargo test --workspace
 ```
 
 ```bash
-python3 tools/gen_vectors.py --check --wave 1
+python3 tools/gen_vectors.py --check
 ```
 
 The fixtures are generated from `tools/vecprim.py`, which imports nothing from the reference

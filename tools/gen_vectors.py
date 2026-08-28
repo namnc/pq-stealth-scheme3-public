@@ -1,6 +1,6 @@
 """Emit the tier-2 conformance vectors. **Imports nothing from the implementation.**
 
-    gen_vectors.py [--out vectors] [--wave 1] [root]
+    gen_vectors.py [--out vectors] [root]
 
 Exit 0 if every row the plan lists is either emitted or recorded as not generatable with a
 reason, 1 if a row is neither, 2 on usage error.
@@ -43,10 +43,11 @@ import vecprim as vp  # noqa: E402
 PLAN = Path("vectors/PLAN.md")
 TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 
-# Which plan groups belong to which wave. Kept in step with
-# `check_vector_coverage.WAVES`, and `tools/test-gen-vectors.py` asserts the two agree -- two
+# The plan groups this generator builds, in emission order. Every invocation builds all of
+# them: there is no partial run, which is what lets the manifest be REPLACED rather than
+# merged below. `tools/test-gen-vectors.py` asserts the plan and this list agree -- two
 # copies of a pacing decision is one too many, and the test is what stops them drifting.
-WAVES = {1: ("1", "2.9")}
+GROUPS = ("1", "2.9")
 
 GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
@@ -431,31 +432,26 @@ def refuse_to_downgrade(dest: Path, emitted: dict) -> list[str]:
 
 def main(argv: list[str]) -> int:
     args = argv[1:]
-    out_dir, wave = "vectors", 1
+    out_dir = "vectors"
     # `--check` regenerates into memory and compares against what is committed, writing
     # nothing. A gate that
     # needs write access is a gate an independent reviewer cannot run.
     check_only = "--check" in args
     if check_only:
         args.remove("--check")
-    for flag, cast in (("--out", str), ("--wave", int)):
-        if flag in args:
-            k = args.index(flag)
-            if k + 1 >= len(args):
-                print(f"usage error: {flag} needs a value", file=sys.stderr)
-                return 2
-            val = cast(args[k + 1])
-            out_dir, wave = (val, wave) if flag == "--out" else (out_dir, val)
-            del args[k:k + 2]
+    if "--out" in args:
+        k = args.index("--out")
+        if k + 1 >= len(args):
+            print("usage error: --out needs a value", file=sys.stderr)
+            return 2
+        out_dir = args[k + 1]
+        del args[k:k + 2]
     bad = [a for a in args if a.startswith("-")]
     if bad or len(args) > 1:
         print(f"usage error: unexpected argument(s) {bad or args[1:]}", file=sys.stderr)
         print(__doc__, file=sys.stderr)
         return 2
     root = Path(args[0] if args else ".").resolve()
-    if wave not in WAVES:
-        print(f"usage error: no wave {wave}; known: {sorted(WAVES)}", file=sys.stderr)
-        return 2
     if not (root / PLAN).is_file():
         print(f"usage error: no plan at {root / PLAN}", file=sys.stderr)
         return 2
@@ -509,8 +505,8 @@ def main(argv: list[str]) -> int:
     skipped_rows: list[str] = []
     stale: list[str] = []
     unverified: list[str] = []
-    print(f"wave {wave}: groups {', '.join('§' + g for g in WAVES[wave])}")
-    for g in WAVES[wave]:
+    print(f"groups: {', '.join('§' + g for g in GROUPS)}")
+    for g in GROUPS:
         want = rows.get(g)
         if want is None:
             print(f"  §{g}: the plan has no group for it", file=sys.stderr)
@@ -552,7 +548,7 @@ def main(argv: list[str]) -> int:
                       "the only other thing that notices is a golden executed-case count "
                       "in another crate.")
                 return 1
-        blob = (json.dumps({"section": f"§{g}", "wave": wave, "vectors": body},
+        blob = (json.dumps({"section": f"§{g}", "vectors": body},
                            indent=2) + "\n").encode("utf-8")
         if check_only:
             # Compared ROW BY ROW, not byte by byte, and the reason is that "differs" and
@@ -596,7 +592,7 @@ def main(argv: list[str]) -> int:
             for rid in committed:
                 if rid not in body:
                     stale.append(f"{f.name}: {rid} is committed and the plan no longer lists "
-                                 f"it as a fixture for this wave -- deleted, withdrawn or "
+                                 f"it as a fixture -- deleted, withdrawn or "
                                  f"reserved")
                     diff += 1
             state = "STALE" if diff else ("current, partly unverified" if unchecked
@@ -614,21 +610,16 @@ def main(argv: list[str]) -> int:
             entry["rows_withdrawn_or_reserved"] = len(want) - len(slots)
         manifest[f.name] = entry
 
-    # THE MANIFEST IS MERGED, NOT REPLACED. One manifest describes every committed section
-    # file across every wave, and this run rebuilt only one wave's -- so the other waves'
-    # entries are carried over from the committed manifest rather than dropped. Without the
-    # merge, a `--wave 2` run would emit a manifest naming two files and
-    # `pqsa-conformance::load` would refuse the four wave-1 files as unlisted; the first
-    # multi-wave regeneration is where a per-run manifest stops being a per-tree one.
-    # Sorted by file name so the byte order does not depend on which wave ran last.
+    # THE MANIFEST IS REPLACED, NOT MERGED, and that is a change from when this generator
+    # ran one wave at a time. Then, a run rebuilt part of the set and had to carry the rest
+    # of the committed manifest over or it would name fewer files than ship. Now every run
+    # builds every group, so a carried-over entry can only be one thing: a file that has
+    # stopped shipping, still named. That is not hypothetical -- the entries for
+    # `section-2.json` and `section-5.json` outlived both files, and `--check` passed anyway,
+    # because it verifies the files that are present rather than the names that are listed.
+    # Sorted by file name so the byte order does not depend on iteration order.
     mf = dest / "manifest.json"
-    merged: dict[str, dict] = {}
-    if mf.is_file():
-        try:
-            merged = json.loads(mf.read_text(encoding="utf-8")).get("files", {})
-        except json.JSONDecodeError:
-            merged = {}
-    merged.update(manifest)
+    merged: dict[str, dict] = dict(manifest)
     # The runner is named CONDITIONALLY, because this manifest ships into trees that do not
     # carry one: a single-rung export drops the conformance crate, and a `_what` naming it
     # unconditionally would point a reader at a package their tree does not contain. What is
@@ -686,7 +677,7 @@ def main(argv: list[str]) -> int:
               f"produces:")
         for t in stale:
             print(f"  {t}")
-        print(f"\nRegenerate with `python3 tools/gen_vectors.py --wave {wave}` and commit the "
+        print(f"\nRegenerate with `python3 tools/gen_vectors.py` and commit the "
               "result.")
         return 1
     # The conclusion must not be wider than the run. A process that SKIPPED rows it could not
@@ -695,13 +686,13 @@ def main(argv: list[str]) -> int:
     # generated public transcripts repeated the overclaim, which is where an outside reader
     # would have believed it. A partial success says which part.
     if check_only and unverified:
-        print(f"OK, PARTLY: every row the plan lists for this wave is either emitted or "
+        print(f"OK, PARTLY: every row the plan lists is either emitted or "
               f"recorded as not generatable with a reason, and every REBUILDABLE committed "
               f"row matches a fresh generation — but {len(unverified)} row(s) and "
               f"manifest.json were NOT compared, because this process cannot rebuild them. "
               f"This run is not the full check.")
     else:
-        print("OK: every row the plan lists for this wave is either emitted or recorded as "
+        print("OK: every row the plan lists is either emitted or recorded as "
               "not generatable with a reason"
               + (", and every committed file matches a fresh generation" if check_only
                  else ""))

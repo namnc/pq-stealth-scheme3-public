@@ -16,24 +16,14 @@
   },
   "files": {
     "section-1.json": {
-      "sha256": "013afd221a4458712cb7b9cbe3dd63b5f8ecef10300070eaa9b6ec7abac445bb",
+      "sha256": "e946e8c6b0a373c441dac389a6f5a0dd5f2359cbc5d39f2aab953a0dae260985",
       "rows_in_plan": 7,
       "rows_present": 7
     },
-    "section-2.json": {
-      "sha256": "a45ca2eeaf2f2c2dcf89a060e894518a34e448471be7bd582024fd3e5ae376ce",
-      "rows_in_plan": 13,
-      "rows_present": 13
-    },
     "section-2_9.json": {
-      "sha256": "13be3f05064639484d9b1c216844b9670eceac9493225f18ff6133f9679f0863",
+      "sha256": "1364113923dc7d1fec71b4c973955114c0db69d3200bd3a38fc0c5ce8555c139",
       "rows_in_plan": 12,
       "rows_present": 12
-    },
-    "section-5.json": {
-      "sha256": "f600298f4c017c3bb8867bf4434b95a0a5c4465d9be55e1b3836bfb342326fa1",
-      "rows_in_plan": 5,
-      "rows_present": 5
     }
   }
 }

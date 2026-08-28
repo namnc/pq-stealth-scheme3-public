@@ -476,7 +476,7 @@ under 3 coexists with no migration.
 
 **Fixtures exist and ship** — `vectors/section-*.json`, with a sha256 each in
 `vectors/manifest.json`, regenerable and checkable with
-`python3 tools/gen_vectors.py --check --wave 1`. `vectors/PLAN.md` carries the row list the
+`python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
 **Nineteen rows pin this rung**, in two groups rather than one, which is worth stating
