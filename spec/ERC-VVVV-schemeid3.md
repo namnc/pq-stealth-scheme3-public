@@ -101,8 +101,7 @@ value, `"pq-stealth/hybrid-payment/v1"`, and names the output `ss`.
    `viewing_pk_ec` are **33-byte SEC1-compressed** points; `ct` is the 1 088 announcement bytes; `ek` is the 1 184
    meta-address bytes; and `ss_ec` is the 32-byte x-coordinate per item 1.
 
-**The IKM is the combiner NIST SP 800-227 puts forward, with this document's field names --
-all six fields.** That combiner is
+**The IKM is in NIST SP 800-227.**
 `H(K1, K2, c1, c2, ek1, ek2, domain_sep)`, and the **inputs** map onto it one for one:
 
 | NIST input | here | why |
