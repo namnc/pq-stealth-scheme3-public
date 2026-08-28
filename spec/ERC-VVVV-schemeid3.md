@@ -285,11 +285,6 @@ scalar multiplication. **A scanning service MUST be sized on the decapsulation**
 term the tag cannot reduce; sizing on the scalar multiplication as though it were paid per
 announcement overstates that term by a factor of 256.
 
-Widening the tag would shrink only the 1/256 term, and would not remove the address comparison
-that §2.4 requires in any case. Note also what the required comparison buys: the residual
-ambiguity a narrow tag leaves is resolved **locally**, against a field the announcement already
-carries, so a scanner never queries chain state to disambiguate a tag hit.
-
 #### 2.6 Recipient
 
 ```
@@ -349,19 +344,11 @@ order sees nothing wrong about the announcement.
 Announcement cost, measured as **real standalone transactions** against the real ERC-5564
 interface on anvil (`--hardfork prague`), with `gasUsed` read off the receipt. These are
 **total transaction gas** — the 21 000 intrinsic and every calldata byte included — so no
-convention needs stating. Generator: `harness/announcement/measure.py`; receipts committed at
-`harness/announcement/measured.json` and re-derived from the EIP-7623 rule — with no node —
-by `tools/check_measured.py`, which ships here and which a reader runs against this
-tree. **The CI definition that runs it on every pass does not ship** — it is written for the
-repository this document was folded out of — so the re-derivation is one command a reader
-issues, not a promise about a pipeline they cannot see.
-
-**The generator lives in this repository**, beside the figures it produces: a figure whose
-harness lives somewhere a reader cannot reference is unfalsifiable, which is the arrangement
-the numbers rule exists to forbid. Its field lengths are read from `tools/derive_sizes.py`
-rather than retyped, because a retyped copy of a wire table can carry a superseded `schemeId`
-and a superseded view-tag width while looking complete — a derived table moves the moment the
-wire model does.
+convention needs stating. The generator ships beside the figures, at
+`harness/announcement/measure.py`, and reads its field lengths from `tools/derive_sizes.py`
+rather than retyping them; the receipts are committed at
+`harness/announcement/measured.json`, and `tools/check_measured.py` re-derives every one of
+them from the EIP-7623 rule with no node.
 
 | schemeId | payload | calldata | execution | gas | floor binds | vs classical |
 |---|---|---|---|---|---|---|
@@ -380,42 +367,30 @@ wire model does.
 > which EIP-7623 prices at 1 token against 4 — so the narrowing is worth 21 tokens, or 210
 > gas, and not the 280 a reader computing 7 × 4 × 10 would expect.
 >
-> `tools/check_measured.py` re-derives every total here from `max(21000 + 4·tokens +
-> execution, 21000 + 10·tokens)` and checks every payload against §6's wire table, without a
-> node, on any tree it is run against. A figure that stops matching its payload fails — which
-> is exactly the failure class this table is exposed to whenever the wire moves, and the
-> reason the checker exists.
-
 **The EIP-7623 calldata floor binds**, so execution gas is not charged at all — the cost is
 data availability, and optimising the announcer buys nothing.
 
 **Registration is priced against the canonical registry itself.** Every row above is an
 `announce()` call; a recipient also makes a one-time ERC-6538 `registerKeys` call whose
-calldata is the meta-address. The byte counts are §6's arithmetic on the field sizes,
-re-derived from FIPS 203 by `tools/derive_sizes.py`; the gas is measured by
-`harness/registration` as real first-time transactions — one fresh registrant per row,
-Prague — and re-derives from `harness/registration/measured.json`:
+calldata is the meta-address, measured by `harness/registration` as real first-time
+transactions with one fresh registrant per row:
 
 | schemeId | meta-address, registered once | vs schemeId 1's 66 B | registration gas |
 |---|---|---|---|
 | 1 (classical) | 66 B | 1.0× | 115 310 |
 | **3** | **1 250 B** | **18.9×** | **964 809** |
 
-We installs the **canonical ERC-6538 registry's deployed
-runtime bytecode** — read off mainnet at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538`,
-SHA-256-pinned, committed beside the harness — and reads `gasUsed` off the receipts. 
-So each figure is an upper bound rather than an
-exact cost, and the gap is arithmetic: the payload is all-nonzero by convention, real key
-material carries about one zero byte in 256, and a zero calldata byte costs 12 gas less on
-the standard EIP-7623 path these rows take — some 59 gas at 1 250 B, derived per row by
-`tools/derive_sizes.py`.
+The measured object is the registry's **deployed runtime bytecode**, read off mainnet at
+`0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` and SHA-256-pinned beside the harness, because a
+recompilation would price this machine's compiler settings instead. The payload is all-nonzero
+by convention, so each figure is an upper bound rather than an exact cost, and the gap is
+arithmetic: real key material carries about one zero byte in 256 and a zero calldata byte
+costs 12 gas less on the standard EIP-7623 path these rows take — some 59 gas at 1 250 B,
+derived per row by `tools/derive_sizes.py`.
 
-Registration is once per recipient
-per `schemeId`, not once per payment, so an 18.9x calldata multiple on a single lifetime
-transaction is a different kind of cost from the announcement multiple — which is why the two
-tables are separate. The 18.9x above **is** a comparison against the classical scheme, and is
-meant as one; what it is not is a per-payment figure, and reading it as one is the single way
-to get this table wrong.
+**Registration is once per recipient per `schemeId`, not once per payment**, which is why this
+table is separate from the one above. The 18.9x is a comparison against the classical scheme
+and is meant as one; reading it as a per-payment figure is the single way to get it wrong.
 
 **A whole payment IS measured, and the figure is 111 300 gas.** `harness/payment/` runs all
 three transactions against a local node — announce, fund the derived address, then spend from
@@ -456,8 +431,8 @@ anonymity if the ML-KEM ciphertext is linkable to the registered `ek`: `ct` and 
 both public, and they are not rewritten by the hash. Implementations and documentation
 MUST NOT claim that privacy survives either primitive failing.
 
-**A leaked one-time key plus `ss` yields the master spending key while a leaked one-time key *alone* yields nothing** Inherited from ERC-5564,
-not introduced here.
+**A leaked one-time key plus `ss` yields the master spending key, while a leaked one-time key
+*alone* yields nothing.** Inherited from ERC-5564, not introduced here.
 
 ## Backwards Compatibility
 
@@ -465,8 +440,7 @@ not introduced here.
 `announce()` and `registerKeys` unchanged, and adds nothing to either interface. The
 `schemeId` field exists precisely to carry schemes these standards did not anticipate.
 
-**One `schemeId` value awaits reservation** — 3. It is not reserved today; see Open before
-submission.
+**One `schemeId` value awaits reservation** — 3. It is not reserved today.
 
 **Existing schemeId 1 deployments are unaffected, and the skip rule is why.** A wallet that
 supports only schemeId 1 encounters these announcements in the same event stream and skips
@@ -491,15 +465,12 @@ because a reader expecting a single `schemeId 3` file will not find one:
 | `vectors/section-2_9.json` | 20 | §2 — the 128-byte keygen seed and its scalar and determinism rules, the delegation window scan, the 1 250-byte meta-address and its point validation, the combiner and its bindings, the wire mapping, the address derivation, and what §2.7 calls a skip |
 
 **What warrant each row carries is recorded in `vectors/rederivation.json`, not left to be
-inferred.** Nineteen of the twenty-seven were re-derived by a second implementer working from
-this document's prose alone, with every expected value stripped; that file records what the
-re-derivation witnessed, row by row, and its `bytes_disagree` list being empty *is* the claim.
-The remaining eight are the ones re-homed when the set was reduced with this document — among
-them that a view-tag mismatch is a skip *and decapsulation does not fail*, the
-implicit-rejection behaviour §2.4 and §1 both rest on. They are listed under `absent`: written
-after that re-derivation and witnessed by nobody outside this project, which is a weaker
-warrant and is stated as one. `vectors/PLAN.md` maps each to the sentence above that it pins,
-and an implementer should read both files as part of the suite.
+inferred.** Nineteen of the twenty-seven were re-derived by a second implementer from this
+document's prose alone, with every expected value stripped, and that file's `bytes_disagree`
+list being empty *is* the claim. The other eight were re-homed when the set was reduced with
+this document — among them that a view-tag mismatch is a skip *and decapsulation does not
+fail* — and are listed under `absent`: written after that re-derivation and witnessed by
+nobody outside this project. `vectors/PLAN.md` maps each row to the sentence it pins.
 
 ## Reference implementation
 
@@ -507,7 +478,7 @@ and an implementer should read both files as part of the suite.
 `crates/kem`, `crates/ec` and `crates/core`. Those four crates are the closure of this scheme's
 dependencies: nothing else is needed to derive a key, build an announcement or scan for one.
 
-The announcement-gas harness that produced §7's measured row is `harness/announcement/`,
+The announcement-gas harness that produced §6's measured row is `harness/announcement/`,
 `harness/registration/` measures the registration row, and `harness/payment/` measures all
 three transactions of a payment against a local node.
 

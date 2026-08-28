@@ -309,19 +309,11 @@ def main() -> int:
     # The §5 scheme-name and `keygen_seed`-salt cases went the same way -- their subject was
     # `section-5.json`.
     print("\nvecprim's primitives, against the COMMITTED fixtures")
-    # The reason is a mutation report rather than a hunch: eight mutations
-    # to `vecprim.py` -- a one-byte view tag, `announce_seed` with its index appended last, a
-    # `kem_id` without its length prefix, `kem_encaps` returning the library's field order -- all
+    # A mutation report rather than a hunch: eight mutations to `vecprim.py` -- among them a
+    # changed view-tag width and `kem_encaps` returning the library's field order -- all
     # SURVIVED this suite. Every case above builds a SYNTHETIC tree and compares the generator
-    # against itself, so a primitive can change and every synthetic expectation changes with it.
-    #
-    # These cases compare against the fixtures in `vectors/`, which are committed bytes that do
-    # not move when the code does. That is the only kind of comparison that can catch a
-    # derivation changing, and the suite had none.
-    #
-    # (`crates/core` asserts several of the same values in Rust, which is why the defect was not
-    # dangerous -- but a Rust test does not exercise the Python these vectors are generated from,
-    # and this suite claimed to.)
+    # against itself, so a primitive can move and every synthetic expectation moves with it.
+    # These cases compare against the committed bytes in `vectors/`, which do not.
     real = Path(".")
     if not (real / "vectors/section-1.json").is_file():
         print("  SKIPPED  no committed vectors in this tree, so nothing to compare against.")

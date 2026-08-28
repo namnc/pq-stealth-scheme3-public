@@ -65,11 +65,11 @@ INTRINSIC = 21_000
 # unmarked gas figures quoted in prose are receipts". A gate whose scope has emptied still
 # says OK, which is the failure this file exists to prevent, occurring inside it.
 #
-# `AUDIT.md` stays in the tuple. It does not ship here, and a glob that matches nothing costs
-# nothing; what it buys is that a tree which reintroduces it does not have to remember to
-# widen the gate. `--all` no longer widens the scope -- both tuples are the same set now --
-# and what it still changes is the verdict: it REPORTS untraced figures against an expected
-# count, where the bare run FAILS on them.
+# `docs/*.md` and `AUDIT.md` stay in the tuple though neither ships here: a glob matching
+# nothing costs nothing, and a tree that reintroduces either does not have to remember to
+# widen the gate. `--all` no longer widens the scope -- both tuples are one set now -- and
+# what it still changes is the verdict: it REPORTS an untraced figure where the bare run
+# FAILS on it.
 #
 # EACH HARNESS'S README IS IN SCOPE, and was not. Those files quote the receipts their own
 # harness produced, which is the shortest possible path from a measurement to a reader, and
@@ -490,18 +490,12 @@ def main(argv: list[str]) -> int:
                     generated_spans.append((body_start, close))
             for m in re.finditer(pattern_re, text):
                 token = m.group(1)
-                # A CONTIGUOUS digit run directly behind an ellipsis is exempt ONLY in a
-                # transcript file, and only when the ellipsis truncates a real hex token:
-                # the demo prints long values as head…tail, and a tail that happens to be
-                # all digits — a small counter in big-endian hex ends in one, every time —
-                # is bytes, not a figure. "Real hex token" is checked by walking back to the
-                # token boundary, NOT by peeking at four characters: `preface…99999` has
-                # four hex letters before the ellipsis and is still prose wearing an
-                # approximation mark, and `deadbee7…99999` in ORDINARY prose is caught by
-                # the file scope even though its head passes the token test. The head must
-                # be a whole delimited token, all hex, at least 8 characters, containing a
-                # decimal digit. Spaced groups are never exempt — they are this repository's
-                # FIGURE formatting, and no hex tail contains a space.
+                # A digit run behind an ellipsis is bytes, not a figure -- the demo prints
+                # long values as head…tail and a hex tail can be all digits. Exempt only
+                # inside a generated span, and only when the head is a whole delimited
+                # token, all hex, 8+ characters, containing a digit: `preface…99999` is
+                # prose wearing an approximation mark. Spaced groups are never exempt --
+                # they are this repository's FIGURE formatting, and no hex tail has a space.
                 if (
                     any(a <= m.start() < b for a, b in generated_spans)
                     and " " not in token
@@ -569,17 +563,10 @@ def main(argv: list[str]) -> int:
                                 and "gas" in headers[col_i]):
                             continue
                 line_no = text[: m.start()].count("\n")
-                # A MARKER SCOPES THE PARAGRAPH IT INTRODUCES, not the three lines after it.
-                #
-                # Three lines was arbitrary and it showed: a marker placed correctly at the head
-                # of a paragraph failed to reach a figure five lines down, so a figure that HAD
-                # been classified still reported as untraced. Widened to the paragraph -- from
-                # the marker to the next blank line -- which is the scope a reader would assume
-                # from where the marker sits.
-                #
-                # Bounded by the blank line rather than unbounded, because a marker that reached
-                # to the end of a section would let one classification quietly cover figures
-                # nobody looked at.
+                # A MARKER SCOPES THE PARAGRAPH IT INTRODUCES -- from the marker to the next
+                # blank line, which is the scope a reader assumes from where it sits. A fixed
+                # three-line window missed a figure five lines under a correctly placed marker;
+                # an unbounded one would let one classification cover a whole section.
                 start_of_para = line_no
                 while start_of_para > 0 and lines[start_of_para - 1].strip():
                     start_of_para -= 1
