@@ -67,12 +67,13 @@ implemented.
 > | a malformed `ct` is a skip at the entry point, not an error | §2.7 | V3-15 |
 > | the derived key controls the derived address, as a key-to-address relation | §2.6 | V3-16 |
 >
-> **These eight are unwitnessed, and `rederivation.json` lists every one of them under
-> `absent`.** The blinded re-derivation predates them: a second implementer computed the
-> rows above from the prose alone, and these were not among the rows put to them. That is
-> a weaker warrant than `bytes_agree` and the ledger says so in the one place a reader
-> checks — which is the whole reason the gap was left standing until it could be closed
-> this way rather than quietly.
+> **These eight are unwitnessed.** The blinded re-derivation predates them: a second
+> implementer computed the rows above from the prose alone, and these were not among the rows
+> put to them. That is a weaker warrant than `bytes_agree`, and `rederivation.json` does not
+> list them — it records only what the re-derivation DID, and the generator computes the
+> complement against the shipped fixtures and prints it on every run. A hand-kept list of
+> unwitnessed rows would be a second copy of what the fixture set already determines, and the
+> copy that goes stale is the one implying a row was witnessed.
 >
 > The sixth was the one to weigh, and V3-14 is built to carry it. It is the only fixture
 > exhibiting **ML-KEM's implicit rejection** — a foreign ciphertext yielding a pseudorandom

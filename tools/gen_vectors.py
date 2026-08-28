@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import vecprim as vp  # noqa: E402
 
 PLAN = Path("vectors/PLAN.md")
+LEDGER = Path("vectors/rederivation.json")
 TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 
 # The plan groups this generator builds, in emission order. Every invocation builds all of
@@ -48,6 +49,13 @@ TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 # merged below. `tools/test-gen-vectors.py` asserts the plan and this list agree -- two
 # copies of a pacing decision is one too many, and the test is what stops them drifting.
 GROUPS = ("1", "2.9")
+
+# The ledger's buckets, which record what the blinded re-derivation ACTUALLY DID. There is
+# deliberately no bucket for the rows it never saw: that set is the COMPLEMENT of these
+# against the shipped fixtures, and `witness()` computes it rather than trusting a list kept
+# by hand. The list is the weaker artifact -- add a fixture, forget the edit, and the stale
+# copy is the one implying the row was witnessed. The complement's default is the safe one.
+WITNESSED = ("bytes_agree", "bytes_disagree", "outcome_only", "ungeneratable")
 
 GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
@@ -364,10 +372,10 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     #
     # Eight rules §2 states for THIS scheme had their only fixture in that set and lost it
     # with it; `vectors/PLAN.md` names each and where §2 states it. These rows put them
-    # back. They are NEW VALUES and are listed under `absent` in
-    # `vectors/rederivation.json`: the blinded re-derivation predates them and witnessed
-    # none of them, which is exactly why they are fenced off here rather than filed in
-    # among the witnessed rows above.
+    # back. They are NEW VALUES: the blinded re-derivation predates them and witnessed none
+    # of them, which is exactly why they are fenced off here rather than filed in among the
+    # witnessed rows above. `vectors/rederivation.json` does not name them -- `witness()`
+    # computes the unwitnessed set and prints it on every run.
     #
     # Neither KEM-bearing row runs a KEM. V3-09 takes `ek` from ACVP keygen and V3-14
     # takes `(dk, ct, ss_pq)` from an ACVP decapsulation case whose `reason` is
@@ -597,6 +605,43 @@ def refuse_to_downgrade(dest: Path, emitted: dict) -> list[str]:
     return lost
 
 
+def witness(root: Path, shipped: list[str]) -> tuple[list[str], list[str]]:
+    """`(lines to print, findings)` for the re-derivation ledger against the shipped rows.
+
+    The rows nothing outside this project has witnessed are COMPUTED here, not read: a row
+    added after the blinded pass is unwitnessed whether or not anyone remembered to say so.
+    An unwitnessed row is REPORTED and never failed -- it is a legitimate state, and the
+    whole point is that it stays visible. A ledger naming a row that does not ship IS a
+    failure: that entry vouches for nothing, and the complement cannot detect it.
+    """
+    path = root / LEDGER
+    if not path.is_file():
+        return ([f"witness: SKIPPED -- no {LEDGER}, so nothing in this tree says which rows "
+                 f"an independent re-derivation saw"], [])
+    try:
+        led = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        return ([], [f"{LEDGER} is not valid JSON ({e})"])
+    seen: list[str] = []
+    for k in WITNESSED:
+        seen.extend(led.get(k, []))
+    dupes = sorted({r for r in seen if seen.count(r) > 1})
+    strays = sorted(set(seen) - set(shipped))
+    unwitnessed = [r for r in shipped if r not in set(seen)]
+    lines = [f"witness: {len(set(seen) & set(shipped))} of {len(shipped)} shipped row(s) "
+             f"re-derived independently, {len(unwitnessed)} with NO outside witness"]
+    if unwitnessed:
+        lines.append(f"  no witness: {', '.join(unwitnessed)}")
+    bad = []
+    if dupes:
+        bad.append(f"{LEDGER} classifies {len(dupes)} row(s) more than once: "
+                   f"{', '.join(dupes)} -- a row's warrant must be one thing")
+    if strays:
+        bad.append(f"{LEDGER} names {len(strays)} row(s) no fixture has: {', '.join(strays)} "
+                   f"-- an entry for a row that does not ship vouches for nothing")
+    return lines, bad
+
+
 def main(argv: list[str]) -> int:
     args = argv[1:]
     out_dir = "vectors"
@@ -647,11 +692,12 @@ def main(argv: list[str]) -> int:
               f"({rejections} of them IMPLICIT-REJECTION cases)")
         # A count of zero rejection cases means the file lost them, and the oracle would then
         # be silently weakened: strong on keygen and encapsulation, blind on the
-        # path `V2-11` and `V2-13` are emitted through.
+        # path V3-14 is emitted through.
         if rejections == 0:
             print("\nFAIL: the vendored ACVP file carries no `modified ciphertext` "
-                  "decapsulation case, so implicit rejection -- the property this whole ladder "
-                  "rests on -- has no external witness.", file=sys.stderr)
+                  "decapsulation case, so implicit rejection -- the property §2.4's "
+                  "required address comparison rests on -- has no external witness.",
+                  file=sys.stderr)
             return 1
         if disagreements:
             for d in disagreements:
@@ -667,6 +713,7 @@ def main(argv: list[str]) -> int:
     dest.mkdir(parents=True, exist_ok=True)
 
     emitted = absent = 0
+    shipped: list[str] = []
     manifest: dict[str, dict] = {}
     missing: list[str] = []
     skipped_rows: list[str] = []
@@ -710,10 +757,10 @@ def main(argv: list[str]) -> int:
                     print(f"  {line}")
                 print("\nNothing was written. Install the missing dependency and re-run, or "
                       "pass --out to a scratch directory if a downgrade is genuinely intended.")
-                print("This failure mode is real: without this refusal, a regeneration "
-                      "lacking `kyber-py` replaces V2-01, V2-11 and V2-13 with stubs, and "
-                      "the only other thing that notices is a golden executed-case count "
-                      "in another crate.")
+                print("This failure mode is real: it is what a regeneration lacking "
+                      "`kyber-py` did to the KEM-bearing rows of the set this one was cut "
+                      "from, and the only other thing that noticed was a golden "
+                      "executed-case count in another crate.")
                 return 1
         blob = (json.dumps({"section": f"§{g}", "vectors": body},
                            indent=2) + "\n").encode("utf-8")
@@ -769,6 +816,7 @@ def main(argv: list[str]) -> int:
         else:
             f.write_bytes(blob)
             print(f"  §{g}: {len(body)}/{len(slots)} slot(s) written to {f.name}")
+        shipped.extend(body)
         entry = {"sha256": hashlib.sha256(blob).hexdigest(),
                  "rows_in_plan": len(want), "rows_present": len(body)}
         # Only stated when nonzero, so a group with no such rows keeps its exact committed
@@ -820,6 +868,9 @@ def main(argv: list[str]) -> int:
         mf.write_bytes(man)
 
     print(f"\n{emitted} vector(s) emitted, {absent} recorded as not generatable")
+    witness_lines, witness_bad = witness(root, shipped)
+    for line in witness_lines:
+        print(line)
     if skipped_rows:
         # Named, not just counted: a silently narrowed row set reads as full coverage.
         print(f"{len(skipped_rows)} plan row(s) withdrawn or reserved, not a generator's to "
@@ -839,6 +890,11 @@ def main(argv: list[str]) -> int:
               "(`pip install --no-deps kyber-py==1.2.0`) for the full check. An absent "
               "capability is not a stale file, and a gate that conflated the two would be "
               "one somebody switches off.")
+    if witness_bad:
+        print(f"\nFAIL: {len(witness_bad)} finding(s) in the re-derivation ledger:")
+        for w in witness_bad:
+            print(f"  {w}")
+        return 1
     if stale:
         print(f"\nFAIL: {len(stale)} committed row(s) or file(s) are not what the generator "
               f"produces:")

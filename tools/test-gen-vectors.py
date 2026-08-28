@@ -356,6 +356,51 @@ def main() -> int:
     case("and genuinely different rows still differ",
          gv.canonical({"x": [1, 2]}) == gv.canonical({"x": [1, 3]}), False)
 
+    print("\nthe re-derivation ledger, and the rows it does NOT name")
+    # The ledger used to carry an `absent` list naming the unwitnessed rows by hand. It was a
+    # second copy of a fact the fixture set already determines, with no gate on it: add a
+    # fixture, forget the edit, and the stale copy is the one implying the row was witnessed.
+    # The generator computes the complement instead, so these cases are what make that
+    # computation falsifiable.
+    def with_ledger(body):
+        root = tree(plan_of(**{"1": ["V1-01", "V1-02"], "2_9": []}))
+        if body is not None:
+            (root / "vectors/rederivation.json").write_text(json.dumps(body),
+                                                            encoding="utf-8")
+        return run(root)
+
+    rc, out = with_ledger(None)
+    case("no ledger is announced as SKIPPED, not passed over", "witness: SKIPPED" in out, True)
+    case("and the run still succeeds", rc, 0)
+
+    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"]})
+    case("a ledger covering every row reports none unwitnessed",
+         "2 of 2 shipped row(s) re-derived independently, 0 with NO outside witness" in out,
+         True)
+    case("and names no row as unwitnessed", "no witness:" in out, False)
+
+    # THE CASE THE `absent` LIST EXISTED FOR, now automatic: a row nothing witnessed is
+    # named without anyone having listed it.
+    rc, out = with_ledger({"bytes_agree": ["V1-01"]})
+    case("a row the ledger does not name is reported unwitnessed",
+         "1 with NO outside witness" in out and "no witness: V1-02" in out, True)
+    case("and that is REPORTED, not failed -- an unwitnessed row is a legitimate state",
+         rc, 0)
+
+    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"], "outcome_only": ["V9-99"]})
+    case("a ledger naming a row no fixture has exits 1", rc, 1)
+    case("and says which", "V9-99" in out and "vouches for nothing" in out, True)
+
+    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"], "outcome_only": ["V1-01"]})
+    case("a row classified twice exits 1", rc, 1)
+    case("and says which", "V1-01" in out and "must be one thing" in out, True)
+
+    # The four buckets are read by name, so a bucket lost from the tuple would silently
+    # convert its rows to unwitnessed. This is the case that notices.
+    rc, out = with_ledger({"ungeneratable": ["V1-01"], "bytes_disagree": ["V1-02"]})
+    case("every witnessed bucket counts, not just the agreeing ones",
+         "2 of 2 shipped row(s)" in out, True)
+
     print("\nusage")
     case("an unknown flag exits 2", run(tree(plan_of(**{"1": []})), "--bogus")[0], 2)
     case("the withdrawn --wave flag is now just an unknown flag",

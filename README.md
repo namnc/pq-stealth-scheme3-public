@@ -56,8 +56,9 @@ implementation, reported at the top of the run.
 question as whether it is current. Nineteen of the twenty-seven were re-derived by a second
 implementer from the specification's prose alone, with every expected value stripped; that
 file records what the re-derivation witnessed, row by row, and its `bytes_disagree` list
-being empty *is* the claim. The other eight are listed under `absent` — written later, and
-witnessed by nobody outside this project.
+being empty *is* the claim. The rows it does NOT cover are not listed there: they are the
+complement, and `python3 tools/gen_vectors.py` computes and prints them on every run, so a
+fixture added later is counted as unwitnessed without anyone remembering to say so.
 
 ```bash
 python3 tools/check_measured.py

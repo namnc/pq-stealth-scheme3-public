@@ -383,10 +383,9 @@ because a reader expecting a single `schemeId 3` file will not find one:
 **What warrant each row carries is recorded in `vectors/rederivation.json`, not left to be
 inferred.** Nineteen of the twenty-seven were re-derived by a second implementer from this
 document's prose alone, with every expected value stripped, and that file's `bytes_disagree`
-list being empty *is* the claim. The other eight were re-homed when the set was reduced with
-this document -- among them that a view-tag mismatch is a skip *and decapsulation does not
-fail* -- and are listed under `absent`: written after that re-derivation and witnessed by
-nobody outside this project. `vectors/PLAN.md` maps each row to the sentence it pins.
+list being empty *is* the claim. The other eight carry no outside witness at all, and
+`python3 tools/gen_vectors.py` names them on every run rather than leaving the count to be
+subtracted. `vectors/PLAN.md` maps each row to the sentence it pins.
 
 ## Reference implementation
 
