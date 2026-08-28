@@ -52,7 +52,7 @@ implemented.
 > the SEC1 `0x02`/`0x03` tag rule (V3-03), and the announcement's wire shape (V3-08).
 >
 > **Eight rules the specification still states for this scheme lost their only fixture, and
-> have been re-homed as V3-09 to V3-16.** The gap is recorded rather than erased because
+> have been re-homed as V3-09 to V3-15.** The gap is recorded rather than erased because
 > the re-homed rows differ in one respect from every row above them, stated in the next
 > paragraph:
 >
@@ -65,7 +65,7 @@ implemented.
 > | `address = keccak256(uncompressed(pk)[1..])[12..32]` | §2.4 | V3-13 |
 > | a view-tag mismatch is a skip — **and decapsulation does not fail** | §2.7 | V3-14 |
 > | a malformed `ct` is a skip at the entry point, not an error | §2.7 | V3-15 |
-> | the derived key controls the derived address, as a key-to-address relation | §2.6 | V3-16 |
+> | the derived key controls the derived address, as a key-to-address relation | — | **no fixture**: re-homed as V3-16, then dropped with the §2.6 sentence it pinned |
 >
 > **These eight are unwitnessed.** The blinded re-derivation predates them: a second
 > implementer computed the rows above from the prose alone, and these were not among the rows
@@ -113,7 +113,6 @@ implemented.
 | V3-13 | `address = keccak256(uncompressed(pk)[1..])[12..32]` | a derived `stealth_pk`, both encodings | the 20-byte address and its EIP-55 form | keccak of the *compressed* form; keccak *with* the `0x04` prefix; `[0..20]` rather than `[12..32]`. Each is 20 well-formed bytes and each is a different address — the payment is lost to a chain address nobody holds a key for, not to an error |
 | V3-14 | a view-tag mismatch is a skip — **and decapsulation does not fail** | ACVP decapsulation tcId 88, `reason: modified ciphertext`; `ek` read from `dk[1152:2336]` and checked against the `H(ek)` at `dk[2336:2368]` | 32 bytes and **no error**; a derived tag differing from the announced one; **skip** | scanning on whether `Decaps` errored — it never does, so such an implementation matches every announcement ever published. Raising on the mismatch is the other error: `announce()` is permissionless, so an error path there is a scanner denial of service (§2.4) |
 | V3-15 | a malformed `ct` is a **skip at the entry point**, not an error | `metadata` of 1 088, 1 089, 1 090 B; `ephemeralPubKey` of 32 and 33 B | skip for every shape but 1 089 / 33 | raising, or propagating a library exception. Anyone can call `announce()` with any bytes, so a scanner that errors on shape stops at the first announcement an attacker publishes, for the price of one transaction. The 1 089 case is the positive control |
-| V3-16 | the derived key controls the derived address, **as a key-to-address relation** | `spending_sk`, `ss`, the offset | `stealth_sk`, and the address from the key **identical** to the address from the point | checking only that both paths produced bytes. They always do: `spending_pk + offset·G` and `spending_sk + offset` agree only if both are right, and a sign or byte-order slip in either yields a well-formed key for a different address — presented as spendable, and not |
 
 ## 7. Deliverables, in order
 

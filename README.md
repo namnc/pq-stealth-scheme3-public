@@ -53,7 +53,7 @@ and adds one thing — an acceptance test of that vendored file against an indep
 implementation, reported at the top of the run.
 
 `vectors/rederivation.json` says how strongly each row is backed, which is not the same
-question as whether it is current. Nineteen of the twenty-seven were re-derived by a second
+question as whether it is current. Nineteen of the twenty-six were re-derived by a second
 implementer from the specification's prose alone, with every expected value stripped; that
 file records what the re-derivation witnessed, row by row, and its `bytes_disagree` list
 being empty *is* the claim. The rows it does NOT cover are not listed there: they are the

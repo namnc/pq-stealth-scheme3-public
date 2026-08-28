@@ -65,9 +65,7 @@ H(ss)      = SHA256("pq-stealth/offset/v1" || ss), reduced to a valid scalar
 view_tag   = SHA256("pq-stealth/view-tag/v1" || ss)[0]                     1 B
 ```
 
-Scalar reduction MUST use one shared counter-based procedure for sender and recipient. If the
-two diverge on the rare retry path, funds become unspendable -- so the procedure is given in
-full rather than described:
+Scalar reduction MUST use one shared counter-based procedure for sender and recipient as described:
 
 ```
 base = SHA256("pq-stealth/offset/v1" || ss)
@@ -391,18 +389,18 @@ under 3 coexists with no migration.
 `python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
-**Twenty-seven rows pin this scheme**, in two groups rather than one, which is worth stating
+**Twenty-six rows pin this scheme**, in two groups rather than one, which is worth stating
 because a reader expecting a single `schemeId 3` file will not find one:
 
 | group | rows | what it pins |
 |---|---|---|
 | `vectors/section-1.json` | 7 | Section 1 -- the derivations every schemeId shares |
-| `vectors/section-2_9.json` | 20 | Section 2 -- keys and seeds, the meta-address, the combiner and its bindings, the wire mapping, and what counts as a skip |
+| `vectors/section-2_9.json` | 19 | Section 2 -- keys and seeds, the meta-address, the combiner and its bindings, the wire mapping, and what counts as a skip |
 
 **What warrant each row carries is recorded in `vectors/rederivation.json`, not left to be
-inferred.** Nineteen of the twenty-seven were re-derived by a second implementer from this
+inferred.** Nineteen of the twenty-six were re-derived by a second implementer from this
 document's prose alone, with every expected value stripped, and that file's `bytes_disagree`
-list being empty *is* the claim. The other eight carry no outside witness at all, and
+list being empty *is* the claim. The other seven carry no outside witness at all, and
 `python3 tools/gen_vectors.py` names them on every run rather than leaving the count to be
 subtracted. `vectors/PLAN.md` maps each row to the sentence it pins.
 

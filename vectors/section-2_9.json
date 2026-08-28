@@ -332,23 +332,6 @@
       "wrong": {
         "note": "raising, or propagating a library exception. Anyone can call announce() with any bytes, so a scanner that errors on shape stops at the first announcement an attacker publishes -- and it costs the attacker one transaction. The 1089 case is the positive control"
       }
-    },
-    "V3-16": {
-      "claim": "a wallet SHOULD verify the derived key controls the derived address, as a key-to-address relation",
-      "given": {
-        "spending_sk": "1111111111111111111111111111111111111111111111111111111111111111",
-        "ss": "7ae80633e684e840812f564d69fee6e33e61b213a7d48c83f52920b40745ccf6",
-        "offset": "c501747dcccfa828e8054d1a984a5532b811b637de79935b74a499eb353a1c4f"
-      },
-      "expect": {
-        "stealth_sk": "d612858edde0b939f9165e2ba95b6643c922c748ef8aa46c85b5aafc464b2d60",
-        "address_from_the_key": "1c41f46a98415cd7d6db5d3dc110f658ab04ef22",
-        "address_from_the_point": "1c41f46a98415cd7d6db5d3dc110f658ab04ef22",
-        "assertion": "identical"
-      },
-      "wrong": {
-        "note": "checking only that both paths produced bytes. They always do: spending_pk + offset*G and spending_sk + offset are two derivations that agree only if both are right, and a sign or byte-order slip in either yields a well-formed key for a different address. The payment is then presented as spendable and is not"
-      }
     }
   }
 }

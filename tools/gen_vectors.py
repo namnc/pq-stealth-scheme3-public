@@ -368,7 +368,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                      "harder to chase than a clean empty scan"}}
 
     # ----------------------------------------------------------------------------------
-    # V3-09..V3-16 -- RE-HOMED from the schemeId 2 set, which this tree no longer ships.
+    # V3-09..V3-15 -- RE-HOMED from the schemeId 2 set, which this tree no longer ships.
     #
     # Eight rules §2 states for THIS scheme had their only fixture in that set and lost it
     # with it; `vectors/PLAN.md` names each and where §2 states it. These rows put them
@@ -452,7 +452,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "that caused it, or -- in a library that does not "
                                     "validate -- returns a value on the wrong curve"}}
 
-    off_pt = vp.mul(scalar_from_ss := vp.h_of_ss(ss)[1])
+    off_pt = vp.mul(vp.h_of_ss(ss)[1])
     stealth_pt = vp.add(vp.decode_compressed(spending_pk), off_pt)
     address = vp.address_of(stealth_pt)
     uncompressed = vp.encode_uncompressed(stealth_pt)
@@ -520,22 +520,16 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "publishes -- and it costs the attacker one transaction. "
                                     "The 1089 case is the positive control"}}
 
-    stealth_sk = (int.from_bytes(spending_seed, "big") + scalar_from_ss) % vp.N
-    v["V3-16"] = {"claim": "a wallet SHOULD verify the derived key controls the derived "
-                           "address, as a key-to-address relation",
-                  "given": {"spending_sk": hx(spending_seed), "ss": hx(ss),
-                            "offset": f"{scalar_from_ss:064x}"},
-                  "expect": {"stealth_sk": f"{stealth_sk:064x}",
-                             "address_from_the_key": hx(vp.address_of(vp.mul(stealth_sk))),
-                             "address_from_the_point": hx(address),
-                             "assertion": "identical"},
-                  "wrong": {"note": "checking only that both paths produced bytes. They "
-                                    "always do: spending_pk + offset*G and "
-                                    "spending_sk + offset are two derivations that agree "
-                                    "only if both are right, and a sign or byte-order slip "
-                                    "in either yields a well-formed key for a different "
-                                    "address. The payment is then presented as spendable and "
-                                    "is not"}}
+    # COVERAGE REMOVED WITH ITS SUBJECT. V3-16 stood here, pinning that the address derived
+    # from `stealth_sk` equals the one derived from `stealth_pk`. Section 2.6's "a wallet
+    # SHOULD verify that the derived key controls the derived address" left the document, and
+    # a fixture with no normative sentence behind it is what this plan says gets deleted
+    # rather than argued about. Nothing in this tree checks that relation now.
+    #
+    # Worth knowing if it ever returns: it caught a divergence BETWEEN the two derivations,
+    # not a bad input to them. A byte-order slip in `offset` moves both paths together and
+    # the identity still holds -- that failure is V1-01..V1-06's, and the `wrong` column here
+    # claimed otherwise.
     return v
 
 
