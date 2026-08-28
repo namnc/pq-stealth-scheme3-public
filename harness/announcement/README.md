@@ -28,6 +28,19 @@ python3 measure.py --rpc-url URL  # against an already-running node
 
 Needs `anvil`, `cast` and `forge` on PATH. Exits 1 if any self-check fails.
 
+## The announcer is BUILT here, so the toolchain is part of the measurement
+
+`harness/registration` measures the ERC-6538 registry's **deployed** bytecode, read off
+mainnet, so no compiler setting can reach its figures. This harness has no such object to read:
+ERC-5564's announcer is compiled from `contracts/` and deployed to anvil, which means execution
+gas moves with solc and its optimizer — and the classical baseline is the one row the EIP-7623
+floor does not cover, so a shift there lands squarely on the published ratio.
+
+So `measure.py` pins the compiler version, the optimizer settings and solc's target EVM,
+**asserts what the build actually used rather than what `foundry.toml` declares**, and refuses
+to measure on a mismatch. The receipt names the toolchain beside the hardfork. What the
+optimizer alone is worth is in the harness's own docstring, measured by turning it off.
+
 ## The field lengths are READ, not retyped
 
 `CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203 and

@@ -2,6 +2,14 @@
   "harness": "announcement",
   "what": "total transaction gas for one ERC-5564 announce(), by scheme, each row sending the same real derived stealth address (see the note on STEALTH in measure.py)",
   "hardfork": "prague",
+  "toolchain": {
+    "solc": "0.8.28+commit.7893614a",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "evm_version": "prague"
+  },
   "intrinsic_gas": 21000,
   "self_check": "pass",
   "cases": [

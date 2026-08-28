@@ -39,6 +39,22 @@ TWO NUMBERS, AND HOW EACH IS OBTAINED
    a flag. How many rows that covers is printed rather than assumed; with one
    post-quantum scheme shipping it is the classical baseline alone.
 
+THE ANNOUNCER HERE IS COMPILED, AND THAT IS A DEPENDENCE WORTH PINNING
+-----------------------------------------------------------------------
+`harness/registration` measures the canonical registry's DEPLOYED bytecode, read
+off mainnet, precisely so no compiler setting can move its figures.  This harness
+cannot do that -- ERC-5564's announcer is measured here as a local build -- so the
+execution figures are a function of the toolchain as well as of the EVM, and the
+dependence is not small.  Measured, with the optimizer turned off and nothing else
+changed: the classical baseline's execution goes 5 143 -> 6 471 and its TOTAL
+28 067 -> 29 395, which moves the published ratio from 2.47x to 2.36x.  The
+classical row is the denominator and it is the one row the EIP-7623 floor does not
+cover, so the whole error lands on the ratio.
+
+So the toolchain is pinned below and RECORDED IN THE RECEIPT beside the hardfork,
+for exactly the reason the hardfork is: a silent bump reprices everything and a
+receipt that does not name what produced it cannot say so.
+
 Run:
     python3 measure.py                # boots its own anvil, prints the table
     python3 measure.py --json         # rewrites measured.json
@@ -76,6 +92,21 @@ CONTRACTS = ROOT / "contracts"
 # no longer specifies -- the failure mode a moving wire model makes routine.
 sys.path.insert(0, str(ROOT / "tools"))
 import derive_sizes  # noqa: E402
+
+# The EVM the receipts are taken against. anvil's default would silently reprice everything
+# on a Foundry bump, so it is passed explicitly, and it is one constant rather than the three
+# separate string literals it used to be.
+HARDFORK = "prague"
+
+# What the announcer must be built with. `contracts/foundry.toml` DECLARES these; the check
+# below asserts what the build ACTUALLY used, which is the pair that can disagree -- a machine
+# with a different solc on PATH, a profile override, a stale artifact.
+#
+# `EVM_VERSION` must equal `HARDFORK`: solc targeting one EVM while anvil executes another is
+# a measurement of neither, and nothing else in this file would notice.
+SOLC_VERSION = "0.8.28"
+OPTIMIZER = {"enabled": True, "runs": 200}
+EVM_VERSION = HARDFORK
 
 # anvil's first default account. Public, published in anvil's own banner.
 DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -183,7 +214,7 @@ class Node:
         # Pin the fork. EIP-7623 arrived with Prague; leaving this to anvil's
         # default would silently reprice everything on a toolchain bump.
         self.proc = subprocess.Popen(
-            ["anvil", "--hardfork", "prague", "--port", str(port), "--silent"],
+            ["anvil", "--hardfork", HARDFORK, "--port", str(port), "--silent"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid,
@@ -200,6 +231,32 @@ class Node:
         if self.proc:
             os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
             self.proc.wait()
+
+
+def toolchain():
+    """What the announcer was ACTUALLY built with. Raises rather than repricing quietly."""
+    raw = run(["forge", "inspect", "ERC5564Announcer", "metadata",
+               "--root", str(CONTRACTS), "--json"])
+    md = json.loads(raw)
+    if isinstance(md, str):                     # forge has emitted the JSON as a JSON string
+        md = json.loads(md)
+    version = md["compiler"]["version"]
+    optimizer = md["settings"]["optimizer"]
+    evm = md["settings"].get("evmVersion")
+    bad = []
+    if not version.startswith(SOLC_VERSION + "+"):
+        bad.append(f"solc {version}, expected {SOLC_VERSION}")
+    if {"enabled": optimizer.get("enabled"), "runs": optimizer.get("runs")} != OPTIMIZER:
+        bad.append(f"optimizer {optimizer}, expected {OPTIMIZER}")
+    if evm != EVM_VERSION:
+        bad.append(f"solc targeted evmVersion {evm}, expected {EVM_VERSION} to match the "
+                   f"hardfork anvil runs")
+    if bad:
+        sys.exit("TOOLCHAIN MISMATCH -- the execution figures would not be the committed "
+                 "ones, and the receipt would not say so:\n  " + "\n  ".join(bad))
+    return {"solc": version, "optimizer": {"enabled": optimizer["enabled"],
+                                           "runs": optimizer["runs"]},
+            "evm_version": evm}
 
 
 def deploy(url):
@@ -339,7 +396,8 @@ def table(results):
     base = next(r for r in results if r["schemeId"] == 1)["nonzero"]["total_gas"]
     lines = [
         "",
-        "Announcement cost as a REAL STANDALONE TRANSACTION (anvil, --hardfork prague)",
+        f"Announcement cost as a REAL STANDALONE TRANSACTION (anvil, --hardfork "
+        f"{HARDFORK})",
         "",
         f"{'scheme':<38}{'payload':>9}{'calldata':>10}{'exec':>8}"
         f"{'TOTAL':>10}{'floor?':>8}{'x class':>9}",
@@ -374,6 +432,8 @@ def main():
     if not args.rpc_url and not shutil.which("anvil"):
         sys.exit("anvil not found on PATH; pass --rpc-url to use a running node")
 
+    tc = toolchain()
+
     node = Node(args.rpc_url)
     try:
         announcer = deploy(node.url)
@@ -398,12 +458,16 @@ def main():
             "what": "total transaction gas for one ERC-5564 announce(), by scheme, "
                     "each row sending the same real derived stealth address (see the "
                     "note on STEALTH in measure.py)",
-            "hardfork": "prague",
+            "hardfork": HARDFORK,
+            # The announcer is BUILT here rather than read off chain, so the execution
+            # figures depend on this as much as on the hardfork. See the docstring for
+            # what the optimizer alone is worth.
+            "toolchain": tc,
             "intrinsic_gas": INTRINSIC,
             "self_check": "pass" if not problems else problems,
             "cases": results,
-            # Same rows keyed by name, so `contracts/test/AnnouncementGas.t.sol`
-            # can address them without depending on list order.
+            # Same rows keyed by name, so a consumer can address them without depending
+            # on list order.
             "cases_by_name": {r["name"]: r for r in results},
         }
         (HERE / "measured.json").write_text(json.dumps(out, indent=2) + "\n")

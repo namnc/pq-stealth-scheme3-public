@@ -1,12 +1,22 @@
 [profile.default]
 src = "src"
-test = "test"
 out = "out"
 solc_version = "0.8.28"
 optimizer = true
 optimizer_runs = 200
 
-# One contract, no libraries, no tests.
+# THE THREE SETTINGS ABOVE ARE LOAD-BEARING, and `harness/announcement/measure.py` asserts
+# what the build ACTUALLY used rather than trusting this file -- a different solc on PATH or
+# a profile override would otherwise reprice every execution figure in silence.
+#
+# The reason this file can do that and `harness/registration` cannot: the ERC-6538 registry is
+# measured as the DEPLOYED bytecode read off mainnet, so no compiler setting reaches it. The
+# announcer is measured as a LOCAL BUILD, so every one of them does. The harness's docstring
+# carries what the optimizer alone is worth, measured rather than guessed, and the receipt
+# names the toolchain beside the hardfork.
+
+# One contract, no libraries, no tests -- and no `test` key either, since there is no test
+# directory to point it at and `test` is forge's default in any case.
 #
 # This directory exists for exactly one reason: `harness/announcement/measure.py` measures
 # announcement cost as REAL standalone transactions against the real ERC-5564 interface, and
