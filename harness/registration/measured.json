@@ -14,13 +14,6 @@
       "total_gas": 115310
     },
     {
-      "name": "schemeId 2 registration",
-      "schemeId": 2,
-      "meta_address_bytes": 1217,
-      "calldata_bytes": 1348,
-      "total_gas": 941838
-    },
-    {
       "name": "schemeId 3 registration",
       "schemeId": 3,
       "meta_address_bytes": 1250,

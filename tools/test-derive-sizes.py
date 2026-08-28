@@ -61,19 +61,19 @@ def main() -> int:
          "384*3 + 32" in out and "32*(10*3 + 4)" in out, True)
 
     print("\na quoted payload that disagrees with its construction")
-    rc, out = run(('"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_089)',
-                   '"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_088)'))
-    case("a wrong schemeId 2 payload exits 1", rc, 1)
-    case("and names schemeId 2", "schemeId 2 announcement" in out, True)
+    rc, out = run(('"schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122)',
+                   '"schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_121)'))
+    case("a wrong payload exits 1", rc, 1)
+    case("and names the row", "schemeId 3 announcement" in out, True)
     # The ANNOUNCE_ERC loop and the SHAPES loop both compare a total against the same quoted
     # figure, so either alone catches a wrong quote -- and that redundancy once made the
     # mutation deleting ANNOUNCE_ERC's `bad.append` SURVIVE this suite. Each loop's message
     # is asserted separately below, so each append is individually observable. A guard nothing
     # can distinguish from its neighbour is a guard nobody notices losing.
-    case("and it is the ANNOUNCE_ERC loop that says so", "derived 1089 != quoted 1088" in out,
+    case("and it is the ANNOUNCE_ERC loop that says so", "derived 1122 != quoted 1121" in out,
          True)
     case("and the SHAPES loop says so too, in its own words",
-         "totals 1089 != §5's 1088" in out, True)
+         "totals 1122 != §5's 1121" in out, True)
 
     print("\nthe view-tag width is load-bearing, and reaches EVERY payload")
     # The failure this case exists for actually happened: the width moved in one file and
@@ -81,8 +81,8 @@ def main() -> int:
     # is a width nothing checks.
     rc, out = run(("VIEW_TAG = 1  ", "VIEW_TAG = 8  "))
     case("widening the view tag exits 1", rc, 1)
-    case("and it moves BOTH rungs, not just the one carrying it in metadata",
-         "schemeId 2 announcement" in out and "schemeId 3 announcement" in out, True)
+    case("and it moves the payload, the shape and the meta-address checks alike",
+         "schemeId 3 announcement" in out, True)
 
     print("\nthe shape table -- (ephemeralPubKey, metadata), not the total")
     rc, out = run(('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),',
@@ -91,22 +91,32 @@ def main() -> int:
     case("and names the shape", "shape (33, 1090) totals 1123" in out, True)
 
     # Two rows sharing a shape is legal ONLY if declared; one appearing quietly is what this
-    # catches. §5's recognition rule would go stale and nothing else would say so.
-    rc, out = run(('    "schemeId 2 announcement":  (CT,               VIEW_TAG),',
-                   '    "schemeId 2 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),'))
+    # catches. §5's recognition rule would go stale and nothing else would say so. One rung
+    # ships, so the mutation adds the second -- the detector is what a future rung walks into.
+    ADD = ('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n',
+           '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n'
+           '    "a second rung":            (SEC1_COMPRESSED,  VIEW_TAG + CT),\n')
+    QUOTE = ('    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n',
+             '    "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n'
+             '    "a second rung":            (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),\n')
+    rc, out = run(QUOTE, ADD)
     case("an undeclared shape collision exits 1", rc, 1)
     case("and names both rows", "UNDECLARED shape collision" in out
-         and "schemeId 3 announcement" in out, True)
+         and "schemeId 3 announcement" in out and "a second rung" in out, True)
 
-    rc, out = run(("DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []",
-                   'DECLARED_SHAPE_COLLISIONS = [("schemeId 2 announcement", '
-                   '"schemeId 3 announcement")]'))
+    rc, out = run(QUOTE,
+                  ('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n',
+                   '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n'
+                   '    "a second rung":            (CT,               VIEW_TAG),\n'),
+                  ("DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []",
+                   'DECLARED_SHAPE_COLLISIONS = [("schemeId 3 announcement", '
+                   '"a second rung")]'))
     case("a declared collision that is not one exits 1", rc, 1)
     case("and says the two are not the same shape", "the same shape and they are" in out, True)
 
     print("\nthe meta-addresses and the registration ratios")
-    rc, out = run(('"schemeId 2": (SPENDING_PK + EK,                   1_217)',
-                   '"schemeId 2": (SPENDING_PK + EK,                   1_218)'))
+    rc, out = run(('"schemeId 3": (SPENDING_PK + VIEWING_PK_EC + EK,   1_250)',
+                   '"schemeId 3": (SPENDING_PK + VIEWING_PK_EC + EK,   1_251)'))
     case("a wrong meta-address exits 1", rc, 1)
     case("and names it as a meta-address", "meta-address" in out, True)
 

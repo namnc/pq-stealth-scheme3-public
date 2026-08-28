@@ -111,7 +111,7 @@ def run_with_audit(data: dict, text: str) -> tuple[int, str]:
         return r.returncode, r.stdout + r.stderr
 
 
-def run_with_doc(data: dict, doc_text: str, name: str = "scheme-2.md") -> tuple[int, str]:
+def run_with_doc(data: dict, doc_text: str, name: str = "scheme-3.md") -> tuple[int, str]:
     """Run the tool against a tree that also holds `docs/<name>` with `doc_text`.
 
     The prose sweep is a gate over the `docs` directory, so it needs a tree with a doc in it.
@@ -161,7 +161,8 @@ def main() -> int:
     rc, out = run(real)
     case("a rule-satisfying file passes", rc, 0)
     case("and says every receipt re-derives", "re-derives from EIP-7623" in out, True)
-    case("and reports which rule applied per row", out.count("floor") >= 2, True)
+    case("and reports which rule applied per row",
+         "standard" in out and "floor" in out, True)
 
     print("\na receipt that does not follow the rule FAILS")
     d = copy.deepcopy(real)
@@ -357,38 +358,38 @@ def main() -> int:
     case("but two lines away, across the wrap, is out of scope", rc, 0)
 
     # A DERIVED figure: prose comparing two rungs quotes their difference. The prose
-    # names the schemes the numbers actually come from (cases[1] is schemeId 2,
+    # names the schemes the numbers actually come from (cases[1] is schemeId 3,
     # cases[0] the classical baseline) — a delta attributed to schemes it was not
     # computed from is exactly what the scheme-binding check rejects.
     delta = real_gas - other
-    rc, out = run_with_doc(real, f"schemeId 2 costs {delta} more gas than classical.\n")
+    rc, out = run_with_doc(real, f"schemeId 3 costs {delta} more gas than classical.\n")
     case("a difference between two receipts is allowed", rc, 0)
-    rc, out = run_with_doc(real, f"schemeId 2 costs {delta + 1} more gas than classical.\n")
+    rc, out = run_with_doc(real, f"schemeId 3 costs {delta + 1} more gas than classical.\n")
     case("but a wrong difference is not", rc, 1)
     # THE BINDING ITSELF, on the reviewer's exact shape: swap two schemes' totals in
     # prose — both numbers are receipts, both claims false, and set membership alone
     # certified them.
-    gas2 = real["cases"][1]["nonzero"]["total_gas"]
-    gas3 = real["cases"][2]["nonzero"]["total_gas"]
+    gas1 = real["cases"][0]["nonzero"]["total_gas"]   # classical
+    gas3 = real["cases"][1]["nonzero"]["total_gas"]   # schemeId 3
     rc, out = run_with_doc(
-        real, f"schemeId 2 costs {gas3:,} gas.\n\nschemeId 3 costs {gas2:,} gas.\n"
+        real, f"schemeId 1 costs {gas3:,} gas.\n\nschemeId 3 costs {gas1:,} gas.\n"
               .replace(",", " "))
     case("swapped scheme totals are misassigned receipts, not a pass", rc, 1)
     case("and the finding names the misassignment",
          "assigned to the wrong claim" in out, True)
     rc, out = run_with_doc(
-        real, f"schemeId 2 costs {gas2:,} gas.\n\nschemeId 3 costs {gas3:,} gas.\n"
+        real, f"schemeId 1 costs {gas1:,} gas.\n\nschemeId 3 costs {gas3:,} gas.\n"
               .replace(",", " "))
     case("the same totals rightly assigned pass", rc, 0)
     # ONE paragraph naming both schemes, totals swapped: under a scope-wide union each
     # figure stays vouched by the OTHER claim's receipt. The binding is to the nearest
     # preceding mention — the claim the figure actually belongs to.
     rc, out = run_with_doc(
-        real, f"schemeId 2 costs {gas3:,} gas where schemeId 3 costs {gas2:,} gas.\n"
+        real, f"schemeId 1 costs {gas3:,} gas where schemeId 3 costs {gas1:,} gas.\n"
               .replace(",", " "))
     case("a swap inside one sentence is caught, not vouched by the union", rc, 1)
     rc, out = run_with_doc(
-        real, f"schemeId 2 costs {gas2:,} gas where schemeId 3 costs {gas3:,} gas.\n"
+        real, f"schemeId 1 costs {gas1:,} gas where schemeId 3 costs {gas3:,} gas.\n"
               .replace(",", " "))
     case("and the same sentence rightly assigned passes", rc, 0)
 
@@ -399,11 +400,11 @@ def main() -> int:
         return ("## The ladder\n\n"
                 "| schemeId | announcement | gas | state |\n"
                 "|---|---|---|---|\n"
-                f"| **2** | 1 089 B | {a:,} | none |\n"
+                f"| **1** | 34 B | {a:,} | none |\n"
                 f"| **3** | 1 122 B | {b:,} | none |\n").replace(",", " ")
-    rc, out = run_with_audit(real, ladder(gas2, gas3))
+    rc, out = run_with_audit(real, ladder(gas1, gas3))
     case("a rightly assigned ladder table passes", rc, 0)
-    rc, out = run_with_audit(real, ladder(gas3, gas2))
+    rc, out = run_with_audit(real, ladder(gas3, gas1))
     case("the README two-row swap is caught", rc, 1)
     case("and both rows are named",
          out.count("assigned to the wrong claim"), 2)
@@ -424,7 +425,7 @@ def main() -> int:
     # not claim, and would pass for the wrong reason.
     rc, out = run_with_audit(
         real, ("| schemeId | announcement | gas |\n|---|---|---|\n"
-               f"| **1** | 34 B | {gas2:,} |\n").replace(",", " "))
+               f"| **1** | 34 B | {gas3:,} |\n").replace(",", " "))
     case("a scheme's row does not borrow another scheme's receipt", rc, 1)
     case("and says the figure is not that scheme's",
          "assigned to the wrong claim" in out, True)
@@ -434,29 +435,29 @@ def main() -> int:
     # swap must be caught in each spelling, not only the fully piped one.
     rc, out = run_with_audit(
         real, ("schemeId | announcement | gas\n---|---|---\n"
-               f"**2** | 1 089 B | {gas3:,}\n**3** | 1 122 B | {gas2:,}\n")
+               f"**1** | 34 B | {gas3:,}\n**3** | 1 122 B | {gas1:,}\n")
         .replace(",", " "))
     case("a no-leading-pipe table's swap is caught", rc, 1)
     rc, out = run_with_audit(
         real, ("> | schemeId | announcement | gas |\n> |---|---|---|\n"
-               f"> | **2** | 1 089 B | {gas3:,} |\n> | **3** | 1 122 B | {gas2:,} |\n")
+               f"> | **1** | 34 B | {gas3:,} |\n> | **3** | 1 122 B | {gas1:,} |\n")
         .replace(",", " "))
     case("a blockquoted table's swap is caught", rc, 1)
     rc, out = run_with_audit(
         real, ("> | schemeId | announcement | gas |\n> |---|---|---|\n"
-               f"> | **2** | 1 089 B | {gas2:,} |\n> | **3** | 1 122 B | {gas3:,} |\n")
+               f"> | **1** | 34 B | {gas1:,} |\n> | **3** | 1 122 B | {gas3:,} |\n")
         .replace(",", " "))
     case("and rightly assigned it passes in that spelling too", rc, 0)
     # GFM permits an ESCAPED pipe inside a cell; a parser counting raw pipes shifts
     # every later cell, moving the totals out of the gas column and out of the sweep.
     rc, out = run_with_audit(
         real, ("schemeId | note | gas\n---|---|---\n"
-               f"**2** | harmless \\| note | {gas3:,}\n"
-               f"**3** | harmless \\| note | {gas2:,}\n").replace(",", " "))
+               f"**1** | harmless \\| note | {gas3:,}\n"
+               f"**3** | harmless \\| note | {gas1:,}\n").replace(",", " "))
     case("an escaped pipe does not hide a swapped column", rc, 1)
     rc, out = run_with_audit(
         real, ("schemeId | note | gas\n---|---|---\n"
-               f"**2** | harmless \\| note | {gas2:,}\n"
+               f"**1** | harmless \\| note | {gas1:,}\n"
                f"**3** | harmless \\| note | {gas3:,}\n").replace(",", " "))
     case("and rightly assigned, the escaped-pipe table passes", rc, 0)
     # The escape can sit in the HEADER instead: raw splitting then shifts the header
@@ -464,8 +465,8 @@ def main() -> int:
     # some other column and the row leaves the sweep.
     rc, out = run_with_audit(
         real, ("schemeId | notes \\| aliases | gas\n---|---|---\n"
-               f"**2** | plain note | {gas3:,}\n"
-               f"**3** | plain note | {gas2:,}\n").replace(",", " "))
+               f"**1** | plain note | {gas3:,}\n"
+               f"**3** | plain note | {gas1:,}\n").replace(",", " "))
     case("an escaped pipe in the header does not shift the gas column", rc, 1)
 
     # The synthetic set proves the tool's logic. This proves the committed measurements actually

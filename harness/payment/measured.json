@@ -7,13 +7,6 @@
  "self_check": "pass",
  "cases": [
   {
-   "scheme_id": 2,
-   "announce_gas": 67730,
-   "fund_gas": 21000,
-   "spend_gas": 21000,
-   "total_gas": 109730
-  },
-  {
    "scheme_id": 3,
    "announce_gas": 69300,
    "fund_gas": 21000,

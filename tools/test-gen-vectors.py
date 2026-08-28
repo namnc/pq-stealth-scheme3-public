@@ -223,12 +223,12 @@ def main() -> int:
     case("and says tier 1 is NIST's", "does not compute it" in out, True)
 
     print("\nevery KEM value traces to the vendored file")
-    root = tree(plan_of(**{"1": [], "2": ["V2-05", "V2-10"], "2_9": [], "5": []}))
+    root = tree(plan_of(**{"1": [], "2_9": ["V3-06a", "V3-08"], "5": []}))
     run(root)
     acvp = json.loads((root / "vectors/tier1/ml-kem-768-acvp.json").read_text())
     known = {x["ek"] for x in acvp["keygen"]}
     known |= {x[k] for x in acvp["encapsulation"] for k in ("ek", "m", "c", "k")}
-    body = json.loads((root / "vectors/section-2.json").read_text())["vectors"]
+    body = json.loads((root / "vectors/section-2_9.json").read_text())["vectors"]
     # Any 1088- or 1184-byte hex string in the output must be one NIST published. A
     # synthesised ciphertext is the one artifact this generator must never produce.
     def long_hex(o):
@@ -245,51 +245,19 @@ def main() -> int:
     case("and every one of them is a NIST-published value",
          [f for f in found if f not in known], [])
 
-    # Both worlds, on one machine, via the PQSA_NO_KEM seam. The three rows are the ones whose
-    # behaviour depends on whether an ML-KEM implementation is importable, and without care
-    # only the absent branch existed, so the suite asserted "not_generatable" unconditionally
-    # and started failing the moment the library was installed. A test that describes one
-    # environment is a test that goes stale when the environment changes.
-    KEM_ROWS = ("V2-01", "V2-11", "V2-13")
-
-    print("\nwithout an ML-KEM: the rows are recorded absent, with the reason")
-    root = tree(plan_of(**{"1": [], "2": list(KEM_ROWS), "2_9": [], "5": []}))
-    rc, out = run(root, no_kem=True)
-    case("they do not fail the run", rc, 0)
-    body = json.loads((root / "vectors/section-2.json").read_text())["vectors"]
-    case("all three are marked not_generatable",
-         all("not_generatable" in body[k] for k in KEM_ROWS), True)
-    case("and the reason names the missing library",
-         all("kyber-py is not installed" in body[k]["not_generatable"] for k in KEM_ROWS), True)
-    case("and says why it is recorded rather than synthesised",
-         all("would pass" in body[k]["not_generatable"] for k in KEM_ROWS), True)
-    case("the count distinguishes emitted from recorded",
-         "0 vector(s) emitted, 3 recorded as not generatable" in out, True)
-    case("and the run says the KEM is absent", "ML-KEM: absent" in out, True)
-
-    print("\nwith an ML-KEM: the rows are emitted, and the KEM is checked against NIST first")
-    root = tree(plan_of(**{"1": [], "2": list(KEM_ROWS), "2_9": [], "5": []}))
-    rc, out = run(root)
-    if "ML-KEM: absent" in out:
-        case("SKIPPED -- no ML-KEM on this machine, so this branch cannot be exercised",
-             True, True)
-    else:
-        case("the run passes", rc, 0)
-        case("and reports the acceptance test against NIST's own file",
-             "matched, 0 differed" in out, True)
-        body = json.loads((root / "vectors/section-2.json").read_text())["vectors"]
-        case("none of the three is marked not_generatable",
-             any("not_generatable" in body[k] for k in KEM_ROWS), False)
-        case("V2-11 records that decapsulation did NOT raise",
-             body["V2-11"]["expect"]["decaps_raised"], False)
-        case("and that implicit rejection gave a DIFFERENT secret, which is the whole point",
-             body["V2-11"]["expect"]["tags_differ"], True)
-        case("V2-13 closes the loop: the recipient's secret controls the sender's address",
-             body["V2-13"]["expect"]["the_two_agree"] and
-             body["V2-13"]["expect"]["secrets_agree"], True)
-        case("the count distinguishes emitted from recorded",
-             "3 vector(s) emitted, 0 recorded as not generatable" in out, True)
-
+    # COVERAGE REMOVED WITH ITS SUBJECT, NAMED RATHER THAN DROPPED QUIETLY. Two blocks
+    # stood here, exercising both sides of the `PQSA_NO_KEM` seam on the three schemeId 2
+    # rows whose generability depended on an importable ML-KEM: absent, they were recorded
+    # `not_generatable` with a reason; present, they were emitted and V2-11 asserted that
+    # decapsulation did NOT raise and returned a DIFFERENT secret -- implicit rejection,
+    # demonstrated rather than asserted.
+    #
+    # No surviving row calls the KEM. §1, §2.9 and §5 build from the vendored ACVP file
+    # directly, so `--check` now passes byte-identically with kyber-py absent and neither
+    # branch can be staged from a real row. The seam and the stub path are still in the
+    # tool, and the guards below exercise them through V6-03, whose stub comes from the
+    # conformance hook rather than from the environment. What is NOT exercised any more is
+    # a row moving between the two states because a library came or went.
     print("\n--check: stale, unverifiable and absent are THREE outcomes")
     # The distinction this suite exists to pin: a row that DIFFERS is stale and must fail; a row
     # this process cannot rebuild is unverifiable and must NOT; and an absent file is stale.
@@ -327,19 +295,23 @@ def main() -> int:
     case("an absent file exits 1", rc, 1)
     case("and says absent, not differs", "section-1.json: absent" in out, True)
 
-    # The unverifiable case, forced through the seam: generate WITH the KEM, check WITHOUT it.
-    root = tree(plan_of(**{"1": [], "2": ["V2-01"], "2_9": [], "5": []}))
-    _rc, gen_out = run(root)
-    if "ML-KEM: absent" in gen_out:
-        case("SKIPPED -- no ML-KEM here, so the unverifiable case cannot be staged", True, True)
-    else:
-        rc, out = run(root, "--check", no_kem=True)
-        case("a row this process cannot rebuild does NOT fail the check", rc, 0)
-        case("it is reported as not checked", "NOT CHECKED here" in out, True)
-        case("and named", "V2-01" in out, True)
-        case("and the manifest is skipped rather than called stale",
-             "not compared" in out, True)
-        case("and the word stale is not used for it", "FAIL" in out, False)
+    # The unverifiable case, staged on V6-03: its stub comes from the conformance hook, so
+    # a committed row carrying a VALUE is one this process cannot rebuild, with no dependency
+    # on whether a library is importable.
+    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
+    run(root)
+    f = root / "vectors/section-5.json"
+    body = json.loads(f.read_text())
+    body["vectors"]["V6-03"].pop("not_generatable")
+    body["vectors"]["V6-03"]["expect"] = {"staged_by_the_self_test": True}
+    f.write_text(json.dumps(body, indent=2) + "\n")
+    rc, out = run(root, "--check")
+    case("a row this process cannot rebuild does NOT fail the check", rc, 0)
+    case("it is reported as not checked", "NOT CHECKED here" in out, True)
+    case("and named", "V6-03" in out, True)
+    case("and the manifest is skipped rather than called stale",
+         "not compared" in out, True)
+    case("and the word stale is not used for it", "FAIL" in out, False)
 
     # THE CONCLUSION, staged WITHOUT an ML-KEM. The block above needs kyber-py to generate a
     # real row and is skipped where it is absent -- which left the partial-success sentence
@@ -351,23 +323,22 @@ def main() -> int:
     # manifest comparison must not conclude "every committed file matches a fresh
     # generation", and the generated public transcripts repeat whatever this prints -- so the
     # overclaim would reach a reader with no way to check it.
-    root = tree(plan_of(**{"1": [], "2": ["V2-01"], "2_9": [], "5": []}))
-    run(root, no_kem=True)
-    f = root / "vectors/section-2.json"
+    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
+    run(root)
+    f = root / "vectors/section-5.json"
     body = json.loads(f.read_text())
-    if "not_generatable" in body["vectors"]["V2-01"]:
-        body["vectors"]["V2-01"].pop("not_generatable")
-        body["vectors"]["V2-01"]["expect"] = {"staged_by_the_self_test": True}
-        f.write_text(json.dumps(body, indent=2) + "\n")
-        rc, out = run(root, "--check", no_kem=True)
-        case("a partial run still exits 0 -- an absent capability is not staleness", rc, 0)
-        case("but it does NOT claim every committed file matches",
-             "every committed file matches a fresh generation" in out, False)
-        case("it concludes PARTLY instead", "OK, PARTLY" in out, True)
-        case("and says plainly that this is not the full check",
-             "not the full check" in out, True)
-        case("and counts what it skipped",
-             "1 row(s) and manifest.json were NOT compared" in out, True)
+    body["vectors"]["V6-03"].pop("not_generatable")
+    body["vectors"]["V6-03"]["expect"] = {"staged_by_the_self_test": True}
+    f.write_text(json.dumps(body, indent=2) + "\n")
+    rc, out = run(root, "--check")
+    case("a partial run still exits 0 -- an absent capability is not staleness", rc, 0)
+    case("but it does NOT claim every committed file matches",
+         "every committed file matches a fresh generation" in out, False)
+    case("it concludes PARTLY instead", "OK, PARTLY" in out, True)
+    case("and says plainly that this is not the full check",
+         "not the full check" in out, True)
+    case("and counts what it skipped",
+         "1 row(s) and manifest.json were NOT compared" in out, True)
 
     print("\nthe manifest")
     root = tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}))
@@ -429,22 +400,23 @@ def main() -> int:
     # a stub is a well-formed row. The only signal was a golden executed-case count in another
     # crate, in another language, asserted for an unrelated reason.
     #
-    # Constructed by hand rather than by generating first, so this case does not need `kyber-py`
-    # present to exercise the path that fires when it is absent.
-    root = tree(plan_of(**{"1": [], "2": ["V2-01"], "2_9": [], "5": []}))
+    # Constructed by hand rather than by generating first, and staged on V6-03, whose stub
+    # comes from the conformance hook -- so the case exercises the guard with no dependency
+    # on whether an ML-KEM is importable.
+    root = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
     committed = {
-        "section": "§2",
+        "section": "§5",
         "wave": 1,
-        "vectors": {"V2-01": {"claim": "c", "given": {"keygen_seed": "00" * 96},
-                              "expect": {"ek": "ab" * 1184}}},
+        "vectors": {"V6-03": {"claim": "c", "given": {"seed": "00" * 32},
+                              "expect": {"index": 1}}},
     }
-    victim = root / "vectors/section-2.json"
+    victim = root / "vectors/section-5.json"
     victim.write_text(json.dumps(committed, indent=2) + "\n", encoding="utf-8")
     before = victim.read_text(encoding="utf-8")
 
-    rc, out = run(root, no_kem=True)
+    rc, out = run(root)
     case("a run that would downgrade a committed row exits 1", rc, 1)
-    case("and names the row", "V2-01" in out, True)
+    case("and names the row", "V6-03" in out, True)
     case("and says nothing was written", "Nothing was written" in out, True)
     case("and NOTHING WAS WRITTEN", victim.read_text(encoding="utf-8"), before)
 
@@ -453,7 +425,7 @@ def main() -> int:
     # that a `--out "$(mktemp -d)"` run would destroy the repository's vectors -- wrong, and
     # the kind of false positive that gets a gate switched off.
     with tempfile.TemporaryDirectory() as scratch:
-        rc, out = run(root, "--out", scratch, no_kem=True)
+        rc, out = run(root, "--out", scratch)
         case("--out to a scratch tree is allowed even without the KEM", rc, 0)
         case("and the committed file is untouched",
              victim.read_text(encoding="utf-8"), before)
@@ -461,11 +433,11 @@ def main() -> int:
     # The other direction: a row that has never been generated may absolutely be recorded as a
     # stub, and that is how the honest gaps are recorded. Refusing that too would make the
     # generator unable to describe its own limits.
-    fresh = tree(plan_of(**{"1": [], "2": ["V2-01"], "2_9": [], "5": []}))
-    rc, out = run(fresh, no_kem=True)
+    fresh = tree(plan_of(**{"1": [], "2_9": [], "5": ["V6-03"]}))
+    rc, out = run(fresh)
     case("but a first-time stub is allowed", rc, 0)
-    body = json.loads((fresh / "vectors/section-2.json").read_text())["vectors"]
-    case("and it carries the reason", "not_generatable" in body.get("V2-01", {}), True)
+    body = json.loads((fresh / "vectors/section-5.json").read_text())["vectors"]
+    case("and it carries the reason", "not_generatable" in body.get("V6-03", {}), True)
 
     print("\nvecprim's primitives, against the COMMITTED fixtures")
     # The reason is a mutation report rather than a hunch: eight mutations

@@ -33,33 +33,6 @@
       }
     },
     {
-      "name": "schemeId 2 announcement",
-      "schemeId": 2,
-      "epk_bytes": 1088,
-      "metadata_bytes": 1,
-      "payload_bytes": 1089,
-      "nonzero": {
-        "calldata_bytes": 1316,
-        "zero_bytes": 196,
-        "nonzero_bytes": 1120,
-        "tokens": 4676,
-        "total_gas": 67760,
-        "floor_gas": 67760,
-        "floor_binds": true,
-        "execution_gas": null
-      },
-      "zero": {
-        "calldata_bytes": 1316,
-        "zero_bytes": 1285,
-        "nonzero_bytes": 31,
-        "tokens": 1409,
-        "total_gas": 40367,
-        "floor_gas": 35090,
-        "floor_binds": false,
-        "execution_gas": 13731
-      }
-    },
-    {
       "name": "schemeId 3 announcement",
       "schemeId": 3,
       "epk_bytes": 33,
@@ -113,33 +86,6 @@
         "floor_gas": 24790,
         "floor_binds": false,
         "execution_gas": 5143
-      }
-    },
-    "schemeId 2 announcement": {
-      "name": "schemeId 2 announcement",
-      "schemeId": 2,
-      "epk_bytes": 1088,
-      "metadata_bytes": 1,
-      "payload_bytes": 1089,
-      "nonzero": {
-        "calldata_bytes": 1316,
-        "zero_bytes": 196,
-        "nonzero_bytes": 1120,
-        "tokens": 4676,
-        "total_gas": 67760,
-        "floor_gas": 67760,
-        "floor_binds": true,
-        "execution_gas": null
-      },
-      "zero": {
-        "calldata_bytes": 1316,
-        "zero_bytes": 1285,
-        "nonzero_bytes": 31,
-        "tokens": 1409,
-        "total_gas": 40367,
-        "floor_gas": 35090,
-        "floor_binds": false,
-        "execution_gas": 13731
       }
     },
     "schemeId 3 announcement": {

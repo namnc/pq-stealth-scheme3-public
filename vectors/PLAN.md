@@ -43,27 +43,37 @@ implemented.
 | V1-06 | the counter byte is a single byte appended | a `base` forced to counter 1 | a pinned 32-byte output | `u32` or `u64` counter encoding; ASCII `"1"` |
 | V1-07 | `view_tag = SHA256(DS_viewtag ‖ ss)[0]` | a fixed `ss` | one byte | **the superseded eight-byte width**, `[0..8]`, which matches nothing a conforming sender emits; taking `[31]` instead of `[0]`; or the leading byte of `H(ss)` instead of a separate digest |
 
-## 3. §2 — schemeId 2 (ML-KEM)
+## 3. §2.9 — schemeId 3 (hedged EC half)
 
-| id | claim | given | expect | wrong |
-|---|---|---|---|---|
-| V2-01 | keygen seed is 96 B and keygen is deterministic | a 96-byte seed | meta-address, master, tracking — **twice, identical** | nondeterminism, which makes every vector below unusable |
-| V2-02 | MUST reject any other length | 95 B, 97 B, 0 B | error at keygen | padding or truncating to 96 |
-| V2-03 | `spending_seed` MUST be a valid scalar | `0x00…00`, then `n` | error at keygen | accepted; `SecretKey::from_slice` catches one of these but not both in every library |
-| V2-04 | delegation check is a **32-byte window scan** | `kem_seed` with `spending_seed` at offset **17** | error at keygen | **accepted.** A prefix-only comparison passes this, and the tracking key then contains the master spending key verbatim — reproducible end to end against a real payment |
-| V2-05 | `meta = spending_pk(33) ‖ ek(1184)` = 1 217 B | the keygen above | the exact byte string | field order swapped; a length prefix added |
-| V2-06 | decode MUST reject any other length | 1 216 B, 1 218 B | error at decode | trailing bytes ignored |
-| V2-07 | tag MUST be `0x02`/`0x03` **only** | a `0x05`-tagged encoding of the same point | error at decode | **accepted.** The RustCrypto `sec1` stack canonicalises `0x05` to the same point, so one key gets two on-chain encodings and an attacker picks which recipients see. The two reference implementations **disagreed on this** |
-| V2-08 | 33 bytes of right length can still be a non-point | `0x02 ‖ 32 × 0xff` | error at decode | accepted, then a curve operation on garbage |
-| V2-09 | `address = keccak256(uncompressed(pk)[1..])[12..32]` | a `stealth_pk` | 20 bytes, plus its EIP-55 form | including the `0x04` prefix in the hash; taking `[0..20]` |
-| V2-10 | announcement is `ct` in `ephemeralPubKey`, `view_tag` (1 B) in `metadata` | the sender above | the two field byte strings, 1 088 and 1 | the two fields swapped — which is §3's convention and is wrong here; or an eight-byte `metadata`, the superseded width, which no scheme in the specification emits any more |
-| V2-11 | view-tag mismatch → **skip** | a foreign well-formed `ct` | not mine, no error | an error, which per §2.5 aborts the whole scan |
-| V2-12 | malformed `ct` → **skip at the entry point** | `ct` of 1 087, 0 and 1 089 bytes | not mine, no error, ×3 | an error. Both references are layered so the entry point converts it; an implementation exposing the inner routine as its scanning API inherits the wrong behaviour |
-| V2-13 | the derived key controls the derived address | the vector above | `spend_key_controls` true, **as a key-to-address relation** | asserting only that bytes were produced — a derivation can be self-consistent and wrong |
-
-## 4. §2.9 — schemeId 3 (hedged EC half)
-
-Everything in §3 above applies. These are the additions.
+> **What left with schemeId 2, named rather than dropped quietly.** This set was written as a
+> delta on a KEM-only rung that no longer ships, and its thirteen rows went with it. **Five
+> were already covered here** by a schemeId 3 equivalent: the keygen-seed length rejection
+> (V3-01), the 65-offset delegation window scan (V3-02), the meta-address encoding (V3-03),
+> the SEC1 `0x02`/`0x03` tag rule (V3-03), and the announcement's wire shape (V3-08).
+>
+> **Eight rules the specification still states for this rung lost their only fixture.**
+> Nothing in this tree pins them now:
+>
+> | rule | stated at |
+> |---|---|
+> | keygen is deterministic in the seed — the same 128 bytes give the same three keys | §2.1 |
+> | `spending_seed` MUST be a valid secp256k1 scalar | §2.1, §2.7 |
+> | decode MUST reject a meta-address of any length but 1 250 | §2.2, §2.7 |
+> | 33 bytes of the right length can still be a non-point | §2.2, §2.7 |
+> | `address = keccak256(uncompressed(pk)[1..])[12..32]` | §2.4 |
+> | a view-tag mismatch is a skip — **and decapsulation does not fail** | §2.7 |
+> | a malformed `ct` is a skip at the entry point, not an error | §2.7 |
+> | the derived key controls the derived address, as a key-to-address relation | §2.6 |
+>
+> The sixth is the one to weigh: it was the only fixture exhibiting **ML-KEM's implicit
+> rejection** — a foreign ciphertext yielding a pseudorandom secret and no error — which is
+> the fact §2.4's required address comparison and §1's one-byte tag are both built on. The
+> specification asserts it; no fixture demonstrates it any more.
+>
+> These are recoverable as schemeId 3 rows. They were not re-homed in the pass that removed
+> schemeId 2, because a re-homed row is a **new value** that the blinded re-derivation
+> (`rederivation.json`) has never witnessed, and quietly adding unwitnessed rows to a set
+> whose whole claim is independent witness is a worse trade than a stated gap.
 
 | id | claim | given | expect | wrong |
 |---|---|---|---|---|

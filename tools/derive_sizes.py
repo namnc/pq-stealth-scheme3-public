@@ -54,7 +54,6 @@ VIEWING_PK_EC = 33
 # Each is stated as its construction so that a change to one field cannot leave a total
 # behind.
 ANNOUNCE_ERC = {
-    "schemeId 2 announcement":  (CT + VIEW_TAG,                       1_089),
     "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),
 }
 
@@ -65,7 +64,6 @@ ANNOUNCE_ERC = {
 #
 # (`ephemeralPubKey`, `metadata`) per row.
 SHAPES = {
-    "schemeId 2 announcement":  (CT,               VIEW_TAG),
     "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),
 }
 
@@ -74,7 +72,6 @@ SHAPES = {
 # ERC-5564 registry is a namespace where getting one wrong publishes material under another
 # scheme.
 SHAPE_SCHEME_ID = {
-    "schemeId 2 announcement": 2,
     "schemeId 3 announcement": 3,
 }
 
@@ -89,11 +86,9 @@ DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []
 # WHOLE delegated object, so the count is (len - 32 + 1) and not (len / 32).
 DELEGATION = {
     "schemeId 3 (viewing_ec(32) || kem_seed(64) = 96 B)": (96 - SCALAR + 1, 65),
-    "schemeId 2 (kem_seed(64) = 64 B)":                   (64 - SCALAR + 1, 33),
 }
 
 META = {
-    "schemeId 2": (SPENDING_PK + EK,                   1_217),
     "schemeId 3": (SPENDING_PK + VIEWING_PK_EC + EK,   1_250),
 }
 
@@ -105,7 +100,6 @@ META = {
 META_CLASSICAL = 2 * SPENDING_PK          # ERC-5564 schemeId 1: spending || viewing
 REGISTRATION_RATIOS = {
     "1": (META_CLASSICAL, "1.0"),
-    "2": (1_217, "18.4"),
     "3": (1_250, "18.9"),
 }
 

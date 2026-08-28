@@ -46,7 +46,7 @@ TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 # Which plan groups belong to which wave. Kept in step with
 # `check_vector_coverage.WAVES`, and `tools/test-gen-vectors.py` asserts the two agree -- two
 # copies of a pacing decision is one too many, and the test is what stops them drifting.
-WAVES = {1: ("1", "2", "2.9", "5")}
+WAVES = {1: ("1", "2.9", "5")}
 
 GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
@@ -372,198 +372,6 @@ def group_5() -> dict[str, dict]:
     }
 
     return v
-
-
-# --------------------------------------------------------------------------------------
-# §2 and §2.9 -- what is reachable with the curve plus ACVP as given data
-# --------------------------------------------------------------------------------------
-def group_2(t1: dict) -> dict[str, dict]:
-    v: dict[str, dict] = {}
-    kg = t1["keygen"][0]
-    en = t1["encapsulation"][0]
-    ek_seed = bytes.fromhex(kg["d"] + kg["z"])
-    ek = bytes.fromhex(kg["ek"])
-
-    spending_seed = bytes([0x11]) * 32
-    spending_pk = vp.encode_compressed(vp.mul(int.from_bytes(spending_seed, "big")))
-
-    if vp.have_kem():
-        # The full round trip, from a 96-byte keygen seed. Determinism is asserted by deriving
-        # TWICE and comparing, not by claiming it: a generator that computes once and states
-        # "deterministic" has tested nothing.
-        seed96 = spending_seed + ek_seed
-        ek_a, _ = vp.kem_keygen(seed96[32:])
-        ek_b, _ = vp.kem_keygen(seed96[32:])
-        v["V2-01"] = {
-            "claim": "keygen seed is 96 B and keygen is deterministic",
-            "given": {"keygen_seed": hx(seed96),
-                      "split": "spending_seed(32) || kem_seed(64)",
-                      "kem_seed_source": f"ACVP keyGen tcId {kg['tcId']}"},
-            "expect": {"spending_pk": hx(spending_pk), "ek": hx(ek_a),
-                       "ek_length": len(ek_a),
-                       "deterministic": ek_a == ek_b,
-                       "tracking_key_is_the_dz_seed": hx(ek_seed),
-                       "tracking_key_length": len(ek_seed)},
-            "wrong": {"expanded_dk_length": 2400,
-                      "note": "a tracking key of 2 400 bytes -- the EXPANDED dk, which §1 "
-                              "forbids as the representation; the 64-byte (d, z) seed is what "
-                              "makes the delegated object 64 bytes and not 2 400. Also: "
-                              "splitting the 96 bytes as 64 || 32"}}
-        assert ek_a == ek, "kem_keygen disagrees with the ACVP ek for the same (d, z)"
-    else:
-        v["V2-01"] = {"claim": "keygen seed is 96 B and keygen is deterministic",
-                      "not_generatable": vp.KEM_ABSENT,
-                      "partial": {"kem_seed_dz": hx(ek_seed), "ek_from_acvp": hx(ek)}}
-    v["V2-02"] = {"claim": "MUST reject any other keygen-seed length",
-                  "given": {"lengths": [95, 97, 0]},
-                  "expect": {"outcome": "error at keygen, all three"},
-                  "wrong": {"note": "padding or truncating to 96"}}
-    v["V2-03"] = {"claim": "spending_seed MUST be a valid scalar",
-                  "given": {"spending_seeds": [hx(bytes(32)), hx(vp.N.to_bytes(32, "big"))]},
-                  "expect": {"outcome": "error at keygen, both"},
-                  "wrong": {"note": "accepted; SecretKey::from_slice catches one of these but "
-                                    "not both in every library"}}
-    # V2-04: the window scan. `spending_seed` planted at offset 17 of the 64-byte kem_seed --
-    # a prefix-only comparison passes this, and the tracking key then carries the master
-    # spending key verbatim.
-    planted = bytearray(ek_seed)
-    planted[17:49] = spending_seed
-    v["V2-04"] = {"claim": "delegation check is a 32-byte window scan",
-                  "given": {"spending_seed": hx(spending_seed),
-                            "kem_seed": hx(bytes(planted)), "planted_at_offset": 17},
-                  "expect": {"outcome": "error at keygen"},
-                  "wrong": {"note": "accepted. A prefix-only comparison passes this, and the "
-                                    "tracking key then contains the master spending key "
-                                    "verbatim"}}
-    meta = spending_pk + ek
-    v["V2-05"] = {"claim": "meta = spending_pk(33) || ek(1184) = 1217 B",
-                  "given": {"spending_pk": hx(spending_pk),
-                            "ek": hx(ek), "ek_source": f"ACVP keyGen tcId {kg['tcId']}"},
-                  "expect": {"meta_address": hx(meta), "length": len(meta)},
-                  "wrong": {"swapped": hx(ek + spending_pk),
-                            "note": "field order swapped; a length prefix added"}}
-    v["V2-06"] = {"claim": "decode MUST reject any other length",
-                  "given": {"lengths": [1216, 1218]},
-                  "expect": {"outcome": "error at decode, both"},
-                  "wrong": {"note": "trailing bytes ignored"}}
-    v["V2-07"] = {"claim": "tag MUST be 0x02/0x03 only",
-                  "given": {"compact_0x05": hx(b"\x05" + spending_pk[1:]),
-                            "same_point_compressed": hx(spending_pk)},
-                  "expect": {"outcome": "error at decode"},
-                  "wrong": {"note": "accepted. The RustCrypto sec1 stack canonicalises 0x05 "
-                                    "to the same point, so one key gets two on-chain "
-                                    "encodings. The two references disagreed on this"}}
-    v["V2-08"] = {"claim": "33 bytes of right length can still be a non-point",
-                  "given": {"bytes": hx(b"\x02" + b"\xff" * 32)},
-                  "expect": {"outcome": "error at decode"},
-                  "wrong": {"note": "accepted, then a curve operation on garbage"}}
-    pt = vp.decode_compressed(spending_pk)
-    addr = vp.address_of(pt)
-    v["V2-09"] = {"claim": "address = keccak256(uncompressed(pk)[1..])[12..32]",
-                  "given": {"stealth_pk": hx(spending_pk)},
-                  "expect": {"address": "0x" + hx(addr), "eip55": vp.eip55(addr)},
-                  "wrong": {
-                      "with_0x04_prefix":
-                          "0x" + hx(vp.keccak256(vp.encode_uncompressed(pt))[12:]),
-                      "first_20_bytes":
-                          "0x" + hx(vp.keccak256(vp.encode_uncompressed(pt)[1:])[:20]),
-                      "sha3_not_keccak":
-                          "0x" + hashlib.sha3_256(
-                              vp.encode_uncompressed(pt)[1:]).digest()[12:].hex(),
-                  }}
-    ct = bytes.fromhex(en["c"])
-    ss_pq = bytes.fromhex(en["k"])
-    tag = vp.view_tag(ss_pq)
-    v["V2-10"] = {"claim": "announcement is ct in ephemeralPubKey, view_tag (1 B) in metadata",
-                  "given": {"ct": hx(ct), "ss": hx(ss_pq),
-                            "source": f"ACVP encapsulation tcId {en['tcId']}"},
-                  "expect": {"ephemeralPubKey": hx(ct), "metadata": hx(tag),
-                             "metadata_bytes": len(tag),
-                             "payload_bytes": len(ct) + len(tag)},
-                  "wrong": {"swapped_fields": {"ephemeralPubKey": hx(tag),
-                                               "metadata": hx(ct)},
-                            "superseded_eight_byte_metadata":
-                                hx(hashlib.sha256(vp.DS_VIEWTAG + ss_pq).digest()[:8]),
-                            "note": "the two fields swapped -- which is §3's convention and "
-                                    "is wrong here; or the superseded eight-byte metadata, "
-                                    "which no scheme in the specification emits any more"}}
-    if vp.have_kem():
-        # A FOREIGN announcement: encapsulated to somebody else's ek, decapsulated with ours.
-        # This is the row that exhibits implicit rejection, and it is the one that could not be
-        # built from ACVP at all, because ACVP's keyGen and encapsulation cases use disjoint
-        # keys -- measured, the two ek sets do not intersect.
-        other_dz = bytes([0x5A]) * 64
-        other_ek, _ = vp.kem_keygen(other_dz)
-        m = bytes([0x77]) * 32
-        foreign_ct, senders_ss = vp.kem_encaps(other_ek, m)
-        our_ss = vp.kem_decaps(ek_seed, foreign_ct)
-        announced = vp.view_tag(senders_ss)
-        derived = vp.view_tag(our_ss)
-        v["V2-11"] = {
-            "claim": "view-tag mismatch -> skip, and decapsulation does NOT fail",
-            "given": {"our_kem_seed_dz": hx(ek_seed), "foreign_ek": hx(other_ek),
-                      "foreign_ct": hx(foreign_ct),
-                      "announced_view_tag": hx(announced)},
-            "expect": {"decaps_raised": False,
-                       "our_derived_ss": hx(our_ss),
-                       "our_derived_view_tag": hx(derived),
-                       "tags_differ": announced != derived,
-                       "outcome": "not mine, no error"},
-            "wrong": {"note": "an error, which per §2.5 aborts the whole scan and turns one "
-                              "hostile announcement into permanent loss of every payment. "
-                              "ML-KEM rejects IMPLICITLY: `our_derived_ss` above is a "
-                              "well-formed pseudorandom secret, not a failure signal"}}
-        assert senders_ss != our_ss, "implicit rejection should give a different secret"
-    else:
-        v["V2-11"] = {"claim": "view-tag mismatch -> skip",
-                      "not_generatable": vp.KEM_ABSENT}
-    v["V2-12"] = {"claim": "malformed ct -> skip at the entry point",
-                  "given": {"ct_lengths": [1087, 0, 1089]},
-                  "expect": {"outcome": "not mine, no error, three times"},
-                  "wrong": {"note": "an error. Both references are layered so the entry point "
-                                    "converts it; an implementation exposing the inner "
-                                    "routine as its scanning API inherits the wrong "
-                                    "behaviour"}}
-    if vp.have_kem():
-        # The end-to-end row: a sender encapsulates to our ek, and the stealth SECRET the
-        # recipient derives is checked to control the address the sender published. Nothing
-        # else in the suite closes that loop, and it is the one an implementer most wants.
-        m13 = bytes([0x33]) * 32
-        ct13, ss13 = vp.kem_encaps(ek, m13)
-        ss13_r = vp.kem_decaps(ek_seed, ct13)
-        _base, offset, _c = vp.h_of_ss(ss13)
-        sk_int = int.from_bytes(spending_seed, "big")
-        stealth_sk = (sk_int + offset) % vp.N
-        stealth_pk_from_sk = vp.encode_compressed(vp.mul(stealth_sk))
-        stealth_pk_from_pk = vp.encode_compressed(
-            vp.add(vp.decode_compressed(spending_pk), vp.mul(offset)))
-        addr13 = vp.address_of(vp.decode_compressed(stealth_pk_from_sk))
-        v["V2-13"] = {
-            "claim": "the derived key controls the derived address",
-            "given": {"our_ek": hx(ek), "m": hx(m13), "ct": hx(ct13),
-                      "spending_seed": hx(spending_seed)},
-            "expect": {"sender_ss": hx(ss13), "recipient_ss": hx(ss13_r),
-                       "secrets_agree": ss13 == ss13_r,
-                       "offset": hx(offset.to_bytes(32, "big")),
-                       "stealth_sk": hx(stealth_sk.to_bytes(32, "big")),
-                       "stealth_pk_from_sender_side": hx(stealth_pk_from_pk),
-                       "stealth_pk_from_recipient_secret": hx(stealth_pk_from_sk),
-                       "the_two_agree": stealth_pk_from_pk == stealth_pk_from_sk,
-                       "address": "0x" + hx(addr13),
-                       "eip55": vp.eip55(addr13)},
-            "wrong": {"unreduced_sum": "spending_sk + H(ss) taken without mod n, which differs "
-                                       "only when the sum overflows the group order -- so it "
-                                       "works until it silently does not",
-                      "note": "deriving the address from `stealth_pk_from_pk` while spending "
-                              "with a key derived differently. The two lines above MUST agree; "
-                              "that agreement IS the claim"}}
-        assert stealth_pk_from_pk == stealth_pk_from_sk, "sender and recipient disagree"
-    else:
-        v["V2-13"] = {"claim": "the derived key controls the derived address",
-                      "not_generatable": vp.KEM_ABSENT}
-    return v
-
-
 def group_2_9(t1: dict) -> dict[str, dict]:
     v: dict[str, dict] = {}
     en = t1["encapsulation"][0]
@@ -710,7 +518,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
 
 
 BUILDERS = {"1": lambda t1: group_1(), "5": lambda t1: group_5(),
-            "2": group_2, "2.9": group_2_9}
+            "2.9": group_2_9}
 
 
 def canonical(row) -> str:

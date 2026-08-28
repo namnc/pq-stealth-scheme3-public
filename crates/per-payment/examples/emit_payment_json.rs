@@ -1,7 +1,7 @@
 //! Local operator tool: the fifteen lines `harness/payment/README.md` says a
 //! library-only tree writes for itself. NOT part of the release; deleted after use.
 use pqsa_core::{ExportableSpendKey, SenderState, StealthScheme};
-use pqsa_per_payment::{SchemeId2, SchemeId3};
+use pqsa_per_payment::SchemeId3;
 
 fn hex(b: &[u8]) -> String {
     format!(
@@ -31,10 +31,5 @@ fn case<S: StealthScheme + ExportableSpendKey>(scheme_id: u32, keygen_len: usize
 }
 
 fn main() {
-    println!(
-        r#"{{"cases": [{},
-{}]}}"#,
-        case::<SchemeId2>(2, 96),
-        case::<SchemeId3>(3, 128)
-    );
+    println!(r#"{{"cases": [{}]}}"#, case::<SchemeId3>(3, 128));
 }

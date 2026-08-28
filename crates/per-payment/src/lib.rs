@@ -1,9 +1,8 @@
-//! schemeId 2 (KEM-only) and schemeId 3 (ECDH + ML-KEM), one announcement per payment.
+//! schemeId 3 (ECDH + ML-KEM), one announcement per payment.
 //!
-//! From the shared secret onward both schemes use [`derive_from_shared_secret`]. Spending is
-//! secp256k1 ECDSA on both. SchemeId 3 is specified in §2; §2.8 requires the shared tail.
-//! The full schemeId 2 specification does not ship in this tree. What the hybrid does and
-//! does not give is in §9.
+//! The rung is specified in §2; §1 gives the offset and view-tag derivation it shares with
+//! anything else built on ERC-5564. Spending is secp256k1 ECDSA. What the hybrid does and
+//! does not give is in §7.
 //!
 use pqsa_core::{
     Bytes32, Error, ExportableSpendKey, StealthScheme, VIEW_TAG_BYTES,
@@ -19,11 +18,6 @@ const DS_OFFSET: &[u8] = b"pq-stealth/offset/v1";
 
 /// View-tag domain separator. Separate digest from the offset (V1-07).
 const DS_VIEWTAG: &[u8] = b"pq-stealth/view-tag/v1";
-
-/// schemeId 2: payment secret is the KEM shared secret. Its full specification does not ship
-/// in this tree; §2.8 requires its post-`ss` code to be shared with schemeId 3.
-pub struct SchemeId2;
-
 /// schemeId 3: payment secret combines ECDH and KEM secrets. §2.
 pub struct SchemeId3;
 
@@ -32,7 +26,8 @@ pub struct SchemeId3;
 pub struct MetaAddress {
     /// Payments are derived against this point. Not used to scan.
     pub spending: CompressedPoint,
-    /// ECDH viewing point. `Some` on schemeId 3, `None` on schemeId 2.
+    /// ECDH viewing point. Always `Some` here; the `Option` is vestigial (see the note
+    /// on `Tracking::viewing_ec_seed`).
     pub viewing_ec: Option<CompressedPoint>,
     /// ML-KEM-768 encapsulation key, 1 184 bytes.
     pub ek: Vec<u8>,
@@ -43,7 +38,9 @@ pub struct MetaAddress {
 pub struct Master {
     /// Scalar every one-time key is offset from.
     pub spending_seed: Bytes32,
-    /// Viewing scalar. `Some` on schemeId 3, `None` on schemeId 2.
+    /// Viewing scalar. Always `Some` here. The `Option` is left from a KEM-only rung that
+    /// does not ship in this tree; collapsing it removes a `Malformed` path that nothing
+    /// can now reach, and is a change to the public type rather than a trim.
     pub viewing_ec_seed: Option<Bytes32>,
     /// ML-KEM `(d, z)` seed (64 bytes). Not the 2400-byte expanded key.
     pub kem_seed: Vec<u8>,
@@ -52,7 +49,7 @@ pub struct Master {
 /// Delegatable scan material. §2.1. A delegated scanner sees the whole payment graph (§9).
 #[derive(Clone)]
 pub struct Tracking {
-    /// Viewing scalar. `Some` on schemeId 3, `None` on schemeId 2.
+    /// Viewing scalar. Always `Some` here; the `Option` is vestigial.
     pub viewing_ec_seed: Option<Bytes32>,
     /// ML-KEM `(d, z)` seed.
     pub kem_seed: Vec<u8>,
@@ -92,8 +89,7 @@ pub fn verified_ek(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error>
     Ok(ek)
 }
 
-/// ERC-5564 payload. §5: schemeId 2 puts `ct` in `ephemeralPubKey` and the one-byte tag in
-/// `metadata`; schemeId 3 puts `epk` in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`.
+/// ERC-5564 payload. §5: `epk` in `ephemeralPubKey`, `view_tag ‖ ct` in `metadata`.
 #[derive(Debug, Clone)]
 pub struct Announcement {
     /// schemeId 3: sender ephemeral point.
@@ -118,7 +114,7 @@ pub struct Match {
     pub shared_secret: Bytes32,
 }
 
-/// Offset and view tag from the payment secret. Shared by schemeId 2 and 3, per §1.
+/// Offset and view tag from the payment secret, per §1.
 ///
 /// # Errors
 ///
@@ -231,139 +227,6 @@ fn add_points(spending: &CompressedPoint, offset: &Bytes32) -> Option<Compressed
     let offset_point = pqsa_ec::public_point(offset).ok()?;
     pqsa_ec::add_points(spending, &offset_point).ok()
 }
-
-impl StealthScheme for SchemeId2 {
-    const SCHEME_ID: u64 = 2;
-    const NAME: &'static str = "schemeId 2 (direct KEM)";
-    const KEYGEN_SEED_BYTES: usize = 96;
-    const ANNOUNCE_SEED_BYTES: usize = 32;
-
-    type Meta = MetaAddress;
-    type Master = Master;
-    type Tracking = Tracking;
-    type Announcement = Announcement;
-    type Match = Match;
-    type Scanner = Scanner;
-    type SpendKey = Bytes32;
-
-    /// `spending_seed(32) ‖ kem_seed(64)`. Guard scans the 64-byte `kem_seed`.
-    fn keygen(seed: &[u8]) -> Result<(MetaAddress, Master, Tracking), Error> {
-        if seed.len() != Self::KEYGEN_SEED_BYTES {
-            return Err(Error::Malformed);
-        }
-        let spending_seed: Bytes32 = seed[..32].try_into().map_err(|_| Error::Malformed)?;
-        let kem_seed = seed[32..].to_vec();
-        reject_if_spending_key_is_delegated(&spending_seed, &kem_seed)?;
-        let spending = pqsa_ec::public_point(&spending_seed)?;
-        let (ek, dk_seed) = MlKem768::keygen(&kem_seed)?;
-        Ok((
-            MetaAddress {
-                spending,
-                viewing_ec: None,
-                ek,
-            },
-            Master {
-                spending_seed,
-                viewing_ec_seed: None,
-                kem_seed: dk_seed.clone(),
-            },
-            Tracking {
-                viewing_ec_seed: None,
-                kem_seed: dk_seed,
-            },
-        ))
-    }
-
-    /// Encapsulate with the whole announce seed as `m`. `ss` is the KEM secret (no combiner).
-    fn announce(meta: &MetaAddress, seed: &[u8]) -> Result<Announcement, Error> {
-        if seed.len() != Self::ANNOUNCE_SEED_BYTES {
-            return Err(Error::Malformed);
-        }
-        let (ct, ss) = MlKem768::encapsulate(&meta.ek, seed)?;
-        let (offset, view_tag) = derive_from_shared_secret(&ss)?;
-        let stealth = add_points(&meta.spending, &offset).ok_or(Error::Malformed)?;
-        Ok(Announcement {
-            epk: None,
-            ct,
-            view_tag,
-            stealth_address: pqsa_ec::address_of(&stealth),
-        })
-    }
-
-    /// Decapsulate, then tag. No prefilter: the tag is a function of `ss`. §2.5.
-    fn scan(scanner: &Scanner, ann: &Announcement) -> Option<Match> {
-        if ann.epk.is_some() {
-            return None;
-        }
-        let ss = MlKem768::decapsulate(&scanner.kem_seed, &ann.ct).ok()?;
-        match_from_secret(&ss, &scanner.spending, &ann.view_tag, &ann.stealth_address)
-    }
-
-    /// §1 `ek` check. Viewing fields must be absent (schemeId 3 material is [`Error::Malformed`]).
-    fn bind(tracking: &Tracking, meta: &MetaAddress) -> Result<Scanner, Error> {
-        if tracking.viewing_ec_seed.is_some() || meta.viewing_ec.is_some() {
-            return Err(Error::Malformed);
-        }
-        Ok(Scanner {
-            ek: verified_ek(&tracking.kem_seed, &meta.ek)?,
-            kem_seed: tracking.kem_seed.clone(),
-            viewing_ec_seed: None,
-            viewing_pk_ec: None,
-            spending: meta.spending,
-        })
-    }
-
-    fn spend_key(master: &Master, m: &Match) -> Result<Bytes32, Error> {
-        spend_key_from(master, m)
-    }
-
-    fn match_address(m: &Match) -> [u8; 20] {
-        m.stealth_address
-    }
-
-    fn meta_to_bytes(meta: &MetaAddress) -> Vec<u8> {
-        [meta.spending.as_bytes().as_slice(), &meta.ek].concat()
-    }
-
-    fn meta_from_bytes(bytes: &[u8]) -> Option<MetaAddress> {
-        if bytes.len() != 33 + MlKem768::EK_BYTES {
-            return None;
-        }
-        Some(MetaAddress {
-            spending: pqsa_ec::decode_point(&bytes[..33]).ok()?,
-            viewing_ec: None,
-            ek: bytes[33..].to_vec(),
-        })
-    }
-
-    /// `ephemeralPubKey` = `ct`, `metadata` = 8-byte tag. §6.
-    fn announcement_to_bytes(ann: &Announcement) -> ([u8; 20], Vec<u8>, Vec<u8>) {
-        (ann.stealth_address, ann.ct.clone(), ann.view_tag.to_vec())
-    }
-
-    fn announcement_from_bytes(
-        stealth_address: &[u8; 20],
-        epk: &[u8],
-        metadata: &[u8],
-    ) -> Option<Announcement> {
-        if epk.len() != MlKem768::CT_BYTES || metadata.len() != VIEW_TAG_BYTES {
-            return None;
-        }
-        Some(Announcement {
-            epk: None,
-            ct: epk.to_vec(),
-            view_tag: metadata.try_into().ok()?,
-            stealth_address: *stealth_address,
-        })
-    }
-}
-
-impl ExportableSpendKey for SchemeId2 {
-    fn spend_key_bytes(k: &Bytes32) -> &[u8] {
-        k.as_slice()
-    }
-}
-
 /// schemeId 3 combiner domain separator. §2.4.
 const DS_HYBRID: &[u8] = b"pq-stealth/hybrid-payment/v1";
 
@@ -617,34 +480,6 @@ mod tests {
         assert_eq!(out.len(), 128);
         out
     }
-
-    /// Bit-flipped `d` expands to a different well-formed `ek`; only `bind` notices.
-    #[test]
-    fn a_bit_flipped_tracking_seed_is_caught_by_bind_and_by_nothing_else() {
-        let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-
-        let mut corrupt = tracking.clone();
-        corrupt.kem_seed[7] ^= 0x01; // one bit, in the `d` half
-
-        let (good_ek, _) = MlKem768::keygen(&tracking.kem_seed).unwrap();
-        let (bad_ek, _) = MlKem768::keygen(&corrupt.kem_seed).unwrap();
-        assert_eq!(
-            good_ek.len(),
-            bad_ek.len(),
-            "both expand to a well-formed key"
-        );
-        assert_ne!(
-            good_ek, bad_ek,
-            "to a DIFFERENT key, which is the whole problem"
-        );
-
-        assert!(SchemeId2::bind(&tracking, &meta).is_ok());
-        assert!(matches!(
-            SchemeId2::bind(&corrupt, &meta),
-            Err(Error::TrackingKeyMismatch)
-        ));
-    }
-
     /// Same `d`-flip on schemeId 3.
     #[test]
     fn schemeid3_bind_catches_a_corrupt_kem_seed_too() {
@@ -682,7 +517,7 @@ mod tests {
     /// `ek` depends on `d` only. A corrupt `z` still binds and still opens a genuine ct.
     #[test]
     fn the_ek_check_is_blind_to_the_z_half_and_that_is_harmless() {
-        let (meta, master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
+        let (meta, master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
 
         let mut z_corrupt = tracking.clone();
         z_corrupt.kem_seed[63] ^= 0x80; // last bit of `z`
@@ -694,75 +529,36 @@ mod tests {
             "ek depends on d alone -- FIPS 203 KeyGen_internal"
         );
         assert!(
-            SchemeId2::bind(&z_corrupt, &meta).is_ok(),
+            SchemeId3::bind(&z_corrupt, &meta).is_ok(),
             "and so bind accepts it, which is the gap this test records"
         );
 
-        let ann = SchemeId2::announce(&meta, &[0x77u8; 32]).unwrap();
-        let scanner_z = SchemeId2::bind(&z_corrupt, &meta).unwrap();
-        let m_z = SchemeId2::scan(&scanner_z, &ann).expect("z does not affect a valid decaps");
-        let m_ok = SchemeId2::scan(&SchemeId2::bind(&tracking, &meta).unwrap(), &ann).unwrap();
+        let ann = SchemeId3::announce(&meta, &[0x77u8; 64]).unwrap();
+        let scanner_z = SchemeId3::bind(&z_corrupt, &meta).unwrap();
+        let m_z = SchemeId3::scan(&scanner_z, &ann).expect("z does not affect a valid decaps");
+        let m_ok = SchemeId3::scan(&SchemeId3::bind(&tracking, &meta).unwrap(), &ann).unwrap();
         assert_eq!(m_z.stealth_address, m_ok.stealth_address);
         assert_eq!(m_z.shared_secret, m_ok.shared_secret);
-        assert!(SchemeId2::spend_key(&master, &m_z).is_ok());
+        assert!(SchemeId3::spend_key(&master, &m_z).is_ok());
     }
 
     /// Tracking from account A does not bind to meta of account B.
     #[test]
     fn a_tracking_key_from_a_different_keypair_is_rejected() {
-        let mut other = unhex(SEED96);
-        other[40] ^= 0xff;
-        let (meta_a, _, tracking_a) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let (meta_b, _, tracking_b) = SchemeId2::keygen(&other).unwrap();
+        let mut other = seed128();
+        other[40] ^= 0xff; // inside `viewing_ec_seed`, so the viewing half moves too
+        let (meta_a, _, tracking_a) = SchemeId3::keygen(&seed128()).unwrap();
+        let (meta_b, _, tracking_b) = SchemeId3::keygen(&other).unwrap();
 
-        assert!(SchemeId2::bind(&tracking_a, &meta_a).is_ok());
-        assert!(SchemeId2::bind(&tracking_b, &meta_b).is_ok());
+        assert!(SchemeId3::bind(&tracking_a, &meta_a).is_ok());
+        assert!(SchemeId3::bind(&tracking_b, &meta_b).is_ok());
         for (t, m) in [(&tracking_a, &meta_b), (&tracking_b, &meta_a)] {
             assert!(matches!(
-                SchemeId2::bind(t, m),
+                SchemeId3::bind(t, m),
                 Err(Error::TrackingKeyMismatch)
             ));
         }
     }
-
-    /// Cross-rung bind is `Malformed`, not `TrackingKeyMismatch`.
-    #[test]
-    fn binding_across_rungs_is_malformed_not_a_mismatch() {
-        let (meta2, _, tracking2) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let (meta3, _, tracking3) = SchemeId3::keygen(&seed128()).unwrap();
-
-        // All four orientations: seeds share spending/KEM halves, so a half-check would pass.
-        for outcome in [
-            SchemeId2::bind(&tracking3, &meta2),
-            SchemeId2::bind(&tracking2, &meta3),
-            SchemeId3::bind(&tracking2, &meta3),
-            SchemeId3::bind(&tracking3, &meta2),
-        ] {
-            assert!(matches!(outcome, Err(Error::Malformed)));
-        }
-    }
-
-    /// Parsed announcement keeps the real stealth address; §2.4's comparison succeeds.
-    #[test]
-    fn a_parsed_announcement_survives_the_required_address_comparison() {
-        let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
-
-        // Round-trip through the wire exactly as a scanner reading a log event would.
-        let (addr, epk, md) = SchemeId2::announcement_to_bytes(&built);
-        let parsed = SchemeId2::announcement_from_bytes(&addr, &epk, &md).unwrap();
-        assert_eq!(parsed.stealth_address, built.stealth_address);
-        assert_ne!(parsed.stealth_address, [0u8; 20], "the sentinel is gone");
-
-        let scanner = SchemeId2::bind(&tracking, &meta).unwrap();
-        let m = SchemeId2::scan(&scanner, &parsed).expect("our own payment");
-        assert_eq!(
-            m.stealth_address, parsed.stealth_address,
-            "the derived address must equal the announced one, or §2.4's required \
-             comparison is a guaranteed false negative"
-        );
-    }
-
     /// Same address round-trip for schemeId 3.
     #[test]
     fn schemeid3_parses_the_address_too() {
@@ -780,20 +576,20 @@ mod tests {
     /// Lying announced address is a skip, not an error. §2.4 MUST, §2.7 skip (DoS).
     #[test]
     fn a_lying_announced_address_is_a_skip_and_not_an_error() {
-        let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
-        let (real, epk, md) = SchemeId2::announcement_to_bytes(&built);
+        let (meta, _master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
+        let built = SchemeId3::announce(&meta, &[0x33u8; 64]).unwrap();
+        let (real, epk, md) = SchemeId3::announcement_to_bytes(&built);
 
         let lie: [u8; 20] = core::array::from_fn(|i| 0xa0 ^ (i as u8));
         assert_ne!(
             lie, real,
             "the lie must actually differ, or this tests nothing"
         );
-        let parsed = SchemeId2::announcement_from_bytes(&lie, &epk, &md).unwrap();
+        let parsed = SchemeId3::announcement_from_bytes(&lie, &epk, &md).unwrap();
 
-        let scanner = SchemeId2::bind(&tracking, &meta).unwrap();
+        let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
         assert!(
-            SchemeId2::scan(&scanner, &parsed).is_none(),
+            SchemeId3::scan(&scanner, &parsed).is_none(),
             "the view tag still matches -- it is a function of `ss` and the lie did not touch \
              `ct` -- so the address comparison is the only thing that can reject this, and \
              §2.4 requires it to"
@@ -801,8 +597,8 @@ mod tests {
 
         // A skip and not an error: `announce()` is permissionless, so anyone can publish this
         // and a scan that aborted on it would be a DoS. The honest announcement still matches.
-        let honest = SchemeId2::announcement_from_bytes(&real, &epk, &md).unwrap();
-        let m = SchemeId2::scan(&scanner, &honest).expect("the scan carries on");
+        let honest = SchemeId3::announcement_from_bytes(&real, &epk, &md).unwrap();
+        let m = SchemeId3::scan(&scanner, &honest).expect("the scan carries on");
         assert_eq!(m.stealth_address, built.stealth_address);
     }
 
@@ -823,41 +619,6 @@ mod tests {
         assert_eq!(m.stealth_address, ann.stealth_address);
         assert!(SchemeId3::spend_key(&master, &m).is_ok());
     }
-
-    /// V2-13: master A + match A yields the pinned `stealth_sk`. A different spending seed
-    /// mismatches. Viewing/KEM material is not part of spending.
-    #[test]
-    fn spend_key_checks_the_master_controls_the_address() {
-        let hex = |b: &[u8]| -> String { b.iter().map(|x| format!("{x:02x}")).collect() };
-
-        let (meta, master_a, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
-        let scanner = SchemeId2::bind(&tracking, &meta).unwrap();
-        let m = SchemeId2::scan(&scanner, &built).expect("our payment");
-
-        let sk = SchemeId2::spend_key(&master_a, &m).unwrap();
-        assert_eq!(
-            hex(&sk),
-            "7e38dfce62deab4e80baa191f4471cbd3456838e4928f00f79b505dc975ffeaf"
-        );
-        assert_eq!(
-            hex(&m.stealth_address),
-            "2e21b8ec67a7602ed592b5760ea9bc66ec11f1d7"
-        );
-
-        let mut master_b = master_a.clone();
-        master_b.spending_seed[31] ^= 0x01;
-        assert!(matches!(
-            SchemeId2::spend_key(&master_b, &m),
-            Err(Error::MasterKeyMismatch)
-        ));
-
-        let mut same_spending = master_a.clone();
-        same_spending.kem_seed[0] ^= 0x01;
-        same_spending.viewing_ec_seed = Some([0x22; 32]);
-        assert_eq!(SchemeId2::spend_key(&same_spending, &m).unwrap(), sk);
-    }
-
     /// schemeId 3: mismatch on a foreign spending seed; same spending seed with other fields
     /// changed still spends.
     #[test]
@@ -867,6 +628,18 @@ mod tests {
         let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
         let m = SchemeId3::scan(&scanner, &built).expect("our payment");
         let sk = SchemeId3::spend_key(&master_a, &m).unwrap();
+
+        // Pinned, not merely self-consistent: a derivation can agree with itself and be
+        // wrong, so the key and the address are fixed to bytes rather than recomputed.
+        let hex = |b: &[u8]| -> String { b.iter().map(|x| format!("{x:02x}")).collect() };
+        assert_eq!(
+            hex(&sk),
+            "cb1f6323341ae29a0ebca837b1787a5a4a6b5d11916b0b5f2905d109756c998b"
+        );
+        assert_eq!(
+            hex(&m.stealth_address),
+            "ad0f2e9dac5a0df0a31455d92c6efd330983672d"
+        );
 
         let mut master_b = master_a.clone();
         master_b.spending_seed[31] ^= 0x01;
@@ -886,11 +659,11 @@ mod tests {
     /// A mismatched view tag is not ours.
     #[test]
     fn a_mismatched_view_tag_is_not_ours() {
-        let (meta, _master, tracking) = SchemeId2::keygen(&unhex(SEED96)).unwrap();
-        let mut built = SchemeId2::announce(&meta, &[0x33u8; 32]).unwrap();
+        let (meta, _master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
+        let mut built = SchemeId3::announce(&meta, &[0x33u8; 64]).unwrap();
         built.view_tag[0] ^= 0xff;
-        let scanner = SchemeId2::bind(&tracking, &meta).unwrap();
-        assert!(SchemeId2::scan(&scanner, &built).is_none());
+        let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
+        assert!(SchemeId3::scan(&scanner, &built).is_none());
     }
 
     /// Secret fields do not appear in `Debug` as hex or decimal; public fields still print.
@@ -953,68 +726,38 @@ mod tests {
             S::announcement_to_bytes(&ann)
         }
 
-        // (keygen seed length, epk width, metadata width, zero bytes, digest) -- §6's wire
-        // table for the rung, then the two properties the receipt rests on.
-        let rungs: [(usize, usize, usize, usize, &str); 2] = [
-            (
-                96,
-                1088,
-                1,
-                1,
-                "6c4606126d8456e0b8b323ce093d03ec2f6acfc9797fd06f48319d27475dd6b7",
-            ),
-            (
-                128,
-                33,
-                1089,
-                2,
-                "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca",
-            ),
-        ];
+        // §5's wire table for the rung, then the two properties the receipt rests on.
+        let (keygen_len, epk_w, meta_w, zeros) = (128usize, 33usize, 1089usize, 2usize);
+        let want = "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca";
 
-        for (i, (len, epk_w, meta_w, zeros, want)) in rungs.iter().enumerate() {
-            let (addr, epk_field, metadata) = if i == 0 {
-                walk::<SchemeId2>(*len)
-            } else {
-                walk::<SchemeId3>(*len)
-            };
-            let sid = if i == 0 { 2 } else { 3 };
-            assert_eq!(
-                epk_field.len(),
-                *epk_w,
-                "§6: schemeId {sid} `ephemeralPubKey` width"
-            );
-            assert_eq!(
-                metadata.len(),
-                *meta_w,
-                "§6: schemeId {sid} `metadata` width"
-            );
+        let (addr, epk_field, metadata) = walk::<SchemeId3>(keygen_len);
+        assert_eq!(epk_field.len(), epk_w, "§5: `ephemeralPubKey` width");
+        assert_eq!(metadata.len(), meta_w, "§5: `metadata` width");
 
-            let blob: Vec<u8> = addr
+        let blob: Vec<u8> = addr
+            .iter()
+            .chain(epk_field.iter())
+            .chain(metadata.iter())
+            .copied()
+            .collect();
+        assert_eq!(
+            blob.iter().filter(|b| **b == 0).count(),
+            zeros,
+            "the measured calldata carries exactly {zeros} zero byte(s), and EIP-7623 prices a \
+             zero at 1 token against a nonzero at 4 -- this count is what the committed receipt \
+             rests on"
+        );
+
+        let digest = Sha256::digest(&blob);
+        assert_eq!(
+            digest
                 .iter()
-                .chain(epk_field.iter())
-                .chain(metadata.iter())
-                .copied()
-                .collect();
-            assert_eq!(
-                blob.iter().filter(|b| **b == 0).count(),
-                *zeros,
-                "schemeId {sid}: the measured calldata carries exactly {zeros} zero byte(s), and \
-                 EIP-7623 prices a zero at 1 token against a nonzero at 4 -- this count is what \
-                 the committed receipt rests on"
-            );
-
-            let digest = Sha256::digest(&blob);
-            assert_eq!(
-                digest
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>(),
-                *want,
-                "schemeId {sid}: `stealthAddress ‖ ephemeralPubKey ‖ metadata` is not the \
-                 measured one. Every byte the receipt was taken over is in this digest, so a \
-                 mismatch means the stated seed no longer reproduces the measurement"
-            );
-        }
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+            want,
+            "`stealthAddress ‖ ephemeralPubKey ‖ metadata` is not the measured one. Every byte \
+             the receipt was taken over is in this digest, so a mismatch means the stated seed \
+             no longer reproduces the measurement"
+        );
     }
 }
