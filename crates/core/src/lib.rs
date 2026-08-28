@@ -1,7 +1,19 @@
-//! Shared scheme interface: [`StealthScheme`], errors, §5 seed derivation, the delegation guard.
+//! Shared scheme interface: [`StealthScheme`], errors, seed derivation, the delegation guard.
 //!
-//! Protocol: `spec/ERC-VVVV-schemeid3.md` (§1 vocabulary, §5 seeds). This crate does not
-//! implement a scheme.
+//! Protocol: `spec/ERC-VVVV-schemeid3.md` (§1 vocabulary). This crate does not implement a
+//! scheme.
+//!
+//! **THE SEED DERIVATION IN THIS MODULE IS NOT SPECIFIED BY THE ERC**, and every item below
+//! that derives a seed from a master key -- [`keygen_seed`], [`SenderState`], `announce_seed`,
+//! `kem_id`, and their three domain separators -- is this implementation's choice rather than
+//! a normative requirement. What the ERC does state is the seed's SHAPE and its FRESHNESS: the
+//! keygen seed is 128 bytes (§2.1) and the announce seed is 64 (§2.4), and a fresh announce
+//! seed MUST be drawn per announcement. §2.4 says explicitly that the method is a wallet
+//! concern. A wallet drawing 64 random bytes per announcement conforms; so does this.
+//!
+//! It is here because the demonstration and the payment harness need SOME reproducible source
+//! of seeds -- a receipt is only falsifiable if a reader can reproduce its input -- and because
+//! an index that advances is what makes reuse hard to do by accident.
 //!
 //! [`SenderState`] derives announce seeds and increments an index. Reusing a seed repeats
 //! the KEM ciphertext and the stealth address. [`StealthScheme::announce`] still takes raw
@@ -13,10 +25,10 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 /// 32-byte array (seed, scalar, shared secret, or hash).
 pub type Bytes32 = [u8; 32];
 
-/// §5's domain separator for the sender-entropy derivation.
+/// Domain separator for the sender-entropy derivation. Not from the ERC -- see the module note.
 const DS_SENDER: &[u8] = b"pq-stealth/sender-seed/v1";
 
-/// §5's canonical KEM name for the deployed path. `kem_id` length-prefixes it.
+/// KEM name for the deployed path. `kem_id` length-prefixes it. Not from the ERC.
 const KEM_NAME: &[u8] = b"ML-KEM-768";
 
 /// View-tag width in bytes. §1.
@@ -32,7 +44,7 @@ pub enum Error {
     NoValidScalar,
     /// A 32-byte window of the delegated object equals the spending seed. §2.1.
     SpendingKeyDelegated,
-    /// Sender counter would wrap. Wrapping reuses a seed. §5.
+    /// Sender counter would wrap. Wrapping reuses a seed, which §2.4 forbids.
     CounterExhausted,
     /// KEM rejected a malformed key or ciphertext. [`StealthScheme::scan`] maps this to [`None`].
     Kem,
@@ -76,7 +88,7 @@ pub trait StealthScheme {
     /// Keygen seed length. Other lengths are [`Error::Malformed`].
     const KEYGEN_SEED_BYTES: usize;
 
-    /// Announce seed length. §5.
+    /// Announce seed length. §2.4: 64 bytes.
     const ANNOUNCE_SEED_BYTES: usize;
 
     /// Published via ERC-6538.
@@ -183,10 +195,13 @@ pub trait ExportableSpendKey: StealthScheme {
     fn spend_key_bytes(k: &Self::SpendKey) -> &[u8];
 }
 
-/// §5's domain separator for the keygen-seed derivation. Distinct from the announce seed's.
+/// Domain separator for the keygen-seed derivation, distinct from the announce seed's. Not
+/// from the ERC -- see the module note.
 const DS_KEYGEN: &[u8] = b"pq-stealth/keygen/v1";
 
-/// §5 keygen-seed derivation from a 32-byte master:
+/// Keygen-seed derivation from a 32-byte master. NOT SPECIFIED BY THE ERC; §2.1 states only
+/// that the seed it produces is 128 bytes.
+///
 ///
 /// ```text
 /// HKDF-SHA256(
@@ -226,7 +241,8 @@ pub fn keygen_seed(
     Ok(out)
 }
 
-/// Per-sender announce-seed state: master and next unused index. §5.
+/// Per-sender announce-seed state: master and next unused index. Not from the ERC, which
+/// requires only that a fresh seed reaches every announcement (§2.4).
 ///
 /// Persist both. Losing the counter and continuing reuses an index, which repeats a stealth
 /// address. [`StealthScheme::announce`] still accepts any `&[u8]`. Two `SenderState` values
@@ -358,7 +374,8 @@ pub fn reject_if_spending_key_is_delegated(
     Ok(())
 }
 
-/// §5 announce seed. Integers are u64be. `i` sits immediately after `master` (V6-05).
+/// Announce seed. Integers are u64be; `i` sits immediately after `master`. Not from the ERC.
+/// The fixture that pinned this field order left with the seed-derivation vector group.
 ///
 /// ```text
 /// SHAKE256(DS || master(32) || u64be(i)
@@ -383,7 +400,8 @@ fn announce_seed(master: &Bytes32, scheme_id: u64, scheme_name: &[u8], i: u64, n
     out
 }
 
-/// §5's `kem_id` for a bare KEM: `u64be(|name|) || name`. 18 bytes for `"ML-KEM-768"`.
+/// `kem_id` for a bare KEM: `u64be(|name|) || name`. 18 bytes for `"ML-KEM-768"`. Not from
+/// the ERC.
 fn kem_id(name: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + name.len());
     out.extend_from_slice(&(name.len() as u64).to_be_bytes());
@@ -401,7 +419,7 @@ pub const fn delegation_window_count(len: usize) -> usize {
 mod tests {
     use super::*;
 
-    /// Stand-in so §5 can be tested without a scheme crate. `NAME` is bound into the seed.
+    /// Stand-in so the derivation can be tested without a scheme crate. `NAME` is bound in.
     ///
     /// **The `schemeId 2` and `schemeId 6` names in this module are ARBITRARY KDF INPUTS, not
     /// schemes this tree carries.** They exercise the generic derivation -- that the id, the
@@ -465,7 +483,7 @@ mod tests {
         );
     }
 
-    /// `kem_id` is `u64be(|name|) || name` (18 bytes for `"ML-KEM-768"`). §5.
+    /// `kem_id` is `u64be(|name|) || name` (18 bytes for `"ML-KEM-768"`).
     #[test]
     fn kem_id_is_length_prefixed_and_18_bytes() {
         let id = kem_id(KEM_NAME);

@@ -194,7 +194,7 @@ def eip55(addr20: bytes) -> str:
         c.upper() if c.isalpha() and int(h[i], 16) >= 8 else c for i, c in enumerate(low)
     )
 # --------------------------------------------------------------------------------------
-# The derivations of §1 and §5, from the specification text
+# The derivations of §1, from the specification text
 # --------------------------------------------------------------------------------------
 
 DS_OFFSET = b"pq-stealth/offset/v1"

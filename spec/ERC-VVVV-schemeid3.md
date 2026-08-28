@@ -44,10 +44,12 @@ in RFC 2119.
 parameters** — and the **derandomised internal algorithms** are the ones this document
 requires, not the public interface.
 
-Two requirements in this document are only satisfiable through the internal entry points:
-encapsulation MUST be deterministic in `m` (§2.4), and §5 requires `m` to be **derived**
-rather than sampled; and the decapsulation key MUST be the 64-byte `(d, z)` seed rather than
-the expanded form. FIPS 203's `ML-KEM.Encaps` and `ML-KEM.KeyGen` draw their own randomness
+Two requirements in this document are only satisfiable through the internal entry points.
+**Encapsulation MUST be deterministic in `m`**, and `m` MUST be the `encap_seed` of §2.4 —
+a value the sender already holds — rather than randomness the KEM samples for itself; without
+that, `(ek, m)` does not fix `ct` and `ss_pq` and no conformance vector can pin an
+announcement. And **the decapsulation key MUST be the 64-byte `(d, z)` seed** rather than the
+expanded form. FIPS 203's `ML-KEM.Encaps` and `ML-KEM.KeyGen` draw their own randomness
 and return an expanded `dk`, so an implementation MUST use **`ML-KEM.Encaps_internal(ek, m)`**
 and **`ML-KEM.KeyGen_internal(d, z)`** — Algorithms 17 and 16. **Decapsulation is NOT
 constrained: `ML-KEM.Decaps` and `ML-KEM.Decaps_internal` are both permitted.**
@@ -218,8 +220,16 @@ use the set the recipient registered and MUST NOT process an announcement carryi
 
 #### 2.4 Sender
 
-The announce seed is **64 bytes**, `ephemeral_seed(32) ‖ encap_seed(32)`. It MUST be drawn
-per §5 and MUST NOT be reused; §5 states why binding `schemeId` alone is insufficient.
+The announce seed is **64 bytes**, `ephemeral_seed(32) ‖ encap_seed(32)`. **A fresh seed MUST
+be drawn for every announcement, and a seed MUST NOT be reused** — across recipients, across
+`schemeId`s, or across two payments to the same recipient. Per-`schemeId` uniqueness is not
+enough: what MUST be unique is per announcement. Reuse repeats `epk`, which links the two
+announcements to one sender, and against the same recipient it repeats `ss` and therefore the
+stealth address, which merges two payments onto one key.
+
+**How the seed is produced is deliberately outside this document.** A wallet deriving it from
+a master key and an index satisfies the requirement, and so does a wallet drawing 64 fresh
+random bytes; this document constrains the property, not the method.
 
 ```
 esk         = ephemeral_seed                    a valid secp256k1 scalar per §1

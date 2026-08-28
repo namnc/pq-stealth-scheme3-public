@@ -251,7 +251,7 @@ def main() -> int:
     # decapsulation did NOT raise and returned a DIFFERENT secret -- implicit rejection,
     # demonstrated rather than asserted.
     #
-    # No surviving row calls the KEM. §1, §2.9 and §5 build from the vendored ACVP file
+    # No surviving row calls the KEM. Every surviving group builds from the vendored ACVP file
     # directly, so `--check` now passes byte-identically with kyber-py absent and neither
     # branch can be staged from a real row. The seam and the stub path are still in the
     # tool, and the guards below exercise them through V6-03, whose stub comes from the
@@ -297,8 +297,8 @@ def main() -> int:
     # COVERAGE REMOVED WITH ITS SUBJECT. Two cases stood here -- a row this process cannot
     # rebuild does NOT fail `--check`, and a partial run concludes "OK, PARTLY" rather than
     # claiming every file matches. Both were staged on V6-03, the tree's only row emitted as
-    # a `not_generatable` stub. §5 left and V6-03 with it, so nothing in this tree produces a
-    # stub and neither case can be staged from a real row. The paths are still in the tool.
+    # a `not_generatable` stub. The seed-derivation group left and V6-03 with it, so nothing
+    # in this tree produces a stub and neither case can be staged from a real row. The paths are still in the tool.
     # AND THE SAME FOR THE DOWNGRADE GUARD. `refuse_to_downgrade` refuses to replace a
     # committed row that carries a value with a stub; three cases exercised it, and the
     # `--out` scratch-tree false-positive case with them. All four needed a row the generator
@@ -306,8 +306,8 @@ def main() -> int:
     # and the day a row becomes ungeneratable again is the day it matters. It is UNTESTED
     # here, which is the honest word for it.
     #
-    # The §5 scheme-name and `keygen_seed`-salt cases went the same way -- their subject was
-    # `section-5.json`.
+    # The scheme-name and `keygen_seed`-salt cases went the same way -- their subject was
+    # `section-5.json`, the seed-derivation group.
     print("\nvecprim's primitives, against the COMMITTED fixtures")
     # A mutation report rather than a hunch: eight mutations to `vecprim.py` -- among them a
     # changed view-tag width and `kem_encaps` returning the library's field order -- all
@@ -338,7 +338,7 @@ def main() -> int:
         case("and the offset equals the base when no retry was needed",
              f"{scalar:064x}", v1["V1-01"]["expect"]["offset"])
 
-        # §5's announce-seed cases stood here, pinning `vp.announce_seed`'s field order and
+        # The announce-seed cases stood here, pinning `vp.announce_seed`'s field order and
         # the length-prefixed `kem_id` against the committed V6-05. Three mutations lived
         # there. `section-5.json` is gone, so there is no committed row to pin them against
         # and `vecprim` no longer exposes the derivations they covered.

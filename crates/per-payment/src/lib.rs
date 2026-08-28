@@ -107,7 +107,7 @@ pub struct Announcement {
 #[derive(Clone)]
 pub struct Match {
     /// Derived stealth address. §2.4 makes the comparison against the announced
-    /// `stealthAddress` a MUST and [`match_from_secret`] performs it, so a `Match` never
+    /// `stealthAddress` a MUST and `match_from_secret` performs it, so a `Match` never
     /// carries an address that disagrees with the announcement it came from.
     pub stealth_address: [u8; 20],
     /// Payment secret for the one-time key.
