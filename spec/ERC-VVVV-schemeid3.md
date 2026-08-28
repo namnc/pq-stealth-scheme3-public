@@ -27,11 +27,10 @@ schemeId 3 has a reference implementation against this document, in `crates/per-
 A stealth-address announcement is public and permanent. Anything an observer records today
 can be broken later by a cryptographically relevant quantum computer, and the privacy loss is
 **retroactive** -- harvest now, deanonymise later. 
-That asymmetry says the announcement layer is the urgent one, and it can be upgraded without
-touching the spending path. ERC-5564's `Announcement` and ERC-6538's `registerKeys` take
-unbounded `bytes`, so nothing needs redeploying.
 
-This ERC closes that retroactive hole. 
+We must make the announcement layer post-quantum now, and fortunately it can be upgraded without
+touching the spending path (which is only necessary later). ERC-5564's `Announcement` and ERC-6538's `registerKeys` take
+unbounded `bytes`, so nothing needs redeploying.
 
 ## Specification
 
@@ -40,21 +39,21 @@ in RFC 2119.
 
 ### 1. Common definitions
 
-`ML-KEM-768` is as specified in FIPS 203, **unmodified in its algorithms and in its
-parameters** -- and the **derandomised internal algorithms** are the ones this document
-requires, not the public interface.
+`ML-KEM-768` is as specified in FIPS 203.
 
 **Encapsulation MUST be deterministic in `m`**, and `m` MUST be the `encap_seed` of Section 2.4 --
-a value the sender already holds -- rather than randomness the KEM samples for itself; without
-that, `(ek, m)` does not fix `ct` and `ss_pq` and no conformance vector can pin an
-announcement. And **the decapsulation key MUST be the 64-byte `(d, z)` seed** rather than the
-expanded form. FIPS 203's `ML-KEM.Encaps` and `ML-KEM.KeyGen` draw their own randomness
+a value from the sender -- rather than randomness the KEM samples for itself; without
+that, `(ek, m)` does not fix `ct` and `ss_pq`. 
+
+And **the decapsulation key MUST be the 64-byte `(d, z)` seed**. 
+FIPS 203's `ML-KEM.Encaps` and `ML-KEM.KeyGen` draw their own randomness
 and return an expanded `dk`, so an implementation MUST use **`ML-KEM.Encaps_internal(ek, m)`**
-and **`ML-KEM.KeyGen_internal(d, z)`** -- Algorithms 17 and 16. **Decapsulation is NOT
+and **`ML-KEM.KeyGen_internal(d, z)`** -- Algorithms 17 and 16. 
+
+**Decapsulation is NOT
 constrained: `ML-KEM.Decaps` and `ML-KEM.Decaps_internal` are both permitted.**
 
-A decapsulation key MUST be represented as the 64-byte `(d, z)` seed. This is the KEM half of
-the **tracking key** delegated to a scanner.
+A decapsulation key MUST be represented as the 64-byte `(d, z)` seed.
 
 The stealth derivation is ERC-5564's, unchanged:
 
@@ -65,7 +64,9 @@ H(ss)      = SHA256("pq-stealth/offset/v1" || ss), reduced to a valid scalar
 view_tag   = SHA256("pq-stealth/view-tag/v1" || ss)[0]                     1 B
 ```
 
-Scalar reduction MUST use one shared counter-based procedure for sender and recipient as described:
+We make explicit scalar reduction. 
+It MUST use one shared counter-based procedure for sender and recipient as described below and both sides run this
+identical procedure.
 
 ```
 base = SHA256("pq-stealth/offset/v1" || ss)
@@ -77,15 +78,14 @@ fail
 ```
 
 Convention: **every 32-byte digest above MUST be interpreted as a 256-bit unsigned integer in
-big-endian order (uNbe)**, most significant byte first -- both for the comparison
+big-endian order (u256be)**, most significant byte first -- both for the comparison
 `0 < candidate < n_secp256k1` and for the scalar that results. `u8(counter)` is a single byte,
-and an implementation MUST fail rather than continue past `counter = 256`. Both sides run this
-identical procedure.
+and an implementation MUST fail rather than continue past `counter = 256`.
 
 #### 1.1 The hybrid combiner
 
 schemeId 3 derives its **per-payment secret** by combining an ECDH shared secret with the
-ML-KEM shared secret (Section 2.4). The construction is given here once.
+ML-KEM shared secret (Section 2.4). The construction is given in *hybrid_combine*.
 
 ```
 hybrid_combine(DS, ss_ec, ss_pq, epk, ct, viewing_pk_ec, ek)
@@ -141,9 +141,9 @@ An implementation MUST reject any other length rather than padding or truncating
 - `spending_seed` MUST be a valid secp256k1 scalar: `0 < spending_seed < n`, read big-endian
   per Section 1. It is the master spending key.
 - `viewing_ec_seed` MUST be a valid secp256k1 scalar per Section 1. It is the viewing scalar
-  `viewing_ec`, and it is **delegated**.
+  `viewing_ec`, and it is **delegatable**.
 - `kem_seed` is ML-KEM's `(d, z)` pair as defined in Section 1, and becomes the decapsulation key
-  verbatim. It is **delegated**.
+  verbatim. It is **delegatable**.
 
 **An implementation MUST reject a keygen whose spending scalar appears anywhere inside the
 material that gets delegated -- and the delegated material is the 96-byte concatenation
@@ -190,7 +190,7 @@ use the set the recipient registered and MUST NOT process an announcement carryi
 #### 2.4 Sender
 
 The announce seed is **64 bytes**, `ephemeral_seed(32) || encap_seed(32)`. **A fresh seed MUST
-be drawn for every announcement, and a seed MUST NOT be reused** -- across recipients, across
+be drawn for every announcement, and a seed MUST NOT be reused** -- not even across recipients, across
 `schemeId`s, or across two payments to the same recipient. Per-`schemeId` uniqueness is not
 enough: what MUST be unique is per announcement. Reuse repeats `epk`, which links the two
 announcements to one sender, and against the same recipient it repeats `ss` and therefore the
@@ -281,8 +281,7 @@ one-time key hands it the master. Section 7 carries the general treatment.
 Announcements MUST use ERC-5564's `announce()` unchanged. Meta-addresses MUST be registered
 via ERC-6538 `registerKeys` with the matching `schemeId`.
 
-1. **The view tag MUST be the first byte of `metadata`**, at `metadata[0]`, with no
-   exception.
+1. **The view tag MUST be the first byte of `metadata`**, at `metadata[0]`.
 2. **`metadata` MUST be exactly `view_tag || ct`, in that order**, and an implementation MUST
    NOT reorder the fields.
 3. **`ephemeralPubKey` MUST carry exactly `epk`**, and an implementation MUST NOT swap the
@@ -292,10 +291,10 @@ via ERC-6538 `registerKeys` with the matching `schemeId`.
 
 Announcement cost, measured as **real standalone transactions** against the real ERC-5564
 interface on anvil (`--hardfork prague`), with `gasUsed` read off the receipt. These are
-**total transaction gas** -- the 21 000 intrinsic and every calldata byte included -- so no
-convention needs stating. The generator ships beside the figures, at
-`harness/announcement/measure.py`, and reads its field lengths from `tools/derive_sizes.py`
-rather than retyping them; the receipts are committed at
+**total transaction gas** -- the 21 000 intrinsic and every calldata byte included. 
+The generator ships beside the figures, at
+`harness/announcement/measure.py`, and reads its field lengths from `tools/derive_sizes.py`; 
+the receipts are committed at
 `harness/announcement/measured.json`, and `tools/check_measured.py` re-derives every one of
 them from the EIP-7623 rule with no node.
 
@@ -309,8 +308,8 @@ them from the EIP-7623 rule with no node.
 **The EIP-7623 calldata floor binds**, so execution gas is not charged at all -- the cost is
 data availability.
 
-**Registration is priced against the canonical registry itself.** Every row above is an
-`announce()` call; a recipient also makes a one-time ERC-6538 `registerKeys` call whose
+**Registration is priced against the canonical registry itself.** 
+A recipient makes a one-time ERC-6538 `registerKeys` call whose
 calldata is the meta-address, measured by `harness/registration` as real first-time
 transactions with one fresh registrant per row:
 
@@ -330,11 +329,9 @@ it with the derived key -- and commits the receipts at `harness/payment/measured
 |---|---|---|---|---|
 | **schemeId 3** | 69 300 | **21 000** | **21 000** | **111 300** |
 
-**The funding transfer is exactly the 21 000 intrinsic**, because a native-ETH transfer to an
-EOA carries empty calldata and touches no contract. The same is true of the sweep. So for
-native ETH there is nothing above intrinsic to measure on either side of the announcement,
-and the announcement is the whole of this scheme's cost above a classical transfer. **For any
-other asset it is not**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
+**The funding transfer is exactly the 21 000 intrinsic**, for a native-ETH transfer. 
+**For any
+other asset**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
 neither is measured by this harness, and neither figure is quoted anywhere in this document.
 
 ### 7. Security considerations
@@ -350,16 +347,7 @@ one: the tracking key is all-or-nothing over the recipient's whole payment histo
 
 **This scheme expires at a CRQC.** Spending is secp256k1, so once a CRQC exists the scheme is not a
 usable scheme whatever its announcement layer does: the funds are already gone by the
-paragraph above. It follows that **the EC half is not post-quantum protection of anything** --
-by the time the quantum adversary arrives there is nothing left for it to protect.
-Implementations and documentation MUST NOT present it as post-quantum protection.
-
-What the hybrid is for is the interval **before** a CRQC exists. `ss` includes both `ss_ec`
-and `ss_pq`, so evaluating the combiner needs both secrets. That is a statement about the
-hash inputs, not a reduction in this document. It does **not** preserve announcement
-anonymity if the ML-KEM ciphertext is linkable to the registered `ek`: `ct` and `ek` are
-both public, and they are not rewritten by the hash. Implementations and documentation
-MUST NOT claim that privacy survives either primitive failing.
+paragraph above. What the hybrid is for is the interval **before** a CRQC exists.
 
 **A leaked one-time key plus `ss` yields the master spending key, while a leaked one-time key
 *alone* yields nothing.** Inherited from ERC-5564, not introduced here.
@@ -367,16 +355,11 @@ MUST NOT claim that privacy survives either primitive failing.
 ## Backwards Compatibility
 
 **No consensus change, no new opcode, no change to ERC-5564 or ERC-6538.** This scheme uses
-`announce()` and `registerKeys` unchanged, and adds nothing to either interface. The
-`schemeId` field exists precisely to carry schemes these standards did not anticipate.
+`announce()` and `registerKeys` unchanged.
 
 **One `schemeId` value awaits reservation** -- 3. It is not reserved today.
 
-**Existing schemeId 1 deployments are unaffected, and the skip rule is why.** A wallet that
-supports only schemeId 1 encounters these announcements in the same event stream and skips
-them on `schemeId`, which is mandatory behaviour rather than a courtesy. Nothing in this
-document changes the meaning of an existing announcement, an existing meta-address, or an
-existing registration, and the registry is keyed by `schemeId`, so registration under 1 and
+**Existing schemeId 1 deployments are unaffected.** Registration under 1 and
 under 3 coexists with no migration.
 
 ## Test Cases
@@ -386,20 +369,15 @@ under 3 coexists with no migration.
 `python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
 generator reads and, per row, the normative sentence it pins.
 
-**Twenty-six rows pin this scheme**, in two groups rather than one, which is worth stating
-because a reader expecting a single `schemeId 3` file will not find one:
-
 | group | rows | what it pins |
 |---|---|---|
 | `vectors/section-1.json` | 7 | Section 1 -- the derivations every schemeId shares |
 | `vectors/section-2_9.json` | 19 | Section 2 -- keys and seeds, the meta-address, the combiner and its bindings, the wire mapping, and what counts as a skip |
 
-**What warrant each row carries is recorded in `vectors/rederivation.json`, not left to be
-inferred.** Nineteen of the twenty-six were re-derived by a second implementer from this
-document's prose alone, with every expected value stripped, and that file's `bytes_disagree`
-list being empty *is* the claim. The other seven carry no outside witness at all, and
-`python3 tools/gen_vectors.py` names them on every run rather than leaving the count to be
-subtracted. `vectors/PLAN.md` maps each row to the sentence it pins.
+**Independent rederivation further ensure correctness in `vectors/rederivation.json`.** 
+19 of the 26 were re-derived by a second implementer from this
+document alone, with every expected value stripped, and that file's `bytes_disagree`
+list being empty *is* the claim. `vectors/PLAN.md` maps each row to the sentence it pins.
 
 ## Reference implementation
 
