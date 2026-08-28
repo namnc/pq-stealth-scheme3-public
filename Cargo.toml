@@ -92,15 +92,8 @@ pqsa-ec = { path = "crates/ec" }
 pqsa-per-payment = { path = "crates/per-payment" }
 
 [workspace.lints.rust]
-# An undocumented public item fails the build. The whole point of this workspace at this
-# stage is the documentation, so the documentation is not optional.
 missing_docs = "deny"
-# A `todo!()` body makes every parameter unused, so the workspace default cannot be `deny`
-# without blocking a crate that is still a skeleton. Every IMPLEMENTED crate overrides this
-# to `deny` in its own manifest, which is the granularity that lets an implemented crate be
-# strict while a skeleton is still allowed to exist. Every crate in this workspace overrides
-# it today; the allowance is what keeps the next skeleton cheap, not a concession any current
-# crate relies on.
+# Allow here for future skeleton crates; every current crate denies it in its own manifest.
 unused_variables = "allow"
 
 [workspace.lints.rustdoc]

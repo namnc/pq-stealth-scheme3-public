@@ -452,15 +452,17 @@ requirements as unsatisfied until the port lands.
 
 One encapsulation and one ephemeral key per payment. The announcement is an ephemeral public
 key plus an eight-byte view tag and a KEM ciphertext; spending stays secp256k1 ECDSA on an
-ordinary EOA, so it needs no new verifier and no consensus change. **Forward secrecy is per
-payment**, because every announcement carries a fresh encapsulation *and* a fresh ephemeral
-key. **There is no per-counterparty state** on either side — §5's sender-wide seed state
-remains — which is what makes this rung a drop-in for ERC-5564 as deployed.
+ordinary EOA, so it needs no new verifier and no consensus change. Each announcement carries
+a fresh encapsulation and a fresh ephemeral key, so two payments do not share those values.
+That is key separation and  a later compromise of the recipient's
+long-term tracking key still opens every past ciphertext. **There is no per-counterparty
+state** on either side — §5's sender-wide seed state remains — which is what makes this rung
+a drop-in for ERC-5564 as deployed.
 
 **What the ECDH half is for is stated once, in §9, and it is not post-quantum protection.**
 Spending is secp256k1, so a CRQC ends this rung regardless. The EC half covers the interval
-before that, against a failure of the ML-KEM implementation. Implementations MUST NOT present
-it otherwise.
+before that, against a failure that exposes `ss_pq` while leaving `ct` unlinkable to `ek`. It
+does not cover an ML-KEM anonymity failure. Implementations MUST NOT present it otherwise.
 
 ```
 sender    : esk, epk    ← a fresh ephemeral secp256k1 keypair
@@ -548,9 +550,11 @@ use the set the recipient registered and MUST NOT process an announcement carryi
 **That is a skip, not an error.** `announce()` is permissionless, so an error would be a
 permanently abortable scan that any stranger could trigger for one announcement's gas — the
 failure §2.5, §2.7 and §9 each forbid separately. And **no order over the registry's
-schemeIds exists to be "downgraded" along**: the ML-KEM-only per-payment rung has per-payment
-forward secrecy and no classical floor, the hybrid channel rung has the floor and no forward
-secrecy, and schemeId 3 has both, so those two are incomparable. A recipient simply never
+schemeIds exists to be "downgraded" along**: the ML-KEM-only per-payment rung has a fresh
+encapsulation per payment and no classical floor; the hybrid channel rung has the floor and
+reuses a channel key; schemeId 3 has a classical floor *and* a fresh encapsulation. Fresh
+encapsulation is key separation, not forward secrecy. Those properties do not totally order
+the schemeIds. A recipient simply never
 derives a key for a `schemeId` it did not register, which needs no ordering and no error
 path. See §6.
 
@@ -1437,12 +1441,12 @@ paragraph above. It follows that **the EC half is not post-quantum protection of
 by the time the quantum adversary arrives there is nothing left for it to protect.
 Implementations and documentation MUST NOT present it as post-quantum protection.
 
-What the hybrid is for is the interval **before** a CRQC exists: it keeps the guarantee
-already in production as a floor under a primitive whose implementations are new. The
-author's emphasis is **implementation risk** — a defect in an ML-KEM implementation costs
-privacy today rather than in a decade — and the general form is any pre-CRQC failure of
-ML-KEM's confidentiality or anonymity, of which implementation defects are the likeliest and
-classical cryptanalysis the other.
+What the hybrid is for is the interval **before** a CRQC exists. `ss` includes both `ss_ec`
+and `ss_pq`, so evaluating the combiner needs both secrets. That is a statement about the
+hash inputs, not a reduction in this document. It does **not** preserve announcement
+anonymity if the ML-KEM ciphertext is linkable to the registered `ek`: `ct` and `ek` are
+both public, and they are not rewritten by the hash. Implementations and documentation
+MUST NOT claim that privacy survives either primitive failing.
 
 **So the hybrid is an engineering control, and it MUST be justified as one.** That has a
 consequence worth stating where the decision gets made rather than leaving it implicit: other
@@ -1582,8 +1586,9 @@ have imported a versioning dependency for no property the above does not give.
 
 **The hybrid is temporary, and the schedule is NIST's.** This rung spends on secp256k1, so a
 CRQC ends it whatever the announcement layer does; the EC half is therefore not post-quantum
-protection but cover for the interval before a CRQC exists, where an implementation defect in
-ML-KEM is the likeliest failure. NIST **IR 8547 ipd** Table 4 places elliptic-curve key
+protection but cover for the interval before a CRQC exists, against a failure that exposes
+`ss_pq` without making `ct` linkable to `ek`. It does not cover an ML-KEM anonymity failure.
+NIST **IR 8547 ipd** Table 4 places elliptic-curve key
 establishment at ≥128 bits of security strength as **disallowed after 2035** — not the 2030
 date, which applies only to the 112-bit row — and states that hybrid solutions "are typically
 expected to be temporary measures that lead to a second transition to cryptographic tools
@@ -1602,10 +1607,10 @@ have disagreed — one reading the rule, one reading its justification.
 **A `schemeId` mismatch is a skip and never an error, and "weaker `schemeId`" is undefinable
 rather than undefined.** `announce()` is permissionless, so any error path is a permanent
 scan abort a stranger can trigger for one announcement's gas. And no order over the
-registry's schemeIds exists to appeal to: the ML-KEM-only per-payment rung has per-payment
-forward secrecy and no classical floor, the hybrid channel rung has the floor and no forward
-secrecy, and neither is weaker than the other. An ordering invented in order to apply a rule
-is not a rule.
+registry's schemeIds exists to appeal to: the ML-KEM-only per-payment rung has a fresh
+encapsulation per payment and no classical floor; the hybrid channel rung has the floor and
+reuses a channel key; neither is weaker than the other. An ordering invented in order to
+apply a rule is not a rule.
 
 **Value confirmation is a SHOULD.** A MUST would make conformance depend on chain access
 beyond the announcement log, which nothing else here requires. The asymmetry is stated in the

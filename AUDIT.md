@@ -82,10 +82,12 @@ proposal, and a finding that two artifacts in the world claim the same one is a 
 The adversary records every announcement and every registry entry today, and acquires a
 cryptographically relevant quantum computer later. Against that adversary the question is
 whether an announcement can be linked to the recipient who could spend it. The adversary is not
-assumed to control the recipient's device, to see the sender's entropy source, or to break
-ML-KEM-768 and secp256k1 ECDH at once — the hybrid exists precisely so that one of the two
-failing is survivable. Denial of service against a scanner is in scope where the specification
-makes a claim about it, which is why the `schemeId`-mismatch rule above is normative.
+assumed to control the recipient's device or to see the sender's entropy source. `ss` is
+SHA3-256 of both shared secrets and the public fields; anyone who has both secrets can
+compute it. Which registered `ek` a `ct` belongs to is a question about those public bytes.
+The hash is not used for that. Denial of service against a scanner is in scope where the
+specification makes a claim about it, which is why the `schemeId`-mismatch rule above is
+normative.
 
 ## 5. What is already verified, and by what kind of evidence
 
