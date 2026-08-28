@@ -130,7 +130,8 @@ EIP_7623_TOKENS_PER_ZERO_BYTE = 1
 ZERO_BYTE_SAVING = ((EIP_7623_TOKENS_PER_NONZERO_BYTE - EIP_7623_TOKENS_PER_ZERO_BYTE)
                     * EIP_7623_TOKEN_GAS_STANDARD)
 ZERO_BYTE_ODDS = 256
-# What the documents quote, per schemeId, in gas. Checked below, not trusted.
+# The overstatement quoted per schemeId, in gas, by the harness that applies the
+# convention -- `harness/registration/measure.py`'s `blob()`. Checked below, not trusted.
 REGISTRATION_OVERSTATEMENT = {"1": 3, "3": 59}
 
 

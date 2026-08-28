@@ -8,9 +8,11 @@ canonical ERC-6538 registry's DEPLOYED runtime bytecode.
 
 Requires `anvil` and `cast` (Foundry) on PATH.
 
-WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
-file, and is deliberately NOT repeated here. It used to be in both places: the two
-copies drifted, and every stale claim this directory has carried was carried twice.
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS STATED HERE, at the point the
+convention is applied, and is deliberately NOT repeated in `README.md`. It used to be in
+both places: the two copies drifted, and every stale claim this directory has carried was
+carried twice. One home, and this is it -- the reader who needs a convention is reading
+the code that applies it.
 """
 
 import argparse
@@ -59,7 +61,19 @@ def free_port():
 
 
 def blob(n):
-    """Nonzero payload bytes — see README.md for why byte values end up mattering."""
+    """Payload bytes, none of them zero -- a worst-case calldata convention, stated.
+
+    Byte VALUES cannot reach the storage cost that dominates these rows: a slot is charged
+    zero-to-nonzero unless all 32 of its bytes are zero, which real key material gives with
+    probability about 2**-256. They do reach the CALLDATA cost, which these rows pay on
+    EIP-7623's standard path, where a zero byte is 12 gas cheaper than a nonzero one -- and
+    real key material carries about one zero byte in 256.
+
+    So every figure this harness reports is an UPPER BOUND on what a real registration pays,
+    over by roughly `size / 256 * 12` gas: about 59 gas at schemeId 3's 1 250 bytes, about 3
+    at the classical 66. `tools/derive_sizes.py` derives that per row from the EIP-7623
+    constants rather than from any number typed here, and fails if the two disagree.
+    """
     return "0x" + "".join(f"{1 + (i % 255):02x}" for i in range(n))
 
 

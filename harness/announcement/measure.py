@@ -8,9 +8,11 @@
 Needs `anvil`, `cast` and `forge` on PATH; `forge` builds the announcer from
 `../../contracts`. Exits 1 if any self-check fails.
 
-WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
-file, and is deliberately NOT repeated here. It used to be in both places: the two
-copies drifted, and every stale claim this directory has carried was carried twice.
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS STATED HERE, at the point the
+convention is applied, and is deliberately NOT repeated in `README.md`. It used to be in
+both places: the two copies drifted, and every stale claim this directory has carried was
+carried twice. One home, and this is it -- the reader who needs a convention is reading
+the code that applies it.
 """
 
 import argparse
@@ -135,11 +137,27 @@ def free_port():
 
 
 def blob(n, fill):
-    """Payload bytes.
+    """Payload bytes, in the two fills every row is measured with.
 
     `fill='nonzero'` reproduces the pattern the Foundry fixture used
     (`1 + i % 255`, never zero) so the token count is the worst case.
-    `fill='zero'` is the execution probe README.md describes.
+
+    `fill='zero'` is THE EXECUTION PROBE, and it is the whole reason `execution` can be
+    reported at all. Where the EIP-7623 floor binds, the transaction pays
+    `21000 + 10*tokens` whatever the EVM actually did, so execution is not on the receipt
+    and cannot be subtracted back out of it.
+
+    The probe exploits an asymmetry between the two charges. Execution is a function of
+    calldata LENGTH -- LOG data is 8/byte whatever the byte is, and memory expansion and
+    `CALLDATACOPY` are length-driven. The EIP-7623 token count is a function of calldata
+    VALUES -- a zero byte is 1 token, a nonzero byte is 4. So the same call at the same
+    length with an all-zero payload executes identically and costs about four times fewer
+    tokens, which drops it off the floor and exposes execution as
+    `total - 21000 - 4*tokens`.
+
+    That the two fills execute identically is an ASSUMPTION, so `check()` tests it rather
+    than trusting it: the probe must escape the floor on every row, and on every row where
+    the nonzero variant also escapes, the two execution figures must agree exactly.
     """
     if fill == "zero":
         return "0x" + "00" * n

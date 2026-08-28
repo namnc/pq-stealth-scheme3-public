@@ -8,9 +8,11 @@
 Needs `anvil`, `cast` and `forge` on PATH, and `cargo`. Reads `payment.json` from this
 directory; it derives nothing itself. Exits 1 if any self-check fails.
 
-WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS IN `README.md`, beside this
-file, and is deliberately NOT repeated here. It used to be in both places: the two
-copies drifted, and every stale claim this directory has carried was carried twice.
+WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS STATED HERE, at the point the
+convention is applied, and is deliberately NOT repeated in `README.md`. It used to be in
+both places: the two copies drifted, and every stale claim this directory has carried was
+carried twice. One home, and this is it -- the reader who needs a convention is reading
+the code that applies it.
 """
 from __future__ import annotations
 
@@ -28,6 +30,27 @@ ROOT = HERE.parent.parent
 CONTRACTS = ROOT / "contracts"
 INPUT = HERE / "payment.json"
 OUT = HERE / "measured.json"
+
+# THE DEMONSTRATION SEED -- what produced the committed receipts, stated rather than labelled.
+#
+# `measured.json` records `"input_seed": "unstated"`, because the emitter writes no
+# `seed_label` -- and a label would not be a seed anyway. The committed figures are
+# falsifiable only if a second party can produce the same input, so here is all of it: three
+# constants and one counter, with no file to obtain.
+#
+#     keygen seed      seed[i] = (i * 7 + 3) mod 256,  i in 0..128
+#     sender master    [0x5a; 32]
+#     sender counter   0, the first draw
+#
+# Feed the keygen seed to `keygen`, resume a sender at that master and counter, draw one
+# announce seed, and announce. `crates/per-payment/examples/emit_payment_json.rs` is exactly
+# those steps and takes no argument, which is what keeps this reproducible.
+#
+# THIS MATTERS MORE THAN IT LOOKS. Under EIP-7623 the announcement figure depends on the
+# ciphertext's ZERO-BYTE COUNT, so a different seed gives a different `ct` and a different
+# number. A reader who regenerates from a seed of their own and compares against the
+# committed 69 300 announce / 111 300 total will conclude the receipt is wrong when nothing
+# is wrong with it.
 
 # anvil's first dev account. The funder, and nothing else.
 DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -144,11 +167,13 @@ def spend(url, spend_key, to, wei):
 
 def cases():
     if not INPUT.is_file():
-        print(f"usage error: no {INPUT.name}. Produce it from the reference implementation: "
-              f"where the workspace carries the end-to-end demonstration crate, that crate's "
-              f"--emit-payment-json writes it; where it carries only the per-payment crate, "
-              f"derive the same fields from `input_seed` per this directory's README, which "
-              f"is the schema this tool validates against before it spends anything.",
+        print(f"usage error: no {INPUT.name}. Produce it from the reference implementation, "
+              f"from the repository root: `cargo run -q --example emit_payment_json "
+              f"-p pqsa-per-payment > harness/payment/{INPUT.name}`. It takes no argument -- "
+              f"the demonstration seed is compiled into it, and is restated in full under THE "
+              f"DEMONSTRATION SEED at the top of this file so the committed receipts can be "
+              f"reproduced. The schema it writes is the one validated below, before anything "
+              f"is spent.",
               file=sys.stderr)
         raise SystemExit(2)
     body = json.loads(INPUT.read_text())
@@ -157,7 +182,10 @@ def cases():
         print(f"usage error: {INPUT.name} has no `cases`", file=sys.stderr)
         raise SystemExit(2)
 
-    # THE SCHEMA, checked here because this directory's README promises it is. A non-empty
+    # THE SCHEMA, checked here rather than promised anywhere else. `stealth_address` is the
+    # address Section 2.4 derives, `spend_key` the scalar Section 2.6 derives for it, and
+    # `epk_field` and `metadata` the two ERC-5564 payloads exactly as Section 6's wire table
+    # gives them for that `schemeId`. A non-empty
     # `cases` array is not validation: the announcer accepts arbitrary bytes, so a malformed
     # wire shape reaches it and produces a measurement stamped `"self_check": "pass"`. A harness
     # that measures the wrong shape and reports success is worse than one that refuses to run.
