@@ -100,8 +100,6 @@ value, `"pq-stealth/hybrid-payment/v1"`, and names the output `ss`.
 3. **Explicitly**: `epk` and
    `viewing_pk_ec` are **33-byte SEC1-compressed** points; `ct` is the 1 088 announcement bytes; `ek` is the 1 184
    meta-address bytes; and `ss_ec` is the 32-byte x-coordinate per item 1.
-4. **`epk` MUST be bound into the KDF.** Without it, flipping the compressed parity byte yields the
-same ECDH x-coordinate and therefore the same payment secret.
 
 **The IKM is the combiner NIST SP 800-227 puts forward, with this document's field names --
 all six fields.** That combiner is

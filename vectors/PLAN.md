@@ -45,53 +45,6 @@ implemented.
 
 ## 3. §2.9 — schemeId 3 (hedged EC half)
 
-> **What left with schemeId 2, named rather than dropped quietly.** This set was written as a
-> delta on a KEM-only scheme that no longer ships, and its thirteen rows went with it. **Five
-> were already covered here** by a schemeId 3 equivalent: the keygen-seed length rejection
-> (V3-01), the 65-offset delegation window scan (V3-02), the meta-address encoding (V3-03),
-> the SEC1 `0x02`/`0x03` tag rule (V3-03), and the announcement's wire shape (V3-08).
->
-> **Eight rules the specification still states for this scheme lost their only fixture, and
-> have been re-homed as V3-09 to V3-15.** The gap is recorded rather than erased because
-> the re-homed rows differ in one respect from every row above them, stated in the next
-> paragraph:
->
-> | rule | stated at | re-homed as |
-> |---|---|---|
-> | keygen is deterministic in the seed — the same 128 bytes give the same three keys | §2.1 | V3-09 |
-> | `spending_seed` MUST be a valid secp256k1 scalar | §2.1, §2.7 | V3-10 |
-> | decode MUST reject a meta-address of any length but 1 250 | §2.2, §2.7 | V3-11 |
-> | 33 bytes of the right length can still be a non-point | §2.2, §2.7 | V3-12 |
-> | `address = keccak256(uncompressed(pk)[1..])[12..32]` | §2.4 | V3-13 |
-> | a view-tag mismatch is a skip — **and decapsulation does not fail** | §2.7 | V3-14 |
-> | a malformed `ct` is a skip at the entry point, not an error | §2.7 | V3-15 |
-> | the derived key controls the derived address, as a key-to-address relation | — | **no fixture**: re-homed as V3-16, then dropped with the §2.6 sentence it pinned |
->
-> **These eight are unwitnessed.** The blinded re-derivation predates them: a second
-> implementer computed the rows above from the prose alone, and these were not among the rows
-> put to them. That is a weaker warrant than `bytes_agree`, and `rederivation.json` does not
-> list them — it records only what the re-derivation DID, and the generator computes the
-> complement against the shipped fixtures and prints it on every run. A hand-kept list of
-> unwitnessed rows would be a second copy of what the fixture set already determines, and the
-> copy that goes stale is the one implying a row was witnessed.
->
-> The sixth was the one to weigh, and V3-14 is built to carry it. It is the only fixture
-> exhibiting **ML-KEM's implicit rejection** — a foreign ciphertext yielding a pseudorandom
-> secret and no error — which is the fact §2.4's required address comparison and §1's
-> one-byte tag are both built on. It takes `(dk, ct, ss_pq)` from an ACVP decapsulation case
-> whose own `reason` field reads `modified ciphertext`, so the behaviour is **oracled by
-> NIST rather than asserted by this project**, and the composition beyond it needs no
-> lattice arithmetic. V3-09 is oracled the same way, from an ACVP keygen case.
->
-> **§5's seed-derivation group went in the same pass, and for a different reason.** Its five
-> rows pinned `keygen_seed` and `announce_seed` — the HKDF and SHAKE256 field orders, the
-> length-prefixed `kem_id`, and index advance on a rejected seed. **This specification states
-> none of them**: `keygen_seed`, `announce_seed`, `SHAKE256` and `kem_id` appear nowhere in
-> it. A fixture with no normative sentence behind it is the thing §1 of this plan says gets
-> deleted rather than argued about, so it was. Their subject is how a wallet derives many
-> schemes' keys from one master, which is a wallet concern rather than a wire-format one; if
-> it returns to this document, the rows return with it.
-
 | id | claim | given | expect | wrong |
 |---|---|---|---|---|
 | V3-01 | keygen seed is 128 B | 128 B; then 96 B and 127 B | outputs; then errors | accepting schemeId 2's 96-byte seed |
