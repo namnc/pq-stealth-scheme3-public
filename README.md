@@ -4,15 +4,8 @@ Post-quantum stealth addresses for Ethereum: one `schemeId` extending
 [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) with an ML-KEM-768 encapsulation combined
 with a secp256k1 ECDH secret (for implementation risk hedging), one announcement per payment, no protocol change.
 
-The view tag is **one byte**. ML-KEM rejects implicitly, so the KEM never tells a scanner
-whether an announcement is its own — but the announcement carries the `stealthAddress`, and
-§2.4 requires a scanner to compare the address it derives against it. That comparison is local
-and exact, so the tag only has to be a prefilter and the remaining seven bytes buy nothing.
-
-## The rung
-
 A sender pays an address only the recipient can derive. The announcement is public and
-permanent, so it is what an adversary records now and breaks later; this rung closes that
+permanent, so it is what an adversary records now and breaks later; this scheme closes that
 against a quantum adversary. **Spending stays ordinary secp256k1 ECDSA** - the announcement
 layer is post-quantum, the spending is not.
 
@@ -38,8 +31,8 @@ against 28 067 — and is paid every time.
 | `crates/core` | the `StealthScheme` trait |
 | `crates/ec` | secp256k1: SEC1 decoding, ECDH, scalar and point addition, the address |
 | `crates/kem` | ML-KEM-768, over `ml-kem`, checked against NIST's own ACVP cases |
-| `crates/per-payment` | the rung itself |
-| `vectors/` | the fixtures, with `PLAN.md` saying what each row pins and which wrong output it distinguishes |
+| `crates/per-payment` | the scheme itself |
+| `vectors/` | the fixtures saying what each row pins and which wrong output it distinguishes |
 | `harness/` | the gas harnesses: real transactions against a real node, with their receipts |
 | `tools/` | the fixture generator, the size derivation and the gas verifier, each with its self-test |
 | `contracts/` | the ERC-5564 announcer the gas harnesses measure against |
@@ -63,8 +56,7 @@ python3 tools/check_measured.py
 ```
 
 Re-derives every announcement figure from the EIP-7623 calldata rule and binds the rest to the
-committed receipts, with no node needed — so a figure that stops matching fails rather than
-persisting.
+committed receipts, with no node needed.
 
 ## Licence
 

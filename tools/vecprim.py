@@ -5,18 +5,6 @@ tests self-consistency and nothing else, which is why the generator comes ahead 
 cryptography. This module is the other half of that rule: the arithmetic
 the generator needs, written from the standards rather than taken from `crates/`.
 
-WHY IT IS WRITTEN HERE RATHER THAN INSTALLED. Checked against a stock CPython: `hashlib` has
-SHAKE256 and SHA3-256, and **it does not have keccak256** -- `keccak_256` is absent from
-`hashlib.algorithms_available`, and SHA3-256 is a different function, while §2.9's address
-derivation needs keccak. There is no `coincurve`, no `ecdsa`, no `secp256k1`. Adding a
-dependency would trade the standalone property for convenience, and both of these are small
-enough to write and check against published answers.
-
-WHAT IT IS NOT. **Not constant-time, and it must never be described as such.** This generates
-fixtures; it runs on the author's machine against values that are already published in the
-files it writes. A timing side channel here leaks nothing. `crates/pqsa-ec` is where the
-constant-time requirement lives, and copying this arithmetic into it would be a defect.
-
 Not a KEM either. ML-KEM-768 in pure Python is a project rather than a function, and writing
 one would put a second unreviewed KEM in the tree -- so the generator consumes NIST ACVP
 `(ek, m, ct, ss)` tuples instead, which is what the tier-1/tier-2 split already says: tier 1

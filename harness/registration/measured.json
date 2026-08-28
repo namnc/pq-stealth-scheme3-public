@@ -26,41 +26,6 @@
       "meta_address_bytes": 1250,
       "calldata_bytes": 1380,
       "total_gas": 964809
-    },
-    {
-      "name": "schemeId 4 registration",
-      "schemeId": 4,
-      "meta_address_bytes": 1217,
-      "calldata_bytes": 1348,
-      "total_gas": 941838
-    },
-    {
-      "name": "schemeId 5 registration",
-      "schemeId": 5,
-      "meta_address_bytes": 1250,
-      "calldata_bytes": 1380,
-      "total_gas": 964809
-    },
-    {
-      "name": "schemeId 6, category 2 registration",
-      "schemeId": 6,
-      "meta_address_bytes": 4128,
-      "calldata_bytes": 4228,
-      "total_gas": 3008595
-    },
-    {
-      "name": "schemeId 6, category 3 registration",
-      "schemeId": 6,
-      "meta_address_bytes": 5600,
-      "calldata_bytes": 5700,
-      "total_gas": 4064737
-    },
-    {
-      "name": "schemeId 6, category 5 registration",
-      "schemeId": 6,
-      "meta_address_bytes": 7072,
-      "calldata_bytes": 7172,
-      "total_gas": 5120888
     }
   ]
 }

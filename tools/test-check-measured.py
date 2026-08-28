@@ -161,7 +161,7 @@ def main() -> int:
     rc, out = run(real)
     case("a rule-satisfying file passes", rc, 0)
     case("and says every receipt re-derives", "re-derives from EIP-7623" in out, True)
-    case("and reports which rule applied per row", out.count("floor") >= 6, True)
+    case("and reports which rule applied per row", out.count("floor") >= 2, True)
 
     print("\na receipt that does not follow the rule FAILS")
     d = copy.deepcopy(real)
@@ -188,7 +188,7 @@ def main() -> int:
 
     print("\na MISSING row fails -- §7 must not have a silent gap")
     d = copy.deepcopy(real)
-    d["cases"] = [c for c in d["cases"] if c["name"] != "memo (schemeIds 4, 5)"]
+    d["cases"] = [c for c in d["cases"] if c["name"] != "schemeId 3 announcement"]
     rc, out = run(d)
     case("dropping a row exits 1", rc, 1)
     case("and says §6 has the row and nothing measured it",
@@ -399,58 +399,54 @@ def main() -> int:
         return ("## The ladder\n\n"
                 "| schemeId | announcement | gas | state |\n"
                 "|---|---|---|---|\n"
-                f"| **2** | 1 096 B | {a:,} | none |\n"
-                f"| **3** | 1 129 B | {b:,} | none |\n").replace(",", " ")
+                f"| **2** | 1 089 B | {a:,} | none |\n"
+                f"| **3** | 1 122 B | {b:,} | none |\n").replace(",", " ")
     rc, out = run_with_audit(real, ladder(gas2, gas3))
     case("a rightly assigned ladder table passes", rc, 0)
     rc, out = run_with_audit(real, ladder(gas3, gas2))
     case("the README two-row swap is caught", rc, 1)
     case("and both rows are named",
          out.count("assigned to the wrong claim"), 2)
-    # The byte column in the passing table proves its own point: `1 096` matches the
+    # The byte column in the passing table proves its own point: `1 089` matches the
     # figure pattern and is no receipt, and only the header scope keeps it out.
-    memo_tot = next(c["nonzero"]["total_gas"] for c in real["cases"]
-                    if c["name"] == "memo (schemeIds 4, 5)")
+    #
+    # COVERAGE LOST HERE, DELIBERATELY AND NAMED. `check_measured` accepts a receipt whose
+    # NAME covers two schemes -- `memo (schemeIds 4, 5)` was the one -- as vouching for a
+    # row naming either of them. That row left with schemeIds 4 and 5, and `real` is built
+    # from `derive_sizes.SHAPES`, so no fixture in this tree exercises that path any more.
+    # The code for it still runs in `check_measured.py`. Restoring the coverage means either
+    # a receipts fixture independent of SHAPES or removing the multi-scheme-cell path from
+    # the tool; it is recorded rather than left to be noticed as a silent drop.
+    # The borrowing row must name a scheme that HAS receipts. `check_measured` binds only
+    # such contexts -- a context naming a scheme it has never measured stays unbound and
+    # falls back to the membership test, which is deliberate and documented at the binding
+    # check. Pointing this case at an unmeasured scheme would assert a rule the tool does
+    # not claim, and would pass for the wrong reason.
     rc, out = run_with_audit(
-        real, ("| schemeId | memo | gas |\n|---|---|---|\n"
-               f"| **5** | 8 B | {memo_tot:,} |\n").replace(",", " "))
-    case("a receipt naming two schemes vouches for both rows", rc, 0)
-    rc, out = run_with_audit(
-        real, ("| schemeId | first contact | gas |\n|---|---|---|\n"
-               f"| **6** | 1 096 B | {gas2:,} |\n").replace(",", " "))
+        real, ("| schemeId | announcement | gas |\n|---|---|---|\n"
+               f"| **1** | 34 B | {gas2:,} |\n").replace(",", " "))
     case("a scheme's row does not borrow another scheme's receipt", rc, 1)
+    case("and says the figure is not that scheme's",
+         "assigned to the wrong claim" in out, True)
 
     print("\na table is a table in every GFM spelling, and a first cell may name two schemes")
     # GFM permits tables without leading/trailing pipes and inside blockquotes; a
     # swap must be caught in each spelling, not only the fully piped one.
     rc, out = run_with_audit(
         real, ("schemeId | announcement | gas\n---|---|---\n"
-               f"**2** | 1 096 B | {gas3:,}\n**3** | 1 129 B | {gas2:,}\n")
+               f"**2** | 1 089 B | {gas3:,}\n**3** | 1 122 B | {gas2:,}\n")
         .replace(",", " "))
     case("a no-leading-pipe table's swap is caught", rc, 1)
     rc, out = run_with_audit(
         real, ("> | schemeId | announcement | gas |\n> |---|---|---|\n"
-               f"> | **2** | 1 096 B | {gas3:,} |\n> | **3** | 1 129 B | {gas2:,} |\n")
+               f"> | **2** | 1 089 B | {gas3:,} |\n> | **3** | 1 122 B | {gas2:,} |\n")
         .replace(",", " "))
     case("a blockquoted table's swap is caught", rc, 1)
     rc, out = run_with_audit(
         real, ("> | schemeId | announcement | gas |\n> |---|---|---|\n"
-               f"> | **2** | 1 096 B | {gas2:,} |\n> | **3** | 1 129 B | {gas3:,} |\n")
+               f"> | **2** | 1 089 B | {gas2:,} |\n> | **3** | 1 122 B | {gas3:,} |\n")
         .replace(",", " "))
     case("and rightly assigned it passes in that spelling too", rc, 0)
-    # The committed specification's own shape: a first cell naming TWO schemes.
-    gas6 = next(c["nonzero"]["total_gas"] for c in real["cases"]
-                if c["name"] == "schemeId 6 announcement, category 2")
-    mt_s = f"{memo_tot:,}".replace(",", " ")
-    g6_s = f"{gas6:,}".replace(",", " ")
-    rc, out = run_with_audit(
-        real, ("| schemeId | memo | gas |\n|---|---|---|\n"
-               f"| 4, 5 (memo) | 8 B | {mt_s} |\n"))
-    case("a two-scheme first cell binds to both schemes' receipts", rc, 0)
-    rc, out = run_with_audit(
-        real, ("| schemeId | memo | gas |\n|---|---|---|\n"
-               f"| 4, 5 (memo) | 8 B | {g6_s} |\n"))
-    case("and does not borrow a third scheme's receipt", rc, 1)
     # GFM permits an ESCAPED pipe inside a cell; a parser counting raw pipes shifts
     # every later cell, moving the totals out of the gas column and out of the sweep.
     rc, out = run_with_audit(

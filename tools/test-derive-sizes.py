@@ -57,23 +57,10 @@ def main() -> int:
     rc, out = run()
     case("the tool passes as committed", rc, 0)
     case("and says what it does not cover", "does NOT sweep the documents" in out, True)
-    case("it states the FIPS 204 packing widths it derives from",
-         "t1: 10 bits/coeff" in out and "t0: 13 bits/coeff" in out, True)
+    case("it prints the KEM lengths as arithmetic, not as results",
+         "384*3 + 32" in out and "32*(10*3 + 4)" in out, True)
 
-    print("\na quoted figure that disagrees with the derivation")
-    # The defect this whole file exists because of: §4.2 said 3 104 at category 3, which is
-    # the `t1`-only total. If the quoted figure moves, the tool must say so.
-    rc, out = run(("SPEC_META = {2: 4_128, 3: 5_600, 5: 7_072}",
-                   "SPEC_META = {2: 4_128, 3: 3_104, 5: 7_072}"))
-    case("a wrong meta-address figure exits 1", rc, 1)
-    case("and names the category and both numbers",
-         "category 3" in out and "5600" in out and "3104" in out, True)
-
-    rc, out = run(("SPEC_ANNOUNCEMENT = {2: 2_369, 3: 3_009, 5: 3_649}",
-                   "SPEC_ANNOUNCEMENT = {2: 2_369, 3: 3_010, 5: 3_649}"))
-    case("a wrong announcement payload exits 1", rc, 1)
-    case("and names the announcement figure", "3010" in out, True)
-
+    print("\na quoted payload that disagrees with its construction")
     rc, out = run(('"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_089)',
                    '"schemeId 2 announcement":  (CT + VIEW_TAG,                       1_088)'))
     case("a wrong schemeId 2 payload exits 1", rc, 1)
@@ -86,111 +73,76 @@ def main() -> int:
     case("and it is the ANNOUNCE_ERC loop that says so", "derived 1089 != quoted 1088" in out,
          True)
     case("and the SHAPES loop says so too, in its own words",
-         "totals 1089 != §6's 1088" in out, True)
+         "totals 1089 != §5's 1088" in out, True)
+
+    print("\nthe view-tag width is load-bearing, and reaches EVERY payload")
+    # The failure this case exists for actually happened: the width moved in one file and
+    # nothing downstream did. A width that can change while every quoted total still agrees
+    # is a width nothing checks.
+    rc, out = run(("VIEW_TAG = 1  ", "VIEW_TAG = 8  "))
+    case("widening the view tag exits 1", rc, 1)
+    case("and it moves BOTH rungs, not just the one carrying it in metadata",
+         "schemeId 2 announcement" in out and "schemeId 3 announcement" in out, True)
 
     print("\nthe shape table -- (ephemeralPubKey, metadata), not the total")
-    rc, out = run(('    "schemeId 4 first contact": (0,                VIEW_TAG + CT),',
-                   '    "schemeId 4 first contact": (1,                VIEW_TAG + CT),'))
+    rc, out = run(('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),',
+                   '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT + 1),'))
     case("a shape whose fields do not total the quoted payload exits 1", rc, 1)
-    case("and names the shape", "shape (1, 1089) totals 1090" in out, True)
+    case("and names the shape", "shape (33, 1090) totals 1123" in out, True)
 
-    # Two rows sharing a shape is legal and declared; a THIRD collision appearing quietly is
-    # what this catches. §6's note about recognition would go stale and nothing else would say
-    # so, because both rows would still total correctly.
+    # Two rows sharing a shape is legal ONLY if declared; one appearing quietly is what this
+    # catches. §5's recognition rule would go stale and nothing else would say so.
     rc, out = run(('    "schemeId 2 announcement":  (CT,               VIEW_TAG),',
-                   '    "schemeId 2 announcement":  (0,                VIEW_TAG + CT),'))
+                   '    "schemeId 2 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),'))
     case("an undeclared shape collision exits 1", rc, 1)
     case("and names both rows", "UNDECLARED shape collision" in out
-         and "schemeId 4 first contact" in out, True)
+         and "schemeId 3 announcement" in out, True)
 
-    rc, out = run(('DECLARED_SHAPE_COLLISIONS = [("schemeId 3 announcement", "schemeId 5 first contact")]',
-                   'DECLARED_SHAPE_COLLISIONS = [("schemeId 2 announcement", "schemeId 4 first contact")]'))
+    rc, out = run(("DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []",
+                   'DECLARED_SHAPE_COLLISIONS = [("schemeId 2 announcement", '
+                   '"schemeId 3 announcement")]'))
     case("a declared collision that is not one exits 1", rc, 1)
     case("and says the two are not the same shape", "the same shape and they are" in out, True)
 
+    print("\nthe meta-addresses and the registration ratios")
     rc, out = run(('"schemeId 2": (SPENDING_PK + EK,                   1_217)',
                    '"schemeId 2": (SPENDING_PK + EK,                   1_218)'))
-    case("a wrong meta-address for schemeIds 2 to 5 exits 1", rc, 1)
+    case("a wrong meta-address exits 1", rc, 1)
     case("and names it as a meta-address", "meta-address" in out, True)
 
-    print("\nthe registration ratios added with §7's table")
-    # A SELF-CONSISTENT wrong pair: the baseline and the ratio agree with each other and the
-    # baseline is not the largest of schemeIds 2 to 5. This is the classic comparison
-    # defect in miniature —
-    # 5 600 / 1 217 is 4.6, which is arithmetically fine and answers the wrong question.
-    rc, out = run(("LARGEST_2_TO_5 = 1_250", "LARGEST_2_TO_5 = 1_217"),
-                  ('VS_LARGEST_2_TO_5 = "4.5"', 'VS_LARGEST_2_TO_5 = "4.6"'))
-    case("a self-consistent wrong baseline exits 1", rc, 1)
-    case("and the finding says which figure the baseline should have been",
-         "1250" in out and "1217" in out, True)
-
-    rc, out = run(('"6, category 3": (5_600, "84.8")', '"6, category 3": (5_600, "84.9")'))
+    rc, out = run(('"3": (1_250, "18.9")', '"3": (1_250, "18.8")'))
     case("a wrong registration ratio exits 1", rc, 1)
     case("and names the schemeId and both ratios",
-         "6, category 3" in out and "84.8" in out and "84.9" in out, True)
+         "18.9" in out and "18.8" in out, True)
 
-    rc, out = run(("T0_GROWTH_PCT = 80", "T0_GROWTH_PCT = 79"))
-    case("a wrong t0-growth percentage exits 1", rc, 1)
-    case("and names the derived and quoted percentages",
-         "80%" in out and "79%" in out, True)
+    print("\nthe delegation window counts -- (len - 32 + 1), not (len / 32)")
+    # The scan is over the WHOLE delegated object. `96 / 32 = 3` is the wrong answer that
+    # placed the spending seed verbatim in the bytes handed to a scanning service.
+    rc, out = run(("(96 - SCALAR + 1, 65)", "(96 // SCALAR, 65)"))
+    case("a per-32-byte-block window count exits 1", rc, 1)
+    case("and names the window count", "windows" in out, True)
 
-    print("\nthe reference implementation's constants are asserted, not trusted")
-    rc, out = run(("SPIRIT_POC_POLYT0_PACKEDBYTES = 416",
-                   "SPIRIT_POC_POLYT0_PACKEDBYTES = 417"))
-    case("a disagreeing implementation constant exits 1", rc, 1)
-    case("and says which constant", "POLYT0" in out or "t0" in out, True)
-
-    print("\nthe withdrawn figures are reproduced, so the defect stays falsifiable")
-    rc, out = run(("SUPERSEDED_META = {2: 2_464, 3: 3_104, 5: 3_744}",
-                   "SUPERSEDED_META = {2: 2_464, 3: 3_105, 5: 3_744}"))
-    case("a withdrawn figure that is not the t1-only total exits 1", rc, 1)
-    case("and shows the arithmetic it failed to reproduce",
-         "3104" in out or "3105" in out, True)
-
-    print("\nthe derivation side")
-    # If the sum stops including t0, the corrected figures stop being reachable -- which is
-    # the original defect, reintroduced. The tool must fail rather than agree with itself.
-    rc, out = run(("        total = t1 + t0 + EK", "        total = t1 + EK"))
-    case("dropping t0 from the sum exits 1", rc, 1)
-    case("and the failure is on the meta-address, not the announcement",
-         "meta-address" in out or "category 3" in out, True)
-
-    # The formula must agree with the implementation constant it is checked against, and
-    # that cross-check is the only thing distinguishing "derived" from "copied" here.
+    print("\nthe derivation side -- formulas, not copied constants")
+    # The formula must agree with FIPS 203's stated length, and that cross-check is the only
+    # thing distinguishing "derived" from "copied" here.
     rc, out = run(("EK = 384 * MLKEM_768_K + 32", "EK = 384 * MLKEM_768_K + 33"))
-    case("a KEM key length disagreeing with the implementation exits 1", rc, 1)
+    case("a KEM key length disagreeing with FIPS 203 exits 1", rc, 1)
     case("and names both lengths", "1185" in out and "1184" in out, True)
 
-    # A prior form of the case here substituted the literal 10 for `Q_BITS - D` and
-    # assert exit 0, which proves nothing about the "derived from FIPS 204" claim and READS
-    # as coverage of it. Substituting an equal value is inert. What is testable is that the
-    # FIPS PARAMETERS are load-bearing: change one and every total must move.
-    rc, out = run(("D = 13", "D = 12"))
-    case("changing FIPS 204's d exits 1", rc, 1)
-    case("and the failure is on the meta-address totals",
-         "meta-address" in out or "category 3" in out, True)
-    # Isolating: `d` must reach BOTH widths. `t1` is `Q_BITS - d` so it moves either way,
-    # but `t0` is `d` itself — and a hardcoded `T0_BITS_PER_COEFF = 13` is inert against
-    # every assertion above, because the totals move on `t1` alone.
-    case("and d reaches t0's width, not only t1's",
-         "12 bits/coeff x 256 = 384 B/poly" in out, True)
+    rc, out = run(("CT = 32 * (MLKEM_768_DU * MLKEM_768_K + MLKEM_768_DV)",
+                   "CT = 32 * (MLKEM_768_DU * MLKEM_768_K + MLKEM_768_DV) + 1"))
+    case("a ciphertext length disagreeing with FIPS 203 exits 1", rc, 1)
+    case("and names both lengths", "1089" in out and "1088" in out, True)
 
-    rc, out = run(("Q = 8_380_417", "Q = 4_190_209"))
-    case("changing FIPS 204's q exits 1", rc, 1)
-    case("and it moves t1's width, which the output prints",
-         "bits/coeff" in out, True)
-
+    # FIPS 203's parameters must be load-bearing: change one and the lengths must move.
     rc, out = run(("MLKEM_768_K = 3", "MLKEM_768_K = 2"))
     case("changing FIPS 203's k exits 1", rc, 1)
     case("and the failure names the KEM key length", "1184" in out or "ek" in out, True)
 
-    # The widths are printed as arithmetic, so a reader can check them against FIPS 204
-    # Table 1 without running anything -- which is the only defence against a derivation that
-    # is wrong in the same way its cross-check is.
-    rc, out = run()
-    case("the packing widths print as arithmetic, not as results",
-         "10 bits/coeff x 256 = 320 B/poly" in out
-         and "13 bits/coeff x 256 = 416 B/poly" in out, True)
+    rc, out = run(("MLKEM_768_DU = 10", "MLKEM_768_DU = 11"))
+    case("changing FIPS 203's du exits 1", rc, 1)
+    case("and it moves the ciphertext, which every payload is built on",
+         "1088" in out, True)
 
     print()
     if FAILED:

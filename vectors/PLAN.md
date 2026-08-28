@@ -16,15 +16,7 @@ Every vector is a JSON object with six fields. The last one is the reason this f
 }
 ```
 
-- **`claim`** quotes the normative sentence. A vector with no sentence behind it is a
-  vector somebody invented, and it gets deleted rather than argued about.
-- **`wrong`** is the discriminating half. A test that cannot say what failure looks like
-  cannot distinguish a passing implementation from an untested one — the same gate the
-  crates are held to, applied to fixtures.
-
-**Almost every `wrong` below is a defect that actually happened**, in this project or in
-its reference implementations. That is the honest summary of what this vector set is: the
-project's own findings, turned into fixtures a third implementer inherits for free.
+**`claim`** quotes the normative sentence and **`wrong`** is the discriminating half.
 
 ### Two tiers
 
@@ -36,12 +28,6 @@ project's own findings, turned into fixtures a third implementer inherits for fr
 Tier 2 needs only **SHA3-256**, SHA-256, HKDF-SHA256, secp256k1 and keccak-256. **No
 lattice arithmetic**, which is exactly why it can be written before any of this is
 implemented.
-
-> **`SHA3-256` is in this list deliberately.** The shared-secret and
-> channel-key combiners are direct `SHA3-256` hashes, and `SHA3-256` is
-> **not** `keccak-256` — different padding, different digest for the same input. A generator
-> that reads `keccak-256` here cannot produce `V3-05`, `V3-06` or `V4-01` at all.
-> `HKDF-SHA256` stays, because `keygen_seed` still uses it.
 
 ---
 
@@ -57,7 +43,7 @@ implemented.
 | V1-06 | the counter byte is a single byte appended | a `base` forced to counter 1 | a pinned 32-byte output | `u32` or `u64` counter encoding; ASCII `"1"` |
 | V1-07 | `view_tag = SHA256(DS_viewtag ‖ ss)[0]` | a fixed `ss` | one byte | **the superseded eight-byte width**, `[0..8]`, which matches nothing a conforming sender emits; taking `[31]` instead of `[0]`; or the leading byte of `H(ss)` instead of a separate digest |
 
-## 3. §2 — schemeId 2
+## 3. §2 — schemeId 2 (ML-KEM)
 
 | id | claim | given | expect | wrong |
 |---|---|---|---|---|
@@ -75,7 +61,7 @@ implemented.
 | V2-12 | malformed `ct` → **skip at the entry point** | `ct` of 1 087, 0 and 1 089 bytes | not mine, no error, ×3 | an error. Both references are layered so the entry point converts it; an implementation exposing the inner routine as its scanning API inherits the wrong behaviour |
 | V2-13 | the derived key controls the derived address | the vector above | `spend_key_controls` true, **as a key-to-address relation** | asserting only that bytes were produced — a derivation can be self-consistent and wrong |
 
-## 4. §2.9 — schemeId 3
+## 4. §2.9 — schemeId 3 (hedged EC half)
 
 Everything in §3 above applies. These are the additions.
 
@@ -91,37 +77,10 @@ Everything in §3 above applies. These are the additions.
 | V3-06a | `ct` is bound in | two announcements with the same `epk` and `ss_ec` but different `ct` | different `ss` | the same `ss` — the case SP 800-227 section 4.6.3's argument turns on |
 | V3-06b | `viewing_pk_ec` is bound in | the same `ss_ec` reached against two recipients' registered keys | different `ss` | the same `ss`, which is the identity binding absent from the old IKM |
 | V3-07 | `epk` MUST be bound in | the same first contact with the parity byte flipped `0x02`↔`0x03` | a **different** `ss` | the same `ss` — the flipped point has the same x-coordinate, so without `epk` in the IKM this is a replay with a different-looking announcement |
-| V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 089 in `metadata`, 1 122 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]`. **This shape is byte-identical to a schemeId 5 first contact** — §6 declares the collision, so a fixture asserting the two differ would assert the reversed order |
+| V3-08 | wire shape | the sender above | `epk` 33 in `ephemeralPubKey`, **`view_tag ‖ ct`** 1 089 in `metadata`, 1 122 B | §2's field convention, which this variant does not use; **or the reversed field order**, which puts the view tag at `metadata[1088]` — the same length as the right answer, so no length check distinguishes it |
 | V3-08a | the view tag is `metadata[0]` | a real payment, and a foreign announcement | matched; skipped | comparing against the first byte of `ct` — a scanner that agrees 1 time in 256 by coincidence, so it misses most payments to it and finds the occasional one. An intermittent fault, and harder to chase than a clean empty scan |
 
-> **V3-05 and V3-06 are marked `provisional` in the generated files.** §2.9's domain separator
-> string is new in this document and **no outside implementation has adopted it** — this project's
-> own implementation produces these bytes and the blinded re-derivation agreed on them, and neither
-> is an outside party. (An implementation in this repository producing these bytes does
-> not change that.) §3's
-> equivalent parameters were discovered *after* two implementations already matched; these
-> have nothing to match yet. The vector is what turns the proposal into the specification,
-> so the flag comes off when the author confirms the string.
->
-> **`V3-05` does not mention a salt.** A direct hash has no salt, and §3.3 item 2
-> says in terms that the absent-salt requirement was *replaced* by the domain-separator
-> rule rather than answered. This note called the same string an `info` parameter for the
-> same reason. A fixture generated from either would have tested a parameter that does not
-> exist, which is worse than a missing vector: it would pass.
-
 ## 6a. §5 — seed derivation
-
-Three rules here would otherwise have no vectors because §5 is where their specification lives.
-
-> **The fourth row earns its place.** §5 specifies
-> *two* derivations — the keygen seed and the **announce seed** — and a suite where only
-> the keygen half has a row leaves the announce half a derivation nothing can disagree
-> with. The two ways it goes wrong while every constant is quoted correctly: the index
-> appended last where §5 puts it immediately after `master`, and `kem_id` absent entirely.
->
-> `V6-05` below is that fixture, and it pins the field ORDER — exactly the thing a
-> string-shape gate cannot catch, because every constant involved can be quoted from
-> the specification correctly and still assembled in the wrong order.
 
 | id | claim | given | expect | wrong |
 |---|---|---|---|---|
@@ -138,5 +97,3 @@ Three rules here would otherwise have no vectors because §5 is where their spec
    nothing from this repository.** Emits one JSON file per section plus a manifest with a
    sha256 per file.
 2. `vectors/*.json` — the sets above, committed.
-3. a directory note beside them, where a tree carries one — what each file pins, and the
-   tier-1 vendoring pointer.
