@@ -16,18 +16,12 @@ Every vector is a JSON object with six fields. The last one is the reason this f
 }
 ```
 
-**`claim`** quotes the normative sentence and **`wrong`** is the discriminating half.
-
 ### Two tiers
 
 | tier | covers | oracle | who generates it |
 |---|---|---|---|
 | 1 | ML-KEM-768 itself | **FIPS 203 / NIST ACVP** | nobody — vendored at a pinned commit |
 | 2 | **everything below** | the specification text | a standalone generator, no project code |
-
-Tier 2 needs only **SHA3-256**, SHA-256, HKDF-SHA256, secp256k1 and keccak-256. **No
-lattice arithmetic**, which is exactly why it can be written before any of this is
-implemented.
 
 ---
 
