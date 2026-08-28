@@ -1,9 +1,5 @@
 # `announcement` — what one ERC-5564 announcement actually costs
 
-**The harness lives beside the figures it generates, deliberately.** A number whose
-generator lives in a tree the release cannot reference is unfalsifiable to the reader who
-has only the release; the rule here is the number and its harness together, and they are.
-
 Not a Foundry project. It drives `anvil` and `cast` directly, because **the thing being measured
 cannot be observed from inside a Foundry test**:
 
@@ -28,33 +24,10 @@ python3 measure.py --rpc-url URL  # against an already-running node
 
 Needs `anvil`, `cast` and `forge` on PATH. Exits 1 if any self-check fails.
 
-## The announcer is BUILT here, so the toolchain is part of the measurement
-
-`harness/registration` measures the ERC-6538 registry's **deployed** bytecode, read off
-mainnet, so no compiler setting can reach its figures. This harness has no such object to read:
-ERC-5564's announcer is compiled from `contracts/` and deployed to anvil, which means execution
-gas moves with solc and its optimizer — and the classical baseline is the one row the EIP-7623
-floor does not cover, so a shift there lands squarely on the published ratio.
-
-So `measure.py` pins the compiler version, the optimizer settings and solc's target EVM,
-**asserts what the build actually used rather than what `foundry.toml` declares**, and refuses
-to measure on a mismatch. The receipt names the toolchain beside the hardfork. What the
-optimizer alone is worth is measured rather than guessed, and recorded in `measure.py` beside
-the constants it justifies.
-
 ## The field lengths are READ, not retyped
 
 `CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203
 rather than from any constant that produced it, and asserts them against §6.
-
-**The payload table is DERIVED from §6's wire model rather than hand-listed, and that
-choice is load-bearing**: a hand-maintained list here can carry superseded scheme ids and a
-superseded view-tag width while looking complete — a defect class this project has met
-repeatedly — where a derived table moves the moment the wire model does.
-
-Reading the lengths from the size harness means a wire change cannot leave the gas figures
-measuring a payload the document no longer specifies — the failure mode this coupling
-exists to prevent.
 
 ## Two numbers, and how each is obtained
 
@@ -64,20 +37,8 @@ exists to prevent.
 2. **`execution`** — not directly observable when the floor binds, because the transaction then
    pays `21000 + 10·tokens` regardless of what the EVM did.
 
-   Recovered with a probe: the same call with an **all-zero** payload of the same length.
-   Execution gas is a function of calldata *length* (LOG data is 8/byte regardless; memory
-   expansion and `CALLDATACOPY` are length-driven) while the EIP-7623 token count is not — a
-   zero byte is 1 token, a nonzero byte is 4. So the zero variant escapes the floor and exposes
-   execution at identical execution cost.
-
-   **That is an assumption, so it is validated rather than asserted.** On the schemes where the
-   floor binds on neither variant, execution is recoverable from both and the two must agree
-   exactly. The self-check fails if they do not.
-
 ## What the self-check covers
 
-* the zero probe escapes the floor on every row — otherwise it teaches nothing;
-* where execution is recoverable twice, the two agree exactly;
 * **every receipt re-derives from the EIP-7623 rule**: `max(21000 + 4·tokens + execution,
   21000 + 10·tokens)` must equal what the node reported;
 * every measured payload length equals the length §6 specifies for that row, asserted against
@@ -89,7 +50,3 @@ exists to prevent.
 §6's field lengths. No Foundry, no anvil, no network — run it after any wire change
 (`python3 tools/check_measured.py`), and a figure that stopped matching its
 payload fails, while the measurement itself stays a deliberate local act.
-
-That split is the point. Running the harness routinely would make the numbers a side effect
-of a build; CHECKING them routinely makes a stale number a failure — the check costs
-arithmetic, the measurement costs a node.
