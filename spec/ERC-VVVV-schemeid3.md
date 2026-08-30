@@ -183,7 +183,7 @@ first use; an implementation MUST NOT assume a well-formed length implies a well
 #### 2.3 Registration
 
 A recipient MUST register the encoded meta-address via ERC-6538 `registerKeys` with
-`schemeId` 3. **A recipient MAY register several `schemeId`s, per Section 6**, and a scanner MUST
+`schemeId` 3. **A recipient MAY register several `schemeId`s**, and a scanner MUST
 use the set the recipient registered and MUST NOT process an announcement carrying any
 `schemeId` outside it.
 
@@ -219,7 +219,7 @@ address     = keccak256(uncompressed(stealth_pk) without its 0x04 prefix)[12..32
 Encapsulation MUST be deterministic in `encap_seed`, so that a vector fixing `(ek, m)` fixes
 `ct` and `ss_pq`. The sender then:
 
-1. publishes the announcement of Section 5 -- `epk` in `ephemeralPubKey`, the 1 089 bytes
+1. publishes the announcement of -- `epk` in `ephemeralPubKey`, the 1 089 bytes
    `view_tag(ss) || ct` in `metadata`; and
 2. pays `address`.
 
@@ -232,7 +232,7 @@ recipient's `spending_sk` is the other addend.
 #### 2.5 Scanner
 
 Given the tracking key, the meta-address, and an announcement already classified as schemeId
-3 per Section 6:
+3:
 
 ```
 ss_ec <- x-coordinate of ECDH(viewing_ec, epk)
@@ -258,14 +258,14 @@ stealth_sk = (spending_sk + H(ss)) mod n
 `spending_sk = stealth_sk - H(ss) mod n`. Implementations MUST NOT disclose both for the same
 payment, and MUST NOT treat a one-time key as low-value on the grounds that it controls one
 address. In particular a scanning service already holds every `ss`, so handing it any
-one-time key hands it the master. Section 7 carries the general treatment.
+one-time key hands it the master.
 
 #### 2.7 What is an error and what is a skip
 
 | condition | scanner behaviour |
 |---|---|
 | `schemeId` != registered | skip |
-| field lengths match no Section 6 row | skip |
+| field lengths match no Section 3 row | skip |
 | `epk` malformed or not a curve point | skip |
 | `ct` malformed, `ek` malformed | skip |
 | view-tag mismatch | skip |
@@ -276,7 +276,7 @@ one-time key hands it the master. Section 7 carries the general treatment.
 | spending scalar found in delegated material | error, at keygen |
 | meta-address length != 1 250, or either point not a point | error, at decode |
 
-### 5. Wire formats and registry
+### 3. Wire formats and registry
 
 Announcements MUST use ERC-5564's `announce()` unchanged. Meta-addresses MUST be registered
 via ERC-6538 `registerKeys` with the matching `schemeId`.
@@ -287,7 +287,7 @@ via ERC-6538 `registerKeys` with the matching `schemeId`.
 3. **`ephemeralPubKey` MUST carry exactly `epk`**, and an implementation MUST NOT swap the
    two ERC-5564 fields.
    
-### 6. Cost
+### 4. Cost
 
 Announcement cost, measured as **real standalone transactions** against the real ERC-5564
 interface on anvil (`--hardfork prague`), with `gasUsed` read off the receipt. These are
@@ -334,7 +334,7 @@ it with the derived key -- and commits the receipts at `harness/payment/measured
 other asset**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
 neither is measured by this harness, and neither figure is quoted anywhere in this document.
 
-### 7. Security considerations
+### 5. Security considerations
 
 **KEM anonymity is REQUIRED.** The public
 ERC-6538 registry gives an adversary every candidate encapsulation key, so a ciphertext
@@ -385,7 +385,7 @@ list being empty *is* the claim. `vectors/PLAN.md` maps each row to the sentence
 `crates/kem`, `crates/ec` and `crates/core`. Those four crates are the closure of this scheme's
 dependencies: nothing else is needed to derive a key, build an announcement or scan for one.
 
-The announcement-gas harness that produced Section 6's measured row is `harness/announcement/`,
+The announcement-gas harness that produced Section 4's measured row is `harness/announcement/`,
 `harness/registration/` measures the registration row, and `harness/payment/` measures all
 three transactions of a payment against a local node.
 
