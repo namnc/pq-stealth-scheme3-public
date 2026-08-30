@@ -1,24 +1,19 @@
-# `registration` — the one-time ERC-6538 `registerKeys` call, priced
+# `registration`
 
-For precision, the measured object is the
-**canonical ERC-6538 registry's deployed runtime bytecode** — read off Ethereum mainnet
-at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` with `eth_getCode`, committed as
-[`deployed_bytecode.hex`](deployed_bytecode.hex), SHA-256-pinned in `measure.py` and
-checked at every run — installed into anvil with `anvil_setCode`.
-
-## Run
+First-time `registerKeys(uint256,bytes)` against the canonical ERC-6538 registry at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538`.
+Runtime bytecode is committed as `deployed_bytecode.hex`, SHA-256 checked, installed on a fresh Prague Anvil, and read back.
 
 ```bash
-python3 harness/registration/measure.py           # boots its own anvil, prints the table
-python3 harness/registration/measure.py --json    # rewrites measured.json
+python3 harness/bench.py registration --check
+python3 harness/bench.py registration --update
 ```
 
-<!-- gas-external: 20 000 is EIP-2200's SSTORE_SET_GAS, a protocol constant, not a receipt -->
-Requires `anvil` and `cast` (Foundry) on PATH. The self-check asserts every payload
-length against the size model and that every figure is large enough to have actually
-stored its slots (a first registration cannot cost less than 20 000 gas per fresh slot
-touched); `--json` refuses to write receipts that fail it.
+`python3 harness/registration/measure.py` accepts the same flags.
 
-The conventions that move these figures -- a first registration with a fresh registrant per
-row, an all-nonzero payload and the upper bound that implies, the pinned Prague fork -- are
-stated in `measure.py` at the point each one is applied.
+Each case uses a different funded caller. Upper-bound cases use all-nonzero meta-address bytes. `scheme3_real_sample` registers the shared Rust meta-address.
+
+`stealthMetaAddressOf(caller, schemeId)` is empty before the transaction and equals the submitted bytes after.
+
+Field lengths come from `tools/derive_sizes.py`. Calldata length is checked against the ABI encoding.
+
+Requires `anvil` and `cast`.

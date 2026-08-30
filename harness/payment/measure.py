@@ -1,347 +1,172 @@
 #!/usr/bin/env python3
-"""What a whole stealth payment costs: announce, fund, spend.
+"""Live end-to-end native-ETH stealth payment gas benchmark."""
 
-    python3 measure.py                # boots its own anvil, prints the table
-    python3 measure.py --json         # rewrites measured.json
-    python3 measure.py --rpc-url URL  # against an already-running node
-
-Needs `anvil`, `cast` and `forge` on PATH, and `cargo`. Reads `payment.json` from this
-directory; it derives nothing itself. Exits 1 if any self-check fails.
-
-WHAT EACH CONVENTION IS AND WHY IT MOVES THE NUMBER IS STATED HERE, at the point the
-convention is applied, and is deliberately NOT repeated in `README.md`. It used to be in
-both places: the two copies drifted, and every stale claim this directory has carried was
-carried twice. One home, and this is it -- the reader who needs a convention is reading
-the code that applies it.
-"""
 from __future__ import annotations
 
-import json
-import os
-import signal
-import socket
-import subprocess
-import sys
-import time
 from pathlib import Path
+import sys
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
-CONTRACTS = ROOT / "contracts"
-INPUT = HERE / "payment.json"
-OUT = HERE / "measured.json"
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-# THE DEMONSTRATION SEED -- what produced the committed receipts, stated rather than labelled.
-#
-# `measured.json` records `"input_seed": "unstated"`, because the emitter writes no
-# `seed_label` -- and a label would not be a seed anyway. The committed figures are
-# falsifiable only if a second party can produce the same input, so here is all of it: three
-# constants and one counter, with no file to obtain.
-#
-#     keygen seed      seed[i] = (i * 7 + 3) mod 256,  i in 0..128
-#     sender master    [0x5a; 32]
-#     sender counter   0, the first draw
-#
-# Feed the keygen seed to `keygen`, resume a sender at that master and counter, draw one
-# announce seed, and announce. `crates/per-payment/examples/emit_payment_json.rs` is exactly
-# those steps and takes no argument, which is what keeps this reproducible.
-#
-# THIS MATTERS MORE THAN IT LOOKS. Under EIP-7623 the announcement figure depends on the
-# ciphertext's ZERO-BYTE COUNT, so a different seed gives a different `ct` and a different
-# number. A reader who regenerates from a seed of their own and compares against the
-# committed 69 300 announce / 111 300 total will conclude the receipt is wrong when nothing
-# is wrong with it.
-
-# anvil's first dev account. The funder, and nothing else.
-DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-# Its address, and the destination of every spend.
-#
-# An EOA, deliberately. A spend sent to the ANNOUNCER contract instead -- which has no
-# `receive` -- is mined (signed by the derived key, `from` the derived address, 21 000 gas
-# charged) and then REVERTS. `cast` reports failure and a harness reads it as "the key does
-# not work", which is wrong in the most misleading possible direction: the signature is
-# valid and the account pays, and the only thing wrong is the recipient.
-#
-# Worth the paragraph because a reverted spend and an unspendable address look identical from a
-# non-zero exit code, and this harness exists to tell them apart.
-DEV_ADDR = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-INTRINSIC = 21_000
+from harness.erc5564 import (  # noqa: E402
+    ANNOUNCER,
+    ANNOUNCER_SHA256,
+    install_announcer,
+    send_announcement,
+)
+from harness.evm import (  # noqa: E402
+    Anvil,
+    DEV_ADDRESS,
+    DEV_KEY,
+    HARDFORK,
+    gas_used,
+    quantity,
+    require_route,
+    rpc,
+    run,
+    send,
+)
+from harness.runner import Benchmark, Context, main_one  # noqa: E402
+from tools import derive_sizes  # noqa: E402
 
 
-def run(cmd, **kw):
-    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw).stdout
+OUT = Path(__file__).resolve().parent / "measured.json"
+FUND_VALUE = 10**18
+SPEND_VALUE = 5 * 10**17
 
 
-def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-class Node:
-    """A pinned anvil, or an already-running node.
-
-    Pinned to Prague for the same reason the announcement harness is: EIP-7623 arrived with it,
-    and leaving the fork to anvil's default would silently reprice everything on a toolchain bump.
-    """
-
-    def __init__(self, rpc_url=None):
-        self.proc = None
-        if rpc_url:
-            self.url = rpc_url
-            return
-        port = free_port()
-        self.url = f"http://127.0.0.1:{port}"
-        self.proc = subprocess.Popen(
-            ["anvil", "--hardfork", "prague", "--port", str(port), "--silent"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid,
-        )
-        for _ in range(100):
-            try:
-                run(["cast", "block-number", "--rpc-url", self.url])
-                return
-            except subprocess.CalledProcessError:
-                time.sleep(0.1)
-        raise RuntimeError("anvil did not come up")
-
-    def close(self):
-        if self.proc:
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-            self.proc.wait()
-
-
-def deploy(url):
-    bytecode = run(
-        ["forge", "inspect", "ERC5564Announcer", "bytecode", "--root", str(CONTRACTS)]
+def _address(private_key: bytes) -> str:
+    return run(
+        [
+            "cast",
+            "wallet",
+            "address",
+            "--private-key",
+            "0x" + private_key.hex(),
+        ]
     ).strip()
-    out = run(["cast", "send", "--rpc-url", url, "--private-key", DEV_KEY,
-               "--create", bytecode, "--json"])
-    return json.loads(out)["contractAddress"]
 
 
-def gas_of(receipt_json: str) -> int:
-    return int(json.loads(receipt_json)["gasUsed"], 16)
+def _balance(url: str, address: str) -> int:
+    return quantity(rpc(url, "eth_getBalance", [address, "latest"]))
 
 
-def announce(url, announcer, scheme_id, address, epk, metadata):
-    calldata = run(["cast", "calldata",
-                    "announce(uint256,address,bytes,bytes)",
-                    str(scheme_id), address, epk, metadata]).strip()
-    return gas_of(run(["cast", "send", "--rpc-url", url, "--private-key", DEV_KEY,
-                       "--json", announcer, calldata]))
+def _require_eoa(url: str, address: str, label: str) -> None:
+    if rpc(url, "eth_getCode", [address, "latest"]) != "0x":
+        raise RuntimeError(f"{label} {address} is not an EOA")
 
 
-def fund(url, address, wei):
-    return gas_of(run(["cast", "send", "--rpc-url", url, "--private-key", DEV_KEY,
-                       "--json", "--value", str(wei), address]))
+def _announcement_calldata_bytes() -> int:
+    epk_bytes, metadata_bytes = derive_sizes.SHAPES["schemeId 3 announcement"]
+    return (
+        4
+        + 4 * 32
+        + 32
+        + 32 * ((epk_bytes + 31) // 32)
+        + 32
+        + 32 * ((metadata_bytes + 31) // 32)
+    )
 
 
-def spend(url, spend_key, to, wei):
-    """A send FROM the derived address, signed with the derived key.
+def collect(context: Context) -> dict:
+    """Generate and execute one real Scheme 3 announcement, fund, and spend."""
+    fixture = context.fixture
+    stealth_address = "0x" + fixture.stealth_address.hex()
+    spend_key = "0x" + fixture.spend_key.hex()
+    if _address(fixture.spend_key).lower() != stealth_address.lower():
+        raise RuntimeError("fixture spend key does not control the stealth address")
 
-    This is the assertion, not the measurement. If the key does not control the address, `cast`
-    fails here -- and it fails against an EVM's own signature recovery rather than against a
-    reimplementation of it in this file.
+    with Anvil() as node:
+        install_announcer(node.url)
+        _require_eoa(node.url, DEV_ADDRESS, "spend destination")
+        _require_eoa(node.url, stealth_address, "stealth address")
+        if _balance(node.url, stealth_address) != 0:
+            raise RuntimeError("stealth address did not start empty")
 
-    **The receipt's status is checked, not just the exit code.** A transaction can be mined,
-    signed correctly, charged for, and still revert; that is what happened when the destination
-    was a contract with no `receive`, and it is indistinguishable from an unspendable address if
-    only the exit code is read.
-    """
-    out = run(["cast", "send", "--rpc-url", url, "--private-key", spend_key,
-               "--json", "--value", str(wei), to])
-    receipt = json.loads(out)
-    if int(receipt["status"], 16) != 1:
-        raise RuntimeError(
-            f"the spend was mined and REVERTED (status {receipt['status']}), from "
-            f"{receipt.get('from')} to {receipt.get('to')}. The signature was accepted -- the "
-            f"key controls the address -- so this is the DESTINATION refusing the value, not a "
-            f"derivation defect."
+        announce_receipt, calldata = send_announcement(
+            node.url,
+            fixture.scheme_id,
+            stealth_address,
+            "0x" + fixture.epk.hex(),
+            "0x" + fixture.metadata.hex(),
         )
-    return gas_of(out)
+        calldata_bytes = bytes.fromhex(calldata.removeprefix("0x"))
+        if len(calldata_bytes) != _announcement_calldata_bytes():
+            raise RuntimeError("announcement transaction has the wrong calldata shape")
+        fund_receipt = send(
+            node.url, DEV_KEY, "--value", str(FUND_VALUE), stealth_address
+        )
+        require_route(fund_receipt, DEV_ADDRESS, stealth_address, "fund")
+        if _balance(node.url, stealth_address) != FUND_VALUE:
+            raise RuntimeError("fund transaction transferred the wrong value")
+
+        destination_before = _balance(node.url, DEV_ADDRESS)
+        spend_receipt = send(
+            node.url,
+            spend_key,
+            "--value",
+            str(SPEND_VALUE),
+            DEV_ADDRESS,
+        )
+        require_route(spend_receipt, stealth_address, DEV_ADDRESS, "spend")
+        spend_gas = gas_used(spend_receipt)
+        effective_price = quantity(spend_receipt.get("effectiveGasPrice"))
+        if _balance(node.url, DEV_ADDRESS) - destination_before != SPEND_VALUE:
+            raise RuntimeError("spend transaction transferred the wrong value")
+        expected_remainder = FUND_VALUE - SPEND_VALUE - spend_gas * effective_price
+        if _balance(node.url, stealth_address) != expected_remainder:
+            raise RuntimeError("stealth balance does not account for value and fee")
+
+    return {
+        "schema_version": 1,
+        "benchmark": "payment",
+        "environment": {
+            "hardfork": HARDFORK,
+            "announcer_address": ANNOUNCER,
+            "announcer_code_sha256": ANNOUNCER_SHA256,
+        },
+        "fixture": {
+            "name": fixture.name,
+            "sha256": fixture.sha256,
+        },
+        "results": [
+            {
+                "name": "scheme3_real_sample",
+                "scheme_id": fixture.scheme_id,
+                "kind": "real_sample",
+                "transactions": {
+                    "announce": {
+                        "calldata_bytes": len(calldata_bytes),
+                        "zero_bytes": calldata_bytes.count(0),
+                        "gas_used": gas_used(announce_receipt),
+                    },
+                    "fund": {"gas_used": gas_used(fund_receipt)},
+                    "spend": {"gas_used": spend_gas},
+                },
+            }
+        ],
+    }
 
 
-def cases():
-    if not INPUT.is_file():
-        print(f"usage error: no {INPUT.name}. Produce it from the reference implementation, "
-              f"from the repository root: `cargo run -q --example emit_payment_json "
-              f"-p pqsa-per-payment > harness/payment/{INPUT.name}`. It takes no argument -- "
-              f"the demonstration seed is compiled into it, and is restated in full under THE "
-              f"DEMONSTRATION SEED at the top of this file so the committed receipts can be "
-              f"reproduced. The schema it writes is the one validated below, before anything "
-              f"is spent.",
-              file=sys.stderr)
-        raise SystemExit(2)
-    body = json.loads(INPUT.read_text())
-    got = body.get("cases")
-    if not got:
-        print(f"usage error: {INPUT.name} has no `cases`", file=sys.stderr)
-        raise SystemExit(2)
-
-    # THE SCHEMA, checked here rather than promised anywhere else. `stealth_address` is the
-    # address Section 2.4 derives, `spend_key` the scalar Section 2.6 derives for it, and
-    # `epk_field` and `metadata` the two ERC-5564 payloads exactly as Section 6's wire table
-    # gives them for that `schemeId`. A non-empty
-    # `cases` array is not validation: the announcer accepts arbitrary bytes, so a malformed
-    # wire shape reaches it and produces a measurement stamped `"self_check": "pass"`. A harness
-    # that measures the wrong shape and reports success is worse than one that refuses to run.
-    #
-    # Widths come from §6's wire table for the scheme named in the case, so a payload of the wrong
-    # length for its own `schemeId` fails here rather than being priced.
-    #
-    # **The table stays keyed by `schemeId` although one scheme ships**, because what a scheme
-    # puts in each of the two fields is its own choice and not a property of the widths: schemeId
-    # 3 carries the EC ephemeral point in `ephemeralPubKey` and `view_tag ‖ ct` in `metadata`,
-    # and a scheme that carried a KEM ciphertext in `ephemeralPubKey` instead would total within
-    # 33 bytes of it. A key on the widths alone would accept either as the other. The KEM-only
-    # scheme that made this concrete left with the export; the key is what remains of it, and it
-    # is the part worth keeping.
-    # The pair below is read off §6's wire table, and this harness needs a node -- so
-    # `cargo test` is silent about it and only a real run against a node is evidence.
-    WIRE = {3: (33, 1089)}
-    for i, c in enumerate(got):
-        where = f"{INPUT.name} case {i}"
-        missing = [k for k in ("scheme_id", "stealth_address", "spend_key", "epk_field",
-                               "metadata") if k not in c]
-        if missing:
-            print(f"usage error: {where} is missing {', '.join(missing)}", file=sys.stderr)
-            raise SystemExit(2)
-        sid = c["scheme_id"]
-        if sid not in WIRE:
-            print(f"usage error: {where} names schemeId {sid}, and this harness prices the "
-                  f"per-payment schemes {sorted(WIRE)}", file=sys.stderr)
-            raise SystemExit(2)
-        for field, want in (("stealth_address", 20), ("spend_key", 32),
-                            ("epk_field", WIRE[sid][0]), ("metadata", WIRE[sid][1])):
-            v = c[field]
-            if not isinstance(v, str) or not v.startswith("0x"):
-                print(f"usage error: {where} field `{field}` is not a 0x-prefixed hex string",
-                      file=sys.stderr)
-                raise SystemExit(2)
-            try:
-                raw = bytes.fromhex(v[2:])
-            except ValueError:
-                print(f"usage error: {where} field `{field}` is not valid hex", file=sys.stderr)
-                raise SystemExit(2)
-            if len(raw) != want:
-                print(f"usage error: {where} field `{field}` is {len(raw)} bytes and schemeId "
-                      f"{sid} requires {want} per §6's wire table -- the announcer would accept "
-                      f"it and the measurement would price a shape this document does not "
-                      f"specify", file=sys.stderr)
-                raise SystemExit(2)
-    return body, got
+def render(artifact: dict) -> str:
+    transactions = artifact["results"][0]["transactions"]
+    total = sum(observation["gas_used"] for observation in transactions.values())
+    return "\n".join(
+        [
+            "Scheme 3 native-ETH payment gas, Rust fixture, Prague",
+            "",
+            f"{'announce':>10}{'fund':>10}{'spend':>10}{'total':>11}",
+            f"{transactions['announce']['gas_used']:>10}"
+            f"{transactions['fund']['gas_used']:>10}"
+            f"{transactions['spend']['gas_used']:>10}{total:>11}",
+        ]
+    )
 
 
-def main(argv):
-    args = argv[1:]
-    write = "--json" in args
-    if write:
-        args.remove("--json")
-    rpc = None
-    if "--rpc-url" in args:
-        k = args.index("--rpc-url")
-        if k + 1 >= len(args):
-            print("usage error: --rpc-url needs a URL", file=sys.stderr)
-            return 2
-        rpc = args[k + 1]
-        del args[k:k + 2]
-    if args:
-        print(__doc__, file=sys.stderr)
-        return 2
-
-    body, got = cases()
-    node = Node(rpc)
-    results = []
-    try:
-        announcer = deploy(node.url)
-        for c in got:
-            addr, key = c["stealth_address"], c["spend_key"]
-            # 1 ETH in, then send 0.5 back out: enough that the spend cannot be mistaken for a
-            # zero-value transaction, and enough left over to pay for itself.
-            a = announce(node.url, announcer, c["scheme_id"], addr,
-                         c["epk_field"], c["metadata"])
-            f = fund(node.url, addr, 10**18)
-            s = spend(node.url, key, DEV_ADDR, 5 * 10**17)
-            results.append({
-                "scheme_id": c["scheme_id"],
-                "announce_gas": a,
-                "fund_gas": f,
-                "spend_gas": s,
-                "total_gas": a + f + s,
-            })
-    finally:
-        node.close()
-
-    bad = check(results)
-    print(table(results))
-    if bad:
-        print("\nFAIL:")
-        for b in bad:
-            print(f"  {b}")
-        return 1
-    if write:
-        OUT.write_text(json.dumps({
-            "harness": "payment",
-            "what": "gas for a whole stealth payment: announce, fund the derived address, "
-                    "then spend from it with the derived key",
-            "hardfork": "prague",
-            "intrinsic_gas": INTRINSIC,
-            "input_seed": body.get("seed_label", "unstated"),
-            "self_check": "pass",
-            "cases": results,
-        }, indent=1) + "\n")
-        print(f"\nwrote {OUT}")
-    return 0
-
-
-def check(results):
-    """Self-checks, and the third is the only one that is really about cryptography."""
-    bad = []
-    for r in results:
-        if r["fund_gas"] < INTRINSIC:
-            bad.append(f"schemeId {r['scheme_id']}: a transfer below the intrinsic floor "
-                       f"({r['fund_gas']}), which cannot happen -- the measurement is wrong")
-        # A transfer to an account with no code and no prior balance is the intrinsic cost plus
-        # EIP-2929's cold-account access and the new-account charge. Anything far above it means
-        # the derived address is NOT an empty EOA, which would contradict the whole scheme.
-        if r["fund_gas"] > 40_000:
-            bad.append(f"schemeId {r['scheme_id']}: funding cost {r['fund_gas']}, too high for "
-                       f"an empty EOA -- the derived address may have code")
-        if r["spend_gas"] < INTRINSIC:
-            bad.append(f"schemeId {r['scheme_id']}: spend below the intrinsic floor")
-        if r["announce_gas"] <= r["fund_gas"]:
-            bad.append(f"schemeId {r['scheme_id']}: the announcement ({r['announce_gas']}) cost "
-                       f"no more than a bare transfer ({r['fund_gas']}), which would mean the "
-                       f"payload never reached the chain")
-    if not results:
-        bad.append("no cases measured, and an empty table reads like a passing one")
-    return bad
-
-
-def table(results):
-    lines = [
-        "whole-payment gas, Prague, local node",
-        "",
-        f"{'scheme':<10}{'announce':>10}{'fund':>9}{'spend':>9}{'total':>10}"
-        f"{'announce %':>12}",
-    ]
-    for r in results:
-        pct = 100 * r["announce_gas"] / r["total_gas"]
-        lines.append(f"schemeId {r['scheme_id']:<2}{r['announce_gas']:>10}{r['fund_gas']:>9}"
-                     f"{r['spend_gas']:>9}{r['total_gas']:>10}{pct:>11.1f}%")
-    lines += [
-        "",
-        "`fund` and `spend` are identical work for every scheme -- the derived address is an",
-        "ordinary EOA and the derived key an ordinary scalar -- so the schemes differ only in the",
-        "first column. The spend SUCCEEDING is the point: it is the EVM agreeing that the key",
-        "the recipient derived controls the address the sender paid.",
-    ]
-    return "\n".join(lines)
+BENCHMARK = Benchmark("payment", OUT, collect, render)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    raise SystemExit(main_one(BENCHMARK))

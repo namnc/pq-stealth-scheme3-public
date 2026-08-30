@@ -289,50 +289,43 @@ via ERC-6538 `registerKeys` with the matching `schemeId`.
    
 ### 6. Cost
 
-Announcement cost, measured as **real standalone transactions** against the real ERC-5564
-interface on anvil (`--hardfork prague`), with `gasUsed` read off the receipt. These are
-**total transaction gas** -- the 21 000 intrinsic and every calldata byte included. 
-The generator ships beside the figures, at
-`harness/announcement/measure.py`, and reads its field lengths from `tools/derive_sizes.py`; 
-the receipts are committed at
-`harness/announcement/measured.json`, and `tools/check_measured.py` re-derives every one of
-them from the EIP-7623 rule with no node.
+Announcement cost, measured as standalone transactions against the ERC-5564 deployed runtime on anvil (`--hardfork prague`).
+`gasUsed` is the receipt total (21 000 intrinsic and calldata included).
+Field lengths come from `tools/derive_sizes.py`. Receipts: `harness/announcement/measured.json`.
+`python3 harness/bench.py all --check` reruns the transactions and compares artifacts. `python3 tools/check_measured.py` checks snapshot identity and quoted figures.
 
-| schemeId | payload | calldata | execution | gas | floor binds | vs classical |
-|---|---|---|---|---|---|---|
-| 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 067** | no | 1.00x |
-| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 360** | YES | **2.47x** |
+| case | schemeId | payload | calldata | execution | gas | floor binds | vs classical upper bound |
+|---|---|---|---|---|---|---|---|
+| classical upper bound | 1 | 34 B | 292 B | 5 389 | **28 313** | no | 1.00x |
+| Scheme 3 upper bound | **3** | **1 122 B** | **1 380 B** | **17 099** | **69 360** | YES | **2.45x** |
+| Scheme 3 real sample | **3** | **1 122 B** | **1 380 B** | **17 099** | **69 300** | YES | **2.45x** |
 
-> Both rows are measured
+> Totals are receipt `gasUsed`. Upper-bound rows fill dynamic fields with
+> nonzero bytes. `scheme3_real_sample` is the Rust fixture shared by all three
+> benchmarks. `execution` is recovered from a same-shape all-zero probe.
 
-**The EIP-7623 calldata floor binds**, so execution gas is not charged at all -- the cost is
-data availability.
+**The EIP-7623 calldata floor binds for Scheme 3**, so charged gas is the floor. That cost is calldata availability.
 
-**Registration is priced against the canonical registry itself.** 
-A recipient makes a one-time ERC-6538 `registerKeys` call whose
-calldata is the meta-address, measured by `harness/registration` as real first-time
-transactions with one fresh registrant per row:
+Registration is a first `registerKeys` against the canonical ERC-6538 runtime, measured by `harness/registration` with one fresh registrant per row:
 
-| schemeId | meta-address, registered once | vs schemeId 1's 66 B | registration gas |
-|---|---|---|---|
-| 1 (classical) | 66 B | 1.0x | 115 310 |
-| **3** | **1 250 B** | **18.9x** | **964 809** |
+| case | schemeId | meta-address, registered once | vs schemeId 1's 66 B | registration gas |
+|---|---|---|---|---|
+| classical upper bound | 1 | 66 B | 1.0x | 115 310 |
+| Scheme 3 upper bound | **3** | **1 250 B** | **18.9x** | **964 809** |
+| Scheme 3 real sample | **3** | **1 250 B** | **18.9x** | **964 737** |
 
-The measured object is the registry's **deployed runtime bytecode**, read off mainnet at
-`0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` and SHA-256-pinned beside the harness for precision.
+Upper-bound rows use all-nonzero meta-address bytes.
+The real-sample row registers the shared Scheme 3 fixture.
 
-**A whole payment IS measured, and the figure is 111 300 gas.** `harness/payment/` runs all
-three transactions against a local node -- announce, fund the derived address, then spend from
-it with the derived key -- and commits the receipts at `harness/payment/measured.json`:
+The measured object is the registry's deployed runtime bytecode, read off mainnet at `0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` and SHA-256 pinned in `harness/registration`.
+
+A native-ETH payment is three transactions, **111 300 gas** in the measured instance (`harness/payment/measured.json`): announce, fund the derived address, spend from it with the derived key.
 
 | | announce | fund | spend | total |
 |---|---|---|---|---|
 | **schemeId 3** | 69 300 | **21 000** | **21 000** | **111 300** |
 
-**The funding transfer is exactly the 21 000 intrinsic**, for a native-ETH transfer. 
-**For any
-other asset**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
-neither is measured by this harness, and neither figure is quoted anywhere in this document.
+Fund and spend are 21 000 each (native ETH, empty calldata). ERC-20 transfer and sweep are unmeasured.
 
 ### 7. Security considerations
 

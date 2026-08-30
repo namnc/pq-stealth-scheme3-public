@@ -1,55 +1,24 @@
-# `announcement` — what one ERC-5564 announcement actually costs
+# `announcement`
 
-Not a Foundry project. It drives `anvil` and `cast` directly, because **the thing being measured
-cannot be observed from inside a Foundry test**:
+Standalone `announce()` transactions against the canonical ERC-5564 runtime.
+Bytecode is committed as `deployed_bytecode.hex`, SHA-256 checked, installed at `0x55649E01B5Df198D18D95b5cc5051630cfD45564`, and read back before any send.
 
-<!-- gas-external: EIP-2929's COLD_ACCOUNT_ACCESS_COST, a protocol constant, not a receipt -->
-* a test contract reaches the announcer with `CALL`, so it pays EIP-2929 cold account access
-  (2 600) plus caller-side argument copy;
-* a standalone announcement transaction executes no `CALL` at all, and EIP-2929 seeds
-  `accessed_addresses` with `tx.to`, so it pays neither.
-
-Measured in a test frame, the "execution" figure was about **2.1×** the real one. Because the
-EIP-7623 floor binds on the post-quantum schemes — where execution is not charged at all — and
-does **not** bind on the classical baseline, the whole of that error landed on the denominator
-of every published ratio.
-
-## Run it
-
-```
-python3 measure.py                # boots its own anvil, prints the table
-python3 measure.py --json         # rewrites measured.json
-python3 measure.py --rpc-url URL  # against an already-running node
+```bash
+python3 harness/bench.py announcement --check
+python3 harness/bench.py announcement --update
 ```
 
-Needs `anvil`, `cast` and `forge` on PATH. Exits 1 if any self-check fails.
+Each run boots a local Prague Anvil. `python3 harness/announcement/measure.py` accepts the same flags.
 
-## The field lengths are READ, not retyped
+Cases:
 
-`CASES` is built from `tools/derive_sizes.py`, which re-derives every length from FIPS 203
-rather than from any constant that produced it, and asserts them against §6.
+- `classical_upper_bound`, `scheme3_upper_bound`: all-nonzero `ephemeralPubKey` and `metadata`, a fixed 20-byte stealth address, schemeId 1 vs schemeId 3 field lengths from `tools/derive_sizes.py`
+- `scheme3_real_sample`: the shared Rust fixture
 
-## Two numbers, and how each is obtained
+Each case also sends a same-length all-zero payload. The announcer ABI-decodes and logs, so execution follows calldata length.
+Cheaper calldata tokens drop that send off the EIP-7623 floor.
+The collector checks the primary receipt against `max(21000 + 4·tokens + execution, 21000 + 10·tokens)`.
 
-1. **`total`** — straight off the receipt. Ground truth, no arithmetic. It includes the 21 000
-   intrinsic and every calldata byte, so no convention needs stating: it is the number a
-   wallet's balance moves by.
-2. **`execution`** — not directly observable when the floor binds, because the transaction then
-   pays `21000 + 10·tokens` regardless of what the EVM did. Recovered from a second send of
-   the same call with an all-zero payload of the same length, which executes identically and
-   escapes the floor: `measure.py`'s `blob()` states why that holds, and `check()` tests it on
-   every row rather than assuming it.
+Every send must emit one `Announcement` whose address, topics, and ABI data match the call.
 
-## What the self-check covers
-
-* **every receipt re-derives from the EIP-7623 rule**: `max(21000 + 4·tokens + execution,
-  21000 + 10·tokens)` must equal what the node reported;
-* every measured payload length equals the length §6 specifies for that row, asserted against
-  `derive_sizes.ANNOUNCE_ERC` rather than assumed from the import.
-
-## `measured.json` is committed, and the guard checks it without a node
-
-`tools/check_measured.py` re-derives every committed receipt from the EIP-7623 rule and from
-§6's field lengths. No Foundry, no anvil, no network — run it after any wire change
-(`python3 tools/check_measured.py`), and a figure that stopped matching its
-payload fails, while the measurement itself stays a deliberate local act.
+Requires `anvil` and `cast`.

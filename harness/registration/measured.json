@@ -1,24 +1,48 @@
 {
-  "harness": "registration",
-  "what": "first-time ERC-6538 registerKeys cost per schemeId, measured as real transactions against the CANONICAL registry's deployed runtime bytecode (mainnet 0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538, installed with anvil_setCode), one fresh registrant per row",
-  "hardfork": "prague",
-  "registry_bytecode_sha256": "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b82f",
-  "registry_bytecode_source": "eth_getCode 0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538 latest (mainnet, block 25832859)",
-  "self_check": "pass",
-  "cases": [
+  "schema_version": 1,
+  "benchmark": "registration",
+  "environment": {
+    "hardfork": "prague",
+    "contract_address": "0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538",
+    "contract_code_sha256": "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b82f"
+  },
+  "fixture": {
+    "name": "scheme3-demo-v1",
+    "sha256": "777b852e6430a9ae87e54b3aade83199eccd3ad83ce5e95d927e584c0a31fbe3"
+  },
+  "results": [
     {
-      "name": "classical (ERC-5564 schemeId 1) registration",
-      "schemeId": 1,
+      "name": "classical_upper_bound",
+      "scheme_id": 1,
+      "kind": "dynamic_field_upper_bound",
       "meta_address_bytes": 66,
-      "calldata_bytes": 196,
-      "total_gas": 115310
+      "transaction": {
+        "calldata_bytes": 196,
+        "zero_bytes": 123,
+        "gas_used": 115310
+      }
     },
     {
-      "name": "schemeId 3 registration",
-      "schemeId": 3,
+      "name": "scheme3_upper_bound",
+      "scheme_id": 3,
+      "kind": "dynamic_field_upper_bound",
       "meta_address_bytes": 1250,
-      "calldata_bytes": 1380,
-      "total_gas": 964809
+      "transaction": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 122,
+        "gas_used": 964809
+      }
+    },
+    {
+      "name": "scheme3_real_sample",
+      "scheme_id": 3,
+      "kind": "real_sample",
+      "meta_address_bytes": 1250,
+      "transaction": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 128,
+        "gas_used": 964737
+      }
     }
   ]
 }
