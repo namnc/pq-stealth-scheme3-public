@@ -1,13 +1,13 @@
 # Conformance vector plan — schemeId 3, and what it shares
 
-## 1. What makes a vector explainable
+## 1. Each test vector is explainable
 
-Every vector is a JSON object with six fields. The last one is the reason this file exists.
+Every vector is a JSON object with six fields, e.g.
 
 ```json
 {
   "id":       "V1-03",
-  "spec":     "§1",
+  "spec":     "Section 1",
   "claim":    "an implementation MUST fail rather than continue past counter = 256",
   "given":    { "base": "0x0000…0000" },
   "expect":   { "counter": 1, "offset": "0x…" },
@@ -16,7 +16,7 @@ Every vector is a JSON object with six fields. The last one is the reason this f
 }
 ```
 
-### Two tiers
+### Two tiers of test vectors
 
 | tier | covers | oracle | who generates it |
 |---|---|---|---|
