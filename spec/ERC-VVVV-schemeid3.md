@@ -12,7 +12,7 @@ further scheme, **schemeId 3**, which makes the **announcement layer** post-quan
 | announcement | 1 122 B, one encapsulation and one ephemeral key per payment |
 | meta-address | 1 250 B, registered once via ERC-6538 |
 | spending | secp256k1 ECDSA |
-| account | a plain EOA -- no batching account, no ERC-4337, no EIP-7702 |
+| account | a plain EOA |
 
 This needs no protocol change, no new contract, and nothing of the sending account. 
 The ECDH half is a migration hedge against a defect in an ML-KEM implementation, and it is
@@ -24,7 +24,7 @@ schemeId 3 has a reference implementation against this document, in `crates/per-
 
 ### The announcement layer and the spending layer have different clocks
 
-A stealth-address announcement is public and permanent. Anything an observer records today
+A stealth-address announcement is public and permanent, centralized in Announcer contract. Anything an observer records today
 can be broken later by a cryptographically relevant quantum computer, and the privacy loss is
 **retroactive** -- harvest now, deanonymise later. 
 
