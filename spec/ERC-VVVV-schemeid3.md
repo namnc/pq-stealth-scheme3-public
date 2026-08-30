@@ -160,9 +160,9 @@ Three outputs, with three different dispositions:
 
 | output | contents | size | disposition |
 |---|---|---|---|
-| meta-address | `spending_pk(33) || viewing_pk_ec(33) || ek(1184)` | 1 250 B | **published** via ERC-6538 |
+| meta-address | `spending_pk(33),viewing_pk_ec(33),ek(1184)` | 1 250 B | **published** via ERC-6538 |
 | master | `spending_sk` | 32 B | never leaves the owner |
-| tracking | `viewing_ec || dk` | **96 B**, two secrets | **MAY be delegated** to a scanner |
+| tracking | `viewing_ec,dk` | **96 B**, two secrets | **MAY be delegated** to a scanner |
 
 Keygen MUST be deterministic in the seed: the same 128 bytes MUST produce the same three
 outputs. Without that, conformance vectors are impossible.
