@@ -1,10 +1,11 @@
 # PQ Stealth Addresses — schemeId 3
 
-Post-quantum stealth addresses for Ethereum: one `schemeId` extending
-[ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) with an ML-KEM-768 encapsulation combined
-with a secp256k1 ECDH secret (for implementation risk hedging), one announcement per payment, no protocol change.
-**Spending stays ordinary secp256k1 ECDSA** - the announcement
-layer is post-quantum, the spending is not.
+Post-quantum stealth addresses for Ethereum: 
+one `schemeId` extending [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) 
+with an ML-KEM-768 encapsulation combined with a secp256k1 ECDH secret (for implementation risk hedging), 
+one announcement per payment, no protocol change.
+**Spending stays ordinary secp256k1 ECDSA** - 
+hence, the announcement layer is post-quantum, the spending is NOT.
 
 | | |
 |---|---|
@@ -14,10 +15,12 @@ layer is post-quantum, the spending is not.
 | first-time registration gas | **964 809** |
 | a whole payment — announce, fund, spend | **111 300** |
 
-Classical ERC-5564 announces 34 B for 28 067 gas and registers 66 B for
-115 310. The registry entry is **18.9x the classical one in bytes** — 1 250 against 66 — and is
-paid once per `schemeId`. The announcement is **2.47x in gas** — 69 360
-against 28 067 — and is paid every time.
+Classical ERC-5564 announces 34 B for 28 067 gas 
+and registers 66 B for 115 310. 
+The registry entry is **18.9x the classical one in bytes** — 1 250 against 66 — 
+and is paid once per `schemeId`. 
+The announcement is **2.47x in gas** — 69 360 against 28 067 — 
+and is paid every time per payment.
 
 ## What is here
 
@@ -33,22 +36,25 @@ against 28 067 — and is paid every time.
 | `tools/` | the fixture generator, the size derivation and the gas verifier, each with its self-test |
 | `contracts/` | the ERC-5564 announcer the gas harnesses measure against |
 
+Test with
 ```bash
 cargo test --workspace
 ```
 
+Independent test vector generation with
 ```bash
 python3 tools/gen_vectors.py --check
 ```
 
-The fixtures are generated from `tools/vecprim.py`, which deliberately imports nothing from the reference
-implementation that they test. For ML-KEM: the ciphertexts are of NIST's own ACVP file, vendored at
-`vectors/tier1/`.
+The fixtures are generated from `tools/vecprim.py`, 
+which is **independent** from the reference implementation that they test. 
+For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vectors/tier1/`.
 
-In `vectors/rederivation.json` 19 the 26 were re-derived by a second
-implementer from the specification alone, and its `bytes_disagree` list
-being empty *is* what we want.
+(In `vectors/rederivation.json` 19 the 26 were re-derived 
+by a second implementer from the specification alone, 
+and its `bytes_disagree` list being **empty** *is* what we want.)
 
+Gas cost measurement
 ```bash
 python3 tools/check_measured.py
 ```
