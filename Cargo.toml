@@ -5,7 +5,7 @@
 # describes. The full reference implementation carries more, and a reader
 # holding only this tree should not infer their contents from anything here.
 #
-# **Eight external crates**, each the obvious choice rather than a survey result. The four
+# **Seven direct external crates**, each the obvious choice rather than a survey result. The four
 # cryptographic ones:
 #
 #   * `k256`      secp256k1. The one the upstream reference uses, which matters because the
@@ -19,10 +19,9 @@
 #                 and the difference between them is ONE PADDING BYTE -- which is why §1 names
 #                 keccak256 and SHA3-256 separately and why a vector pins them apart.
 #
-# And the four others: `hkdf` (§5's `keygen_seed` -- RustCrypto's rather than a second
-# hand-rolled copy, so V6-01/V6-04 are a genuine cross-implementation check; see the note in
-# `[workspace.dependencies]`), and `hex`, `serde`, `serde_json`, which move fixture bytes in
-# and out of the conformance JSON and touch no cryptography. **Those three are declared for
+# And the three others: `hkdf` (the wallet seed KDF), plus `hex` and `serde_json`, which
+# move fixture bytes in and out of the conformance JSON and touch no cryptography. **Those
+# two are declared for
 # the crates that read fixtures**, so a workspace trimmed to crates that do not read them
 # resolves without them and they are absent from its lock file -- declared here, unused
 # there, which is the correct outcome rather than a stale declaration.
@@ -72,18 +71,14 @@ k256 = { version = "0.13", default-features = false, features = ["ecdh", "arithm
 ml-kem = { version = "0.3.2", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
-# §5's `keygen_seed`. Already in the lock file as a transitive dependency, so promoting it to a
-# direct one adds no new code to the build -- it makes a function the specification requires
-# available to the crates instead of only to the Python that generates the fixtures.
+# Wallet seed derivation used by the harness. It is not part of the ERC wire protocol.
 #
 # RustCrypto's rather than hand-rolled, and the reason is evidence rather than caution: HKDF is
 # twenty lines over HMAC and hand-rolling it would be safe enough, but `tools/vecprim.py` ALREADY
 # hand-rolls it. Two hand-rolled copies by one author agreeing proves nothing; a hand-rolled one
-# agreeing with RustCrypto's is a genuine cross-implementation check, which is what V6-01 and
-# V6-04 need to be worth executing.
+# agreeing with RustCrypto gives the regression pins an implementation-independent cross-check.
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 pqsa-core = { path = "crates/core" }

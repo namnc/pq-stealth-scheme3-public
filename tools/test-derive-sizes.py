@@ -81,8 +81,10 @@ def main() -> int:
     # is a width nothing checks.
     rc, out = run(("VIEW_TAG = 1  ", "VIEW_TAG = 8  "))
     case("widening the view tag exits 1", rc, 1)
-    case("and it moves the payload, the shape and the meta-address checks alike",
-         "schemeId 3 announcement" in out, True)
+    case("the ANNOUNCE_ERC loop names the new total",
+         "schemeId 3 announcement: derived 1129 != quoted 1122" in out, True)
+    case("the SHAPES loop names the new field pair",
+         "shape (33, 1096) totals 1129 != §5's 1122" in out, True)
 
     print("\nthe shape table -- (ephemeralPubKey, metadata), not the total")
     rc, out = run(('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),',
@@ -166,7 +168,8 @@ def main() -> int:
     # FIPS 203's parameters must be load-bearing: change one and the lengths must move.
     rc, out = run(("MLKEM_768_K = 3", "MLKEM_768_K = 2"))
     case("changing FIPS 203's k exits 1", rc, 1)
-    case("and the failure names the KEM key length", "1184" in out or "ek" in out, True)
+    case("and the EK guard names both lengths",
+         "ek 800 != FIPS 203's 1184" in out, True)
 
     rc, out = run(("MLKEM_768_DU = 10", "MLKEM_768_DU = 11"))
     case("changing FIPS 203's du exits 1", rc, 1)

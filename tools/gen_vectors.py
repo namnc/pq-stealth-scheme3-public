@@ -2,8 +2,8 @@
 
     gen_vectors.py [--out vectors] [root]
 
-Exit 0 if every row the plan lists is either emitted or recorded as not generatable with a
-reason, 1 if a row is neither, 2 on usage error.
+Exit 0 if every row in every supported plan section is emitted, 1 on a coverage or content
+failure, and 2 on a usage error.
 
 WHY THIS FILE EXISTS AND WHAT IT MUST NOT DO. This generator comes ahead of any
 cryptography, deliberately, for one reason: a fixture derived from the
@@ -20,12 +20,9 @@ ML-KEM library". None is installed and writing one is a project rather than a ta
 lines of NTT and sampling, and a second unreviewed KEM in the tree. So this consumes NIST ACVP
 `(d, z) -> ek` and `(ek, m) -> (c, k)` tuples instead, which is what the tier split already says.
 
-That substitution has a cost and it is measured rather than glossed: **ACVP's keyGen and
-encapsulation cases use different keys** -- checked: the two `ek` sets are disjoint
--- so a vector needing one key's seed AND a ciphertext to it cannot be built from ACVP alone.
-Those rows are emitted as `not_generatable` with that reason, never with a synthesised `ct` or
-`ss`. A fabricated KEM value in a conformance fixture would be worse than an absent one: it
-would pass.
+ACVP's keyGen and encapsulation cases use different keys, so the surviving vectors use only
+combinations directly supported by published tuples. The generator fails if the plan names a
+row it cannot build; it never emits placeholders.
 """
 
 from __future__ import annotations
@@ -46,8 +43,7 @@ TIER1 = Path("vectors/tier1/ml-kem-768-acvp.json")
 
 # The plan groups this generator builds, in emission order. Every invocation builds all of
 # them: there is no partial run, which is what lets the manifest be REPLACED rather than
-# merged below. `tools/test-gen-vectors.py` asserts the plan and this list agree -- two
-# copies of a pacing decision is one too many, and the test is what stops them drifting.
+# merged below. `main` compares this set with the plan directly.
 GROUPS = ("1", "2.9")
 
 # The ledger's buckets, which record what the blinded re-derivation ACTUALLY DID. There is
@@ -63,9 +59,7 @@ ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
 # THE WITHDRAWN-ROW RULE: a row whose CLAIM cell is struck through or says "no vector --
 # deliberately" is not a fixture. A reader should still see it, and a generator must neither
 # emit it (that resurrects a requirement that no longer exists) nor report it missing (that
-# demands a fixture for one). These patterns are a deliberate second copy of the coverage
-# checker's, which stays out of a shipped tree; `tools/test-gen-vectors.py` asserts the two
-# agree where both are present and says SKIPPED where they are not.
+# demands a fixture for one). The self-test exercises both patterns.
 #
 # WITHDRAWN_CELL is case-sensitive and claim-cell-scoped on purpose: a live row's failure
 # column may legitimately say "the withdrawn rule", and matching case-insensitively anywhere
@@ -86,9 +80,7 @@ def claim_cell(line: str) -> str:
 
 # Read off §2.9 rather than remembered: a remembered `pq-stealth/hybrid/v1` — a string
 # that appears nowhere in the specification — would derive every V3 row under the wrong
-# constant. `tools/test-gen-vectors.py` checks that every constant below is quoted in the
-# specification, and says SKIPPED where the gate that does it is absent, because "I
-# shortened it" is not a failure a reader of the emitted JSON can see.
+# constant.
 DS_HYBRID = b"pq-stealth/hybrid-payment/v1"
 # WHY A ROW IS `provisional`, in one place because it was in three and they drifted.
 #
@@ -118,6 +110,19 @@ def plan_rows(root: Path) -> dict[str, list[tuple[str, str]]]:
         m = ROW.match(ln)
         if m and cur:
             out[cur].append((m.group(1), claim_cell(ln)))
+    return out
+
+
+def repeated_ids(rows: dict[str, list[tuple[str, str]]]) -> list[str]:
+    """Ids that appear more than once in the same plan section."""
+    out: list[str] = []
+    for group, items in rows.items():
+        counts: dict[str, int] = {}
+        for rid, _cell in items:
+            counts[rid] = counts.get(rid, 0) + 1
+        for rid, n in sorted(counts.items()):
+            if n > 1:
+                out.append(f"§{group} {rid} ({n} times)")
     return out
 
 
@@ -309,8 +314,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                   "wrong": {
                       "three_field_form": hx(hashlib.sha3_256(DS_HYBRID + three).digest()),
                       "note": "any other order, and any omission -> a different ss. The "
-                              "three-field form is what both implementations produce today "
-                              "and is the likeliest wrong answer",
+                              "historical three-field form is the likeliest omission",
                   }}
     ct2 = bytes.fromhex(t1["encapsulation"][1]["c"])
     v["V3-06a"] = {"claim": "ct is bound in",
@@ -520,16 +524,6 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "publishes -- and it costs the attacker one transaction. "
                                     "The 1089 case is the positive control"}}
 
-    # COVERAGE REMOVED WITH ITS SUBJECT. V3-16 stood here, pinning that the address derived
-    # from `stealth_sk` equals the one derived from `stealth_pk`. Section 2.6's "a wallet
-    # SHOULD verify that the derived key controls the derived address" left the document, and
-    # a fixture with no normative sentence behind it is what this plan says gets deleted
-    # rather than argued about. Nothing in this tree checks that relation now.
-    #
-    # Worth knowing if it ever returns: it caught a divergence BETWEEN the two derivations,
-    # not a bad input to them. A byte-order slip in `offset` moves both paths together and
-    # the identity still holds -- that failure is V1-01..V1-06's, and the `wrong` column here
-    # claimed otherwise.
     return v
 
 
@@ -555,50 +549,6 @@ def canonical(row) -> str:
     return json.dumps(json.loads(json.dumps(row)), sort_keys=True)
 
 
-def refuse_to_downgrade(dest: Path, emitted: dict) -> list[str]:
-    """A row that is committed WITH a value MUST NOT be replaced by a `not_generatable` stub.
-
-    Without this guard, running this generator without `kyber-py` installed silently deletes
-    the committed values for `V2-01`, `V2-11` and `V2-13` and leaves three "cannot be built"
-    stubs in their place, with nothing in this tool objecting. The only other thing that
-    notices is a golden executed-case count in the conformance runner's own integration
-    test -- a different crate, a different language, an assertion written for an unrelated
-    reason. Named rather than pathed, because a tree that ships the fixtures without the
-    runner still needs this guard and would otherwise carry a pointer at nothing.
-
-    A missing optional dependency must not be able to destroy committed evidence. Emitting a stub
-    for a row that has NEVER been generated is fine and is how the four honest gaps are recorded;
-    emitting one over a row that HAS a value is data loss, and it is silent because a stub is a
-    perfectly well-formed row.
-    """
-    lost = []
-    for name, body in emitted.items():
-        # `dest`, not the repository root. The guard compares against what this run would
-        # actually OVERWRITE, and `--out` exists so a run can regenerate into a scratch tree
-        # without touching the committed set. Keying on the repo
-        # instead made a temp-directory run report that it would destroy the repository's
-        # vectors, which is both wrong and the kind of false positive that gets a gate disabled.
-        old_path = dest / name
-        if not old_path.exists():
-            continue
-        try:
-            old = json.loads(old_path.read_text())["vectors"]
-        except (ValueError, KeyError):
-            continue
-        for rid, new_row in body["vectors"].items():
-            was = old.get(rid)
-            if was is None:
-                continue
-            had_value = "expect" in was and was["expect"]
-            now_stub = "not_generatable" in new_row
-            if had_value and now_stub:
-                lost.append(
-                    f"{name}: {rid} is committed WITH a value and this run would replace it "
-                    f"with a stub -- {new_row['not_generatable'][:70]}"
-                )
-    return lost
-
-
 def witness(root: Path, shipped: list[str]) -> tuple[list[str], list[str]]:
     """`(lines to print, findings)` for the re-derivation ledger against the shipped rows.
 
@@ -609,9 +559,6 @@ def witness(root: Path, shipped: list[str]) -> tuple[list[str], list[str]]:
     failure: that entry vouches for nothing, and the complement cannot detect it.
     """
     path = root / LEDGER
-    if not path.is_file():
-        return ([f"witness: SKIPPED -- no {LEDGER}, so nothing in this tree says which rows "
-                 f"an independent re-derivation saw"], [])
     try:
         led = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
@@ -665,15 +612,38 @@ def main(argv: list[str]) -> int:
         print(f"usage error: no vendored ACVP file at {root / TIER1}. Tier 1 is NIST's and "
               f"this generator does not compute it.", file=sys.stderr)
         return 2
+    if not (root / LEDGER).is_file():
+        print(f"usage error: no re-derivation ledger at {root / LEDGER}", file=sys.stderr)
+        return 2
 
     rows = plan_rows(root)
+    plan_groups = set(rows)
+    supported_groups = set(GROUPS)
+    if plan_groups != supported_groups:
+        missing_groups = sorted(supported_groups - plan_groups)
+        unsupported_groups = sorted(plan_groups - supported_groups)
+        if missing_groups:
+            print(f"FAIL: plan is missing supported section(s): "
+                  f"{', '.join('§' + group for group in missing_groups)}",
+                  file=sys.stderr)
+        if unsupported_groups:
+            print(f"FAIL: plan contains unsupported section(s): "
+                  f"{', '.join('§' + group for group in unsupported_groups)}",
+                  file=sys.stderr)
+        return 1
+    repeated = repeated_ids(rows)
+    if repeated:
+        print("FAIL: PLAN lists the same id more than once in a section:", file=sys.stderr)
+        for line in repeated:
+            print(f"  {line}", file=sys.stderr)
+        return 1
     t1 = tier1(root)
 
     # The ML-KEM library's acceptance test, run on EVERY invocation rather than once by hand.
     # It is not trusted because it is popular; it is trusted for exactly the NIST tuples it
     # reproduces, and a disagreement is a hard failure because every KEM-bearing row below
-    # would otherwise be built on it silently. An absent library is reported, not failed --
-    # those rows record themselves as not generatable with the reason.
+    # would otherwise be built on it silently. The shipped rows use vendored ACVP values, so
+    # an absent optional implementation does not reduce generator coverage.
     if vp.have_kem():
         disagreements = vp.acvp_selftest(t1)
         checks = (len(t1.get("keygen", []))
@@ -700,19 +670,18 @@ def main(argv: list[str]) -> int:
                   "would be built on it.", file=sys.stderr)
             return 1
     else:
-        print("ML-KEM: absent (kyber-py not installed) -- rows needing a round trip will be "
-              "recorded as not generatable")
+        print("ML-KEM: absent (kyber-py not installed) -- optional ACVP implementation "
+              "cross-check not run; all rows still build from vendored NIST values")
 
     dest = root / out_dir
     dest.mkdir(parents=True, exist_ok=True)
 
-    emitted = absent = 0
+    emitted = 0
     shipped: list[str] = []
     manifest: dict[str, dict] = {}
     missing: list[str] = []
     skipped_rows: list[str] = []
     stale: list[str] = []
-    unverified: list[str] = []
     print(f"groups: {', '.join('§' + g for g in GROUPS)}")
     for g in GROUPS:
         want = rows.get(g)
@@ -720,61 +689,42 @@ def main(argv: list[str]) -> int:
             print(f"  §{g}: the plan has no group for it", file=sys.stderr)
             return 1
         built = BUILDERS[g](t1) if g in BUILDERS else {}
-        # `slots`, in the coverage tool's vocabulary: the rows that are fixtures. A withdrawn
-        # or reserved row is skipped by the same rule the coverage tool counts it under --
-        # reporting one as "missing" would demand a fixture for a requirement that no longer
-        # exists, and emitting one would resurrect it.
+        # `slots` are the rows that are fixtures. Reporting a withdrawn or reserved row as
+        # missing would demand a fixture for a requirement that no longer exists; emitting
+        # one would resurrect it.
         slots = [rid for rid, cell in want if not not_a_fixture(cell)]
         skipped_rows.extend(f"§{g} {rid}" for rid, cell in want if not_a_fixture(cell))
         body: dict[str, dict] = {}
         for rid in slots:
             if rid in built:
                 body[rid] = built[rid]
-                if "not_generatable" in built[rid]:
-                    absent += 1
-                else:
-                    emitted += 1
+                emitted += 1
             else:
                 missing.append(f"§{g} {rid}")
         # The plan is the authority on the row set, so a slot the plan lists and this file does
         # not build is a FINDING rather than a silent omission -- which is the whole reason the
         # ids are read off the plan instead of written here.
         f = dest / f"section-{g.replace('.', '_')}.json"
-        # A row committed WITH a value must not be replaced by a `not_generatable` stub. Checked
-        # BEFORE writing, and it aborts the whole run rather than skipping the file, because a
-        # partial write leaves the manifest describing a tree that no longer exists.
-        if not check_only:
-            lost = refuse_to_downgrade(dest, {f.name: {"vectors": body}})
-            if lost:
-                print(f"\nFAIL: this run would DESTROY {len(lost)} committed vector(s):")
-                for line in lost:
-                    print(f"  {line}")
-                print("\nNothing was written. Install the missing dependency and re-run, or "
-                      "pass --out to a scratch directory if a downgrade is genuinely intended.")
-                print("This failure mode is real: it is what a regeneration lacking "
-                      "`kyber-py` did to the KEM-bearing rows of the set this one was cut "
-                      "from, and the only other thing that noticed was a golden "
-                      "executed-case count in another crate.")
-                return 1
         blob = (json.dumps({"section": f"§{g}", "vectors": body},
                            indent=2) + "\n").encode("utf-8")
         if check_only:
-            # Compared ROW BY ROW, not byte by byte, and the reason is that "differs" and
-            # "cannot be checked here" are different findings. Without a KEM this process
-            # cannot rebuild the round-trip rows at all, so a whole-file comparison calls a
-            # perfectly current file stale -- the same conflation as scoring an unapplied
-            # mutation as survived, or a skipped step as failed. A gate that cries stale
-            # where it means unverifiable gets switched off.
             if not f.is_file():
                 stale.append(f"{f.name}: absent")
                 print(f"  §{g}: {f.name} ABSENT")
                 continue
             try:
-                committed = json.loads(f.read_text(encoding="utf-8")).get("vectors", {})
+                committed_file = json.loads(f.read_text(encoding="utf-8"))
             except json.JSONDecodeError as e:
                 stale.append(f"{f.name}: not valid JSON ({e})")
                 print(f"  §{g}: {f.name} UNREADABLE")
                 continue
+            if not isinstance(committed_file, dict):
+                stale.append(f"{f.name}: top level is not an object")
+                print(f"  §{g}: {f.name} UNREADABLE")
+                continue
+            committed = committed_file.get("vectors", {})
+            if not isinstance(committed, dict):
+                committed = {}
             # Compared through `json.dumps`, NOT as Python objects. A tuple in a row
             # serialises to a JSON array and parses back as a list, so `dict != dict` on a
             # freshly built row against a parsed one reports a difference that does not
@@ -783,15 +733,16 @@ def main(argv: list[str]) -> int:
             # is the kind that teaches a reader to ignore it.
             norm = canonical
 
-            diff = unchecked = 0
+            diff = 0
+            want_section = f"§{g}"
+            got_section = committed_file.get("section")
+            if got_section != want_section:
+                stale.append(
+                    f"{f.name}: section is {got_section!r}, expected {want_section!r}"
+                )
+                diff += 1
             for rid, fresh_row in body.items():
-                if "not_generatable" in fresh_row and rid in committed \
-                        and "not_generatable" not in committed[rid]:
-                    # This run is the poorer one: the committed row was built with a
-                    # capability this process lacks. Reported, never failed.
-                    unverified.append(f"§{g} {rid}")
-                    unchecked += 1
-                elif rid not in committed:
+                if rid not in committed:
                     stale.append(f"{f.name}: {rid} is missing from the committed file")
                     diff += 1
                 elif norm(committed[rid]) != norm(fresh_row):
@@ -803,10 +754,8 @@ def main(argv: list[str]) -> int:
                                  f"it as a fixture -- deleted, withdrawn or "
                                  f"reserved")
                     diff += 1
-            state = "STALE" if diff else ("current, partly unverified" if unchecked
-                                          else "current")
-            print(f"  §{g}: {len(body)}/{len(slots)} slot(s), {f.name} {state}"
-                  + (f" ({unchecked} row(s) this run cannot rebuild)" if unchecked else ""))
+            state = "STALE" if diff else "current"
+            print(f"  §{g}: {len(body)}/{len(slots)} slot(s), {f.name} {state}")
         else:
             f.write_bytes(blob)
             print(f"  §{g}: {len(body)}/{len(slots)} slot(s) written to {f.name}")
@@ -848,20 +797,14 @@ def main(argv: list[str]) -> int:
                        "files": dict(sorted(merged.items()))}, indent=2)
            + "\n").encode("utf-8")
     if check_only:
-        # The manifest is a hash per FILE, so it cannot be checked row-wise. It is therefore
-        # only meaningful when this run rebuilt everything the committed set has; otherwise its
-        # hashes legitimately differ and saying so would be the false "stale" again.
         if not mf.is_file():
             stale.append("manifest.json: absent")
-        elif unverified:
-            print("  manifest.json: not compared -- this run could not rebuild every committed "
-                  "row, so its hashes would differ for a reason that is not staleness")
         elif mf.read_bytes() != man:
             stale.append("manifest.json: differs from a fresh generation")
     else:
         mf.write_bytes(man)
 
-    print(f"\n{emitted} vector(s) emitted, {absent} recorded as not generatable")
+    print(f"\n{emitted} vector(s) emitted")
     witness_lines, witness_bad = witness(root, shipped)
     for line in witness_lines:
         print(line)
@@ -876,14 +819,6 @@ def main(argv: list[str]) -> int:
         for m in missing:
             print(f"  {m}")
         return 1
-    if check_only and unverified:
-        print(f"\n{len(unverified)} committed row(s) NOT CHECKED here, because this process "
-              f"cannot rebuild them: {', '.join(unverified)}")
-        print("  Reported, not failed: these rows were NOT checked in this run, and nothing "
-              "else checks them for you. Install an ML-KEM implementation and re-run "
-              "(`pip install --no-deps kyber-py==1.2.0`) for the full check. An absent "
-              "capability is not a stale file, and a gate that conflated the two would be "
-              "one somebody switches off.")
     if witness_bad:
         print(f"\nFAIL: {len(witness_bad)} finding(s) in the re-derivation ledger:")
         for w in witness_bad:
@@ -897,22 +832,8 @@ def main(argv: list[str]) -> int:
         print(f"\nRegenerate with `python3 tools/gen_vectors.py` and commit the "
               "result.")
         return 1
-    # The conclusion must not be wider than the run. A process that SKIPPED rows it could not
-    # rebuild and DECLINED the manifest comparison, then concluded "every committed file
-    # matches a fresh generation", claims a completeness it did not establish -- and the
-    # generated public transcripts repeated the overclaim, which is where an outside reader
-    # would have believed it. A partial success says which part.
-    if check_only and unverified:
-        print(f"OK, PARTLY: every row the plan lists is either emitted or "
-              f"recorded as not generatable with a reason, and every REBUILDABLE committed "
-              f"row matches a fresh generation — but {len(unverified)} row(s) and "
-              f"manifest.json were NOT compared, because this process cannot rebuild them. "
-              f"This run is not the full check.")
-    else:
-        print("OK: every row the plan lists is either emitted or recorded as "
-              "not generatable with a reason"
-              + (", and every committed file matches a fresh generation" if check_only
-                 else ""))
+    print("OK: every supported plan row was emitted"
+          + (", and every committed file matches a fresh generation" if check_only else ""))
     return 0
 
 
