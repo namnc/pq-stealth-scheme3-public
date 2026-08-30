@@ -364,10 +364,8 @@ under 3 coexists with no migration.
 
 ## Test Cases
 
-**Fixtures exist and ship** -- `vectors/section-*.json`, with a sha256 each in
-`vectors/manifest.json`, regenerable and checkable with
-`python3 tools/gen_vectors.py --check`. `vectors/PLAN.md` carries the row list the
-generator reads and, per row, the normative sentence it pins.
+**Fixtures exist and ship** -- in `vectors/section-*.json`. `vectors/PLAN.md` carries the row list the
+generator reads and, per row, and the check it pins.
 
 | group | rows | what it pins |
 |---|---|---|
@@ -391,9 +389,6 @@ three transactions of a payment against a local node.
 
 **Unreviewed.** Nothing here has had external cryptographic review, and no conformance row
 in this export has a witness outside this project -- no third party has re-derived any of them.
-A number of normative requirements are satisfied by the older external implementation only in
-part: design decisions moved the specification ahead of that code. They are port obligations,
-not defects.
 
 ## Copyright
 
