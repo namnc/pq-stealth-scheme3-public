@@ -299,8 +299,8 @@ and `tools/check_measured.py` re-derives every one of them from the EIP-7623 rul
 
 | schemeId | payload | calldata | execution | gas | floor binds | vs classical |
 |---|---|---|---|---|---|---|
-| 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 067** | no | 1.00x |
-| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 360** | YES | **2.47x** |
+| 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 313** | no | 1.00x |
+| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 360** | YES | **2.45x** |
 
 > Both rows are measured, **due to the EIP-7623 calldata floor**, execution gas is not charged at all -- the cost is data availability.
 
