@@ -1,10 +1,11 @@
 # PQ Stealth Addresses — schemeId 3
 
-Post-quantum stealth addresses for Ethereum: one `schemeId` extending
-[ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) with an ML-KEM-768 encapsulation combined
-with a secp256k1 ECDH secret (for implementation risk hedging), one announcement per payment, no protocol change.
-**Spending stays ordinary secp256k1 ECDSA** - the announcement
-layer is post-quantum, the spending is not.
+Post-quantum stealth addresses for Ethereum: 
+one `schemeId` extending [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564) 
+with an ML-KEM-768 encapsulation combined with a secp256k1 ECDH secret (for implementation risk hedging), 
+one announcement per payment, no protocol change.
+**Spending stays ordinary secp256k1 ECDSA** - 
+hence, the announcement layer is post-quantum, the spending is NOT.
 
 | | |
 |---|---|
@@ -35,6 +36,7 @@ Scheme 3 is **2.45x in gas** (69 360 against 28 313) and is paid every time.
 
 ## Tests
 
+Test with
 ```bash
 cargo test --workspace
 python3 tools/run_selftests.py
@@ -49,9 +51,9 @@ Gas, against a local Anvil node:
 python3 harness/bench.py all --check
 ```
 
-The fixtures are generated from `tools/vecprim.py`, which deliberately imports nothing from the reference
-implementation that they test. For ML-KEM: the ciphertexts are of NIST's own ACVP file, vendored at
-`vectors/tier1/`.
+The fixtures are generated from `tools/vecprim.py`, 
+which is **independent** from the reference implementation that they test. 
+For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vectors/tier1/`.
 
 In `vectors/rederivation.json`, 19 of the 26 rows were re-derived by a second
 implementer from the specification alone, and its `bytes_disagree` list
