@@ -53,11 +53,8 @@ python3 harness/bench.py all --check
 
 The fixtures are generated from `tools/vecprim.py`, 
 which is **independent** from the reference implementation that they test. 
+spec_vector.rs (implementing the test vectors) in per_payment matches the two implementation outputs for additional correctness check.
 For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vectors/tier1/`.
-
-In `vectors/rederivation.json`, 19 of the 26 rows were re-derived by a second
-implementer from the specification alone, and its `bytes_disagree` list
-being empty *is* what we want.
 
 ## Licence
 
