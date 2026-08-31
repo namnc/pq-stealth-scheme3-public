@@ -1,127 +1,83 @@
 {
-  "harness": "announcement",
-  "what": "total transaction gas for one ERC-5564 announce(), by scheme, each row sending the same real derived stealth address (see the note on STEALTH in measure.py)",
-  "hardfork": "prague",
-  "toolchain": {
-    "solc": "0.8.28+commit.7893614a",
-    "optimizer": {
-      "enabled": true,
-      "runs": 200
-    },
-    "evm_version": "prague"
+  "schema_version": 1,
+  "benchmark": "announcement",
+  "environment": {
+    "hardfork": "prague",
+    "contract_address": "0x55649E01B5Df198D18D95b5cc5051630cfD45564",
+    "contract_code_sha256": "97b1a2b6e83d4d2d1184c28bfafe24df2463fcaec94e655b2b56ba5fc52a1b17"
   },
-  "intrinsic_gas": 21000,
-  "self_check": "pass",
-  "cases": [
+  "fixture": {
+    "name": "scheme3-demo-v1",
+    "sha256": "777b852e6430a9ae87e54b3aade83199eccd3ad83ce5e95d927e584c0a31fbe3"
+  },
+  "results": [
     {
-      "name": "classical (ERC-5564 schemeId 1)",
-      "schemeId": 1,
+      "name": "classical_upper_bound",
+      "scheme_id": 1,
+      "kind": "dynamic_fields_upper_bound",
       "epk_bytes": 33,
       "metadata_bytes": 1,
-      "payload_bytes": 34,
-      "nonzero": {
+      "transaction": {
         "calldata_bytes": 292,
         "zero_bytes": 229,
-        "nonzero_bytes": 63,
-        "tokens": 481,
-        "total_gas": 28067,
-        "floor_gas": 25810,
-        "floor_binds": false,
-        "execution_gas": 5143
-      },
-      "zero": {
-        "calldata_bytes": 292,
-        "zero_bytes": 263,
-        "nonzero_bytes": 29,
-        "tokens": 379,
-        "total_gas": 27659,
-        "floor_gas": 24790,
-        "floor_binds": false,
-        "execution_gas": 5143
+        "gas_used": 28313
       }
     },
     {
-      "name": "schemeId 3 announcement",
-      "schemeId": 3,
+      "name": "scheme3_upper_bound",
+      "scheme_id": 3,
+      "kind": "dynamic_fields_upper_bound",
       "epk_bytes": 33,
       "metadata_bytes": 1089,
-      "payload_bytes": 1122,
-      "nonzero": {
+      "transaction": {
         "calldata_bytes": 1380,
         "zero_bytes": 228,
-        "nonzero_bytes": 1152,
-        "tokens": 4836,
-        "total_gas": 69360,
-        "floor_gas": 69360,
-        "floor_binds": true,
-        "execution_gas": null
-      },
-      "zero": {
+        "gas_used": 69360
+      }
+    },
+    {
+      "name": "scheme3_real_sample",
+      "scheme_id": 3,
+      "kind": "real_sample",
+      "epk_bytes": 33,
+      "metadata_bytes": 1089,
+      "transaction": {
         "calldata_bytes": 1380,
-        "zero_bytes": 1350,
-        "nonzero_bytes": 30,
-        "tokens": 1470,
-        "total_gas": 41149,
-        "floor_gas": 35700,
-        "floor_binds": false,
-        "execution_gas": 14269
+        "zero_bytes": 230,
+        "gas_used": 69300
       }
     }
   ],
-  "cases_by_name": {
-    "classical (ERC-5564 schemeId 1)": {
-      "name": "classical (ERC-5564 schemeId 1)",
-      "schemeId": 1,
-      "epk_bytes": 33,
-      "metadata_bytes": 1,
-      "payload_bytes": 34,
-      "nonzero": {
-        "calldata_bytes": 292,
-        "zero_bytes": 229,
-        "nonzero_bytes": 63,
-        "tokens": 481,
-        "total_gas": 28067,
-        "floor_gas": 25810,
-        "floor_binds": false,
-        "execution_gas": 5143
-      },
-      "zero": {
+  "diagnostics": [
+    {
+      "name": "classical_upper_bound_execution_probe",
+      "for_case": "classical_upper_bound",
+      "kind": "zero_dynamic_fields_probe",
+      "transaction": {
         "calldata_bytes": 292,
         "zero_bytes": 263,
-        "nonzero_bytes": 29,
-        "tokens": 379,
-        "total_gas": 27659,
-        "floor_gas": 24790,
-        "floor_binds": false,
-        "execution_gas": 5143
+        "gas_used": 27905
       }
     },
-    "schemeId 3 announcement": {
-      "name": "schemeId 3 announcement",
-      "schemeId": 3,
-      "epk_bytes": 33,
-      "metadata_bytes": 1089,
-      "payload_bytes": 1122,
-      "nonzero": {
-        "calldata_bytes": 1380,
-        "zero_bytes": 228,
-        "nonzero_bytes": 1152,
-        "tokens": 4836,
-        "total_gas": 69360,
-        "floor_gas": 69360,
-        "floor_binds": true,
-        "execution_gas": null
-      },
-      "zero": {
+    {
+      "name": "scheme3_upper_bound_execution_probe",
+      "for_case": "scheme3_upper_bound",
+      "kind": "zero_dynamic_fields_probe",
+      "transaction": {
         "calldata_bytes": 1380,
         "zero_bytes": 1350,
-        "nonzero_bytes": 30,
-        "tokens": 1470,
-        "total_gas": 41149,
-        "floor_gas": 35700,
-        "floor_binds": false,
-        "execution_gas": 14269
+        "gas_used": 43979
+      }
+    },
+    {
+      "name": "scheme3_real_sample_execution_probe",
+      "for_case": "scheme3_real_sample",
+      "kind": "zero_dynamic_fields_probe",
+      "transaction": {
+        "calldata_bytes": 1380,
+        "zero_bytes": 1350,
+        "gas_used": 43979
       }
     }
-  }
+  ]
 }

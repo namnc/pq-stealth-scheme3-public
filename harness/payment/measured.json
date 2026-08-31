@@ -1,17 +1,33 @@
 {
- "harness": "payment",
- "what": "gas for a whole stealth payment: announce, fund the derived address, then spend from it with the derived key",
- "hardfork": "prague",
- "intrinsic_gas": 21000,
- "input_seed": "unstated",
- "self_check": "pass",
- "cases": [
-  {
-   "scheme_id": 3,
-   "announce_gas": 69300,
-   "fund_gas": 21000,
-   "spend_gas": 21000,
-   "total_gas": 111300
-  }
- ]
+  "schema_version": 1,
+  "benchmark": "payment",
+  "environment": {
+    "hardfork": "prague",
+    "announcer_address": "0x55649E01B5Df198D18D95b5cc5051630cfD45564",
+    "announcer_code_sha256": "97b1a2b6e83d4d2d1184c28bfafe24df2463fcaec94e655b2b56ba5fc52a1b17"
+  },
+  "fixture": {
+    "name": "scheme3-demo-v1",
+    "sha256": "777b852e6430a9ae87e54b3aade83199eccd3ad83ce5e95d927e584c0a31fbe3"
+  },
+  "results": [
+    {
+      "name": "scheme3_real_sample",
+      "scheme_id": 3,
+      "kind": "real_sample",
+      "transactions": {
+        "announce": {
+          "calldata_bytes": 1380,
+          "zero_bytes": 230,
+          "gas_used": 69300
+        },
+        "fund": {
+          "gas_used": 21000
+        },
+        "spend": {
+          "gas_used": 21000
+        }
+      }
+    }
+  ]
 }

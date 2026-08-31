@@ -1,39 +1,9 @@
 #!/usr/bin/env python3
-"""Re-derive every committed gas receipt from the protocol rule. No node required.
+"""Check snapshot identity and that gas figures in documentation appear in snapshots.
 
     check_measured.py [root]
 
-Exit 0 if every receipt re-derives and every payload matches §6, 1 otherwise, 2 on usage error.
-
-WHY THIS IS SEPARATE FROM THE HARNESS
--------------------------------------
-
-`harness/announcement/measure.py` sends real transactions to a real node. That is the evidence,
-and it is a deliberate local act: running it on every push would make the numbers a side effect
-of a build.
-
-This checks the committed result instead, arithmetically, from EIP-7623 and from §6's field
-lengths -- so a figure that stopped matching its payload FAILS THIS CHECK, wherever it is
-run. Without that, a wire
-change moves every payload and nothing
-detects that the committed receipts describe shapes the document no longer specifies.
-
-**The arithmetic re-derivation covers the ANNOUNCEMENT receipts only, and the success line says
-so because the distinction is invisible from the outside.** EIP-7623 prices calldata, and
-an announcement is calldata-dominated, so its total is predictable from the payload. A
-registration is dominated by STORAGE and a payment by two transfers; neither is predictable
-from field lengths, so for those two the checks are provenance and binding -- the figure must
-be a committed receipt, of the right scheme, from the right harness -- and not arithmetic. A
-tampered registration receipt with matching prose passes, and saying so is worth more than a
-success line that reads stronger than the code.
-
-WHAT IT CANNOT SEE
-------------------
-
-It cannot tell whether the node was right. It re-derives the receipt from the rule the node was
-supposed to be applying, so a client bug that affected both would pass here -- which is why the
-harness's own self-check ALSO validates its execution probe against a second recovery path, and
-why this file is a staleness gate rather than a correctness one.
+Live re-execution is `python3 harness/bench.py all --check`.
 """
 
 from __future__ import annotations
@@ -49,68 +19,32 @@ import derive_sizes  # noqa: E402
 
 MEASURED = Path("harness/announcement/measured.json")
 INTRINSIC = 21_000
+SCHEMA_VERSION = 1
+ANNOUNCER = "0x55649E01B5Df198D18D95b5cc5051630cfD45564"
+ANNOUNCER_SHA256 = "97b1a2b6e83d4d2d1184c28bfafe24df2463fcaec94e655b2b56ba5fc52a1b17"
+REGISTRY = "0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538"
+REGISTRY_SHA256 = "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b82f"
 
-# Documents that quote gas. A five-digit-or-more figure in one of these MUST be a figure the
-# receipts contain, in either the `1 234` or the `1234` form.
-#
-# Exists because a deliberately wrong quoted measurement, planted as a probe, went
-# unnoticed: the checks above verify
-# that measured.json is internally consistent with §6, and the propagation checker guards
-# retired figures it has been told about, so a figure typed by hand into prose was outside both.
-# That is the same gap in a different place -- rule #54 requires a committed harness for every
-# quoted number, and a number nothing compares against the harness is only nominally covered.
-# THE DEFAULT SWEEP IS THE DOCUMENTS THAT SHIP, and it did not used to be. It was
-# `docs/*.md` and `AUDIT.md`, from a tree that had both; this one has neither, so the bare
-# invocation -- the one the README tells a reader to run -- swept nothing and reported "all 0
-# unmarked gas figures quoted in prose are receipts". A gate whose scope has emptied still
-# says OK, which is the failure this file exists to prevent, occurring inside it.
-#
-# `docs/*.md` and `AUDIT.md` stay in the tuple though neither ships here: a glob matching
-# nothing costs nothing, and a tree that reintroduces either does not have to remember to
-# widen the gate. `--all` no longer widens the scope -- both tuples are one set now -- and
-# what it still changes is the verdict: it REPORTS an untraced figure where the bare run
-# FAILS on it.
-#
-# EACH HARNESS'S README IS IN SCOPE, and was not. Those files quote the receipts their own
-# harness produced, which is the shortest possible path from a measurement to a reader, and
-# nothing checked them: `harness/payment/README.md` quoted an announcement at 69 510 and a
-# payment at 111 510 for as long as it took nobody to notice, both superseded by 210 gas when
-# the view tag narrowed to one byte, and both sitting beside the receipt that disagreed.
-#
-# THE SWEEP ONLY SEES A FIGURE THE WORD "gas" IS NEAR, which is the second half of how those
-# two survived: the sentence quoting them never used the word, so widening the file scope
-# alone would not have caught them. That is a real limit and it is stated rather than
-# discovered -- prose that quotes a receipt should say `gas` next to it, and prose that does
-# not is outside this gate whatever directory it lives in.
+# Files this tool reads for quoted gas numbers.
+# `docs/*.md` and `AUDIT.md` are unused in this tree; keep the globs so they
+# are covered if those paths come back.
 GAS_DOCS = ("docs/*.md", "AUDIT.md", "spec/ERC-*.md", "README.md",
             "harness/*/README.md")
 GAS_DOCS_ALL = GAS_DOCS
 
-# What `--all` finds today, asserted so that the gap is a number rather than a memory. A DROP
-# is as much a finding as a rise: it means a figure was removed or marked, and either wants
-# saying in a commit message.
-# ZERO, and in this tree trivially so: every document the sweep covers is a gate, so a figure
-# that is neither a receipt nor marked fails the bare run before it can be reported here. The
-# audit that first drove this count to zero was done in the multi-scheme tree and classified
-# thirteen figures one by one -- external, withdrawn, superseded. None of those figures came to
-# this export, so the inventory did not travel with the constant; the rule did.
-#
-# A RISE IS A FINDING. A drop is too: it means a figure was removed or classified, and either is
-# worth a sentence in the commit that did it.
+# `--all` prints unmatched numbers instead of failing. Same file list either way.
 KNOWN_UNTRACED = 0
 
-# A figure this project did not measure is exempt WHEN IT SAYS SO, in a marker that names the
-# source. An HTML comment, so it renders as nothing and greps as something:
+# A number in those files is treated as gas when it has at least five digits
+# (spaces allowed, e.g. 69 360) and either sits near the word "gas" or is in a
+# table column whose header contains "gas". That number must equal a `gas_used`
+# in harness/*/measured.json (or a sum of those values).
 #
-#     <!-- gas-external: <where the number comes from> -->
-#     <!-- gas-superseded: <why it is quoted anyway> -->
-#
-# On the figure's own line or within the three lines above it. The marker is required to carry
-# text after the colon, because "exempt" without a source is the claim this check exists to stop.
-#
-# This is deliberately NOT a keyword sweep over the prose. "measured at", "roughly", "published"
-# and "UNVERIFIED" all appear beside both kinds of figure in this repository, so a vocabulary
-# list would exempt our own unbacked numbers along with other people's real ones.
+# To quote a number this repo did not measure, put a marker in the same
+# paragraph, with a source after the colon:
+#     <!-- gas-external: EIP-2929 -->
+#     <!-- gas-superseded: pre-Prague figure -->
+#     <!-- gas-withdrawn: dropped claim -->
 MARKER = re.compile(r"<!--\s*gas-(external|superseded|withdrawn):\s*\S")
 
 
@@ -182,14 +116,7 @@ def _cell_schemes(cell: str) -> set[int]:
 # years, section sizes, hardfork-independent constants. Read from the size model rather than
 # listed, so adding a scheme does not mean editing a denylist here.
 def _not_gas() -> set[int]:
-    """Every number the SIZE model already accounts for, so it needs no gas provenance.
-
-    Read from `derive_sizes` wholesale rather than listed, because the alternative is a denylist
-    that excludes whatever is added next -- the failure mode this repository has now watched
-    nine times. Every upper-case int and every int inside a tuple or dict value counts, plus the
-    sums a document legitimately quotes: a shape's two fields added, and the hybrid combiner's
-    2 402-byte IKM.
-    """
+    """Byte-size constants from `derive_sizes`, plus announcement totals and combiner IKM."""
     out = {INTRINSIC}
 
     def absorb(v) -> None:
@@ -220,20 +147,63 @@ def _not_gas() -> set[int]:
     return out
 
 
+def _tokens(measurement: dict) -> int:
+    calldata = measurement["calldata_bytes"]
+    zero = measurement["zero_bytes"]
+    return zero + 4 * (calldata - zero)
+
+
+def _gas_used_values(value: object) -> set[int]:
+    """Collect raw `gas_used` leaves from a result object."""
+    found: set[int] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "gas_used" and isinstance(child, int):
+                found.add(child)
+            else:
+                found.update(_gas_used_values(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(_gas_used_values(child))
+    return found
+
+
+def _byte_values(value: object) -> set[int]:
+    """Collect wire-size leaves that are not gas claims."""
+    keys = {"calldata_bytes", "epk_bytes", "metadata_bytes", "meta_address_bytes"}
+    found: set[int] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in keys and isinstance(child, int):
+                found.add(child)
+            else:
+                found.update(_byte_values(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(_byte_values(child))
+    return found
+
+
+def _load_artifact(root: Path, relative: str, bad: list[str]) -> dict:
+    path = root / relative
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            bad.append(f"{relative}: top level is not an object")
+            return {}
+        return body
+    except (OSError, ValueError) as exc:
+        bad.append(f"{relative}: not readable as JSON ({exc})")
+        return {}
+
+
 def main(argv: list[str]) -> int:
     args = [a for a in argv[1:] if a != "--all"]
-    # ANY unknown flag and ANY extra positional, not just a leading one — the same
-    # fail-closed rule the transcript checker states: `. --al` is a typo for the scope AUDIT
-    # requires, and a verifier that silently narrows its sweep on a typo reports a pass it
-    # never earned.
     unknown = [a for a in args if a.startswith("-")]
     if unknown or len(args) > 1:
         print(f"usage error: unexpected argument(s) {' '.join(unknown or args[1:])}",
               file=sys.stderr)
-        print("usage: check_measured.py [root] [--all]   # both sweep the same documents "
-              "-- the ERC, the root README and each harness's; --all REPORTS an untraced "
-              "figure where the bare form FAILS on it",
-              file=sys.stderr)
+        print("usage: check_measured.py [root] [--all]", file=sys.stderr)
         print(__doc__)
         return 2
     root = Path(args[0] if args else ".").resolve()
@@ -242,78 +212,59 @@ def main(argv: list[str]) -> int:
         print(f"usage error: no measurements at {path}", file=sys.stderr)
         return 2
 
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("intrinsic_gas") != INTRINSIC:
-        print(f"FAIL: the file states an intrinsic of {data.get('intrinsic_gas')}, not "
-              f"{INTRINSIC}", file=sys.stderr)
-        return 1
-    if data.get("self_check") != "pass":
-        print(f"FAIL: the harness's own self-check did not pass when this was written: "
-              f"{data.get('self_check')}", file=sys.stderr)
-        return 1
-
-    cases = data.get("cases", [])
     bad: list[str] = []
-    print(f"{len(cases)} committed receipt(s) from {MEASURED}")
-    print(f"  {'scheme':<38}{'payload':>9}{'TOTAL':>10}{'re-derived':>12}  rule")
-    for c in cases:
-        name = c["name"]
-        nz, z = c["nonzero"], c["zero"]
-        execution = z.get("execution_gas")
-        if execution is None:
-            bad.append(f"{name}: the zero probe has no execution figure, so nothing can be "
-                       f"re-derived from it")
-            continue
-        standard = INTRINSIC + 4 * nz["tokens"] + execution
-        floor = INTRINSIC + 10 * nz["tokens"]
-        predicted = max(standard, floor)
-        which = "floor" if floor > standard else "standard"
-        mark = "ok" if predicted == nz["total_gas"] else "MISMATCH"
-        print(f"  {name:<38}{c['payload_bytes']:>9}{nz['total_gas']:>10}{predicted:>12}  "
-              f"{which:<9}{mark}")
-        if predicted != nz["total_gas"]:
-            bad.append(f"{name}: EIP-7623 predicts {predicted}, the receipt says "
-                       f"{nz['total_gas']}")
-        if nz["floor_gas"] != floor:
-            bad.append(f"{name}: the recorded floor {nz['floor_gas']} is not "
-                       f"{INTRINSIC} + 10*{nz['tokens']} = {floor}")
-        if nz["floor_binds"] != (floor > standard):
-            bad.append(f"{name}: `floor_binds` is {nz['floor_binds']} and the rule says "
-                       f"{floor > standard}")
+    expected_artifacts = {
+        "announcement": (
+            "harness/announcement/measured.json",
+            {
+                "hardfork": "prague",
+                "contract_address": ANNOUNCER,
+                "contract_code_sha256": ANNOUNCER_SHA256,
+            },
+        ),
+        "registration": (
+            "harness/registration/measured.json",
+            {
+                "hardfork": "prague",
+                "contract_address": REGISTRY,
+                "contract_code_sha256": REGISTRY_SHA256,
+            },
+        ),
+        "payment": (
+            "harness/payment/measured.json",
+            {
+                "hardfork": "prague",
+                "announcer_address": ANNOUNCER,
+                "announcer_code_sha256": ANNOUNCER_SHA256,
+            },
+        ),
+    }
+    artifacts: dict[str, dict] = {}
+    fixture_hashes: set[str] = set()
+    for benchmark, (relative, environment) in expected_artifacts.items():
+        body = _load_artifact(root, relative, bad)
+        artifacts[benchmark] = body
+        if body.get("schema_version") != SCHEMA_VERSION:
+            bad.append(f"{relative}: schema_version is not {SCHEMA_VERSION}")
+        if body.get("benchmark") != benchmark:
+            bad.append(f"{relative}: wrong benchmark identity")
+        if body.get("environment") != environment:
+            bad.append(f"{relative}: wrong benchmark environment")
+        if not isinstance(body.get("results"), list) or not body["results"]:
+            bad.append(f"{relative}: results is empty or invalid")
+        fixture = body.get("fixture")
+        if isinstance(fixture, dict) and re.fullmatch(
+            r"[0-9a-f]{64}", str(fixture.get("sha256", ""))
+        ):
+            fixture_hashes.add(fixture["sha256"])
+        else:
+            bad.append(f"{relative}: missing real fixture identity")
+    if len(fixture_hashes) != 1:
+        bad.append("benchmark artifacts do not share one real fixture")
+    print(f"{len(artifacts)} committed benchmark artifact(s) loaded")
 
-        # THE STALENESS CHECK, and the reason this file exists. A receipt whose payload is not
-        # the payload §6 specifies is measuring a shape the document withdrew.
-        if c["schemeId"] == 1:
-            continue
-        want = derive_sizes.ANNOUNCE_ERC.get(name)
-        if want is None:
-            bad.append(f"{name}: not a row of §6's wire table, so its payload is unchecked")
-        elif want[1] != c["payload_bytes"]:
-            bad.append(f"{name}: measured {c['payload_bytes']} B where §6 specifies {want[1]} B "
-                       f"-- the wire changed and this receipt did not. Re-run "
-                       f"`harness/announcement/measure.py --json`.")
-        shape = derive_sizes.SHAPES.get(name)
-        if shape and (shape[0], shape[1]) != (c["epk_bytes"], c["metadata_bytes"]):
-            bad.append(f"{name}: measured fields ({c['epk_bytes']}, {c['metadata_bytes']}) "
-                       f"where §6 gives {shape}")
-
-    # Every row of §6's table must HAVE a measurement, or §7 has a silent gap.
-    measured_names = {c["name"] for c in cases}
-    for name in derive_sizes.SHAPES:
-        if name not in measured_names:
-            bad.append(f"{name}: §6 has this row and nothing measured it")
-
-    # --- every gas figure quoted in prose is one of the receipts ---------------------------
-    # EVERY committed harness's receipts, not one file --
-    # `announcement` prices one transaction and `payment` prices all three of a payment, and a
-    # gate keyed on only one would report the other's figures as unfalsifiable. Read by glob,
-    # because the alternative is a list of harnesses that a third one gets left out of.
     allowed: set[int] = set()
-    # Membership alone is not a claim check: with every receipt number in ONE set,
-    # the registration total vouches for a sentence about an announcement — both numbers are
-    # receipts, both resulting claims false. So numbers are ALSO collected per scheme,
-    # and a figure whose surrounding prose names a scheme must come from that scheme's
-    # own receipts.
+    # Per-scheme sets so a registration total cannot vouch for an announcement claim.
     by_scheme: dict[int, set[int]] = {}
     for receipts in sorted(root.glob("harness/*/measured.json")):
         try:
@@ -321,8 +272,15 @@ def main(argv: list[str]) -> int:
         except (OSError, ValueError):
             bad.append(f"{receipts.relative_to(root)}: not readable as JSON")
             continue
-        for c in body.get("cases", []):
-            sid = c.get("schemeId", c.get("scheme_id"))
+        diagnostics = {
+            diagnostic.get("for_case"): diagnostic.get("transaction")
+            for diagnostic in body.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        }
+        for c in body.get("results", []):
+            if not isinstance(c, dict):
+                continue
+            sid = c.get("scheme_id")
             sids = {sid} if isinstance(sid, int) else set()
             # A receipt's NAME may declare coverage beyond its schemeId field:
             # "memo (schemeIds 4, 5)" is ONE measurement of a wire identical on
@@ -331,19 +289,28 @@ def main(argv: list[str]) -> int:
             for nm in re.finditer(r"schemeIds?\s+(\d)(?:\s*(?:,|and|/|or)\s*(\d))*",
                                   str(c.get("name", ""))):
                 sids |= {int(g) for g in nm.groups() if g}
-            for v in (c, c.get("nonzero") or {}, c.get("zero") or {}):
-                if not isinstance(v, dict):
-                    continue
-                # `marginal_gas` is the per-call primitive cost the ntt harness reads as
-                # gas(n+k)-gas(n) over repetitions -- not a transaction total, so it gets
-                # its own key rather than borrowing one that claims to be a receipt of a
-                # sent transaction.
-                for k in ("total_gas", "floor_gas", "execution_gas",
-                          "announce_gas", "fund_gas", "spend_gas", "marginal_gas"):
-                    if isinstance(v.get(k), int):
-                        allowed.add(v[k])
-                        for s in sids:
-                            by_scheme.setdefault(s, set()).add(v[k])
+            values = _gas_used_values(c)
+            transactions = c.get("transactions")
+            if isinstance(transactions, dict):
+                components = [
+                    observation.get("gas_used")
+                    for observation in transactions.values()
+                    if isinstance(observation, dict)
+                    and isinstance(observation.get("gas_used"), int)
+                ]
+                if len(components) == len(transactions):
+                    values.add(sum(components))
+            if body.get("benchmark") == "announcement":
+                probe = diagnostics.get(c.get("name"))
+                if isinstance(probe, dict) and all(
+                    isinstance(probe.get(key), int)
+                    for key in ("calldata_bytes", "zero_bytes", "gas_used")
+                ):
+                    values.add(probe["gas_used"])
+                    values.add(probe["gas_used"] - INTRINSIC - 4 * _tokens(probe))
+            allowed.update(values)
+            for scheme in sids:
+                by_scheme.setdefault(scheme, set()).update(values)
     # A DIFFERENCE between two receipts is as re-derivable as either receipt, and prose that
     # compares two schemes quotes one -- "1 600 more gas" is 69 060 - 67 460. Allowed, and computed
     # here rather than exempted by hand, so it stays true when a measurement moves.
@@ -444,14 +411,8 @@ def main(argv: list[str]) -> int:
             body = json.loads(receipts.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        for c in body.get("cases", []):
-            for v in (c, c.get("nonzero") or {}, c.get("zero") or {}):
-                if not isinstance(v, dict):
-                    continue
-                for k in ("calldata_bytes", "payload_bytes", "epk_bytes",
-                          "metadata_bytes", "meta_address_bytes"):
-                    if isinstance(v.get(k), int):
-                        exempt.add(v[k])
+        exempt.update(_byte_values(body.get("results", [])))
+        exempt.update(_byte_values(body.get("diagnostics", [])))
     quoted = 0
     sweep_all = "--all" in argv
     untraced = 0
@@ -574,12 +535,8 @@ def main(argv: list[str]) -> int:
                 if MARKER.search(window):
                     continue
                 quoted += 1
-                # THE BINDING CHECK: a figure whose context names a scheme must come
-                # from that scheme's own receipts (or be a difference among the named
-                # schemes' figures). A receipt number assigned to the wrong claim is
-                # falser than an unsourced one — the membership test alone certified
-                # exactly that. Contexts naming schemes with no receipts stay unbound
-                # rather than failing: the membership test still applies to them.
+                # A figure whose context names a scheme must be that scheme's receipt
+                # (or a difference among the named schemes).
                 col = m.start() - (text.rfind("\n", 0, m.start()) + 1)
                 bound, named = scheme_context(lines, line_no, doc, col)
                 if bound and bound <= set(by_scheme):
@@ -592,8 +549,7 @@ def main(argv: list[str]) -> int:
                         bad.append(
                             f"{doc.relative_to(root)}:{line}: {m.group(1)} is quoted for "
                             f"schemeId {'/'.join(str(s) for s in sorted(bound))} and is not "
-                            f"one of that scheme's receipt figures — a receipt number "
-                            f"assigned to the wrong claim is falser than an unsourced one.")
+                            f"one of that scheme's receipt figures (assigned to the wrong claim).")
                         continue
                 if n not in allowed:
                     line = text[: m.start()].count("\n") + 1
@@ -606,9 +562,8 @@ def main(argv: list[str]) -> int:
                         continue
                     bad.append(
                         f"{doc.relative_to(root)}:{line}: {m.group(1)} is quoted as gas and is "
-                        f"not in measured.json. Either re-run "
-                        f"`harness/announcement/measure.py --json` or fix the prose -- a figure "
-                        f"nothing re-derives is unfalsifiable.")
+                        f"not in measured.json. Re-run `harness/bench.py all --update` "
+                        f"or fix the prose.")
 
     if sweep_all:
         print(f"\n{untraced} untraced gas figure(s) outside the docs directory "
@@ -624,14 +579,11 @@ def main(argv: list[str]) -> int:
         for b in bad:
             print(f"  {b}")
         return 1
-    print(f"\nOK: every ANNOUNCEMENT receipt re-derives from EIP-7623, every payload matches "
-          f"§6's wire table, every row of that table has a measurement, and all {quoted} unmarked "
-          f"gas figures quoted in prose are receipts. **The registration and payment receipts are "
-          f"NOT re-derived** -- they are storage- and transfer-dominated rather than calldata-"
-          f"dominated, so EIP-7623 does not predict them; a figure quoting one is checked to BE a "
-          f"committed receipt of the right scheme, not to be arithmetically right. Marked paragraphs (gas-external, "
-          f"gas-superseded, gas-withdrawn) are classified, not receipted — the marker names "
-          f"why each is not a receipt, and this gate checks the marker exists, not the claim.")
+    print(
+        f"\nOK: snapshots name the expected environments and share one fixture; "
+        f"all {quoted} unmarked gas figures quoted in prose appear in a snapshot. "
+        f"Live re-execution: python3 harness/bench.py all --check."
+    )
     return 0
 
 

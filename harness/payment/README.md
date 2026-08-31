@@ -1,61 +1,24 @@
-# `payment` — what a whole stealth payment costs, and whether the key works
+# `payment`
 
-**A payment is three transactions, and §6 measures one of them.**
+Three native-ETH transactions on a fresh Prague Anvil:
 
-```
-1. announce(schemeId, stealthAddress, ephemeralPubKey, metadata)
-2. a value transfer to stealthAddress
-3. a spend FROM stealthAddress, signed with the derived key
-```
+1. `announce` through the canonical ERC-5564 runtime
+2. fund the derived stealth address
+3. spend from that address with the derived key
 
-`harness/announcement` measures (1) — the transaction whose size the whole ladder is an
-argument about. It is not what a payment costs, which a reader of §6 could reasonably
-assume; this harness exists to close that gap.
-
-## Run it
-
-```
-# First, produce payment.json in this directory. From the repository root:
-cargo run -q --example emit_payment_json -p pqsa-per-payment > harness/payment/payment.json
-
-# then, from here:
-python3 measure.py                # boots its own anvil, prints the table
-python3 measure.py --json         # rewrites measured.json
-python3 measure.py --rpc-url URL  # against an already-running node
+```bash
+python3 harness/bench.py payment --check
+python3 harness/bench.py payment --update
 ```
 
-Needs `anvil`, `cast`, `forge` and `cargo` on PATH.
+`python3 harness/payment/measure.py` accepts the same flags.
 
-## No derivations happen here
+The harness runs `crates/per-payment/examples/emit_payment_json.rs` (`keygen`, `announce`, `scan`, `spend_key`).
+The canonicalized JSON is SHA-256'd into the artifact.
 
-It consumes `payment.json` — addresses, payloads and derived keys —
-produced by the reference implementation: here, by `crates/per-payment`'s
-`emit_payment_json` example, which calls the library's own `keygen`, `announce`, `scan` and
-`spend_key` and formats what comes back. It computes nothing itself. `measure.py` validates
-the file before it spends anything.
+Before value moves, the spend key must derive the stealth address and both endpoints must be EOAs.
+After each send the collector checks the announcement event, receipt `from`/`to`, the funded amount, the spent amount, and the stealth balance after value and fee.
 
-## The `payment.json` contract
+`measured.json` stores the three `gasUsed` values. The printed total is their sum.
 
-One object, one `cases` array, one entry per scheme to measure:
-
-```json
-{"cases": [{"scheme_id": 3,
-            "stealth_address": "0x…20 bytes…",
-            "spend_key":       "0x…32 bytes…",
-            "epk_field":       "0x…the ephemeralPubKey bytes…",
-            "metadata":        "0x…the metadata bytes…"}]}
-```
-
-`measure.py` checks shapes and lengths and then checks the pair: it funds
-`stealth_address` and spends from it with `spend_key`, so a file whose key does not open its
-address fails at the node rather than in a comparison here.
-
-### The demonstration seed
-
-Stated under **THE DEMONSTRATION SEED** at the
-top of `measure.py`, beside the input it describes and together with the reason the committed
-figures depend on it.
-
-The private keys in `payment.json` are real private keys but it is acceptable in this
-context: every value is meant to derive from a hard-coded demonstration seed,
-the chain is a throwaway local anvil, and the addresses hold nothing but its play money.
+Requires `cargo`, `anvil`, and `cast`.
