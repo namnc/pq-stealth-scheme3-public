@@ -11,14 +11,14 @@ hence, the announcement layer is post-quantum, the spending is NOT.
 |---|---|
 | meta-address, registered once via ERC-6538 | `spending_pk(33) ‖ viewing_pk_ec(33) ‖ ek(1184)` = **1 250 B** |
 | announcement, per payment | `epk` 33 B in `ephemeralPubKey`, `view_tag ‖ ct` 1 089 B in `metadata` = **1 122 B** |
-| announcement gas, Prague | **69 360** upper bound; 69 300 for the one measured instance |
-| first-time registration gas | **964 809** upper bound; 964 737 for the measured instance |
+| announcement gas, Prague | **69 300** for the one measured instance |
+| first-time registration gas | **964 737** for the measured instance |
 | a whole payment (announce, fund, spend) | **111 300** |
 
 The all-nonzero classical baselines are 28 313 gas for a 34 B announcement and 115 310 gas
 for a 66 B registration. The registry entry is **18.9x the classical one in bytes** (1 250
 against 66) and is paid once per `schemeId`. Comparing the two announcement upper bounds,
-Scheme 3 is **2.45x in gas** (69 360 against 28 313) and is paid every time.
+Scheme 3 is **2.45x in gas** (69 300 against 28 313) and is paid every time.
 
 ## What is here
 
