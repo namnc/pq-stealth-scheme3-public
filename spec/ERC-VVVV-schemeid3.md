@@ -293,9 +293,13 @@ against the real ERC-5564 interface on anvil (`--hardfork prague`),
 with `gasUsed` read off the receipt. 
 
 | schemeId | payload | calldata | execution | gas | vs classical |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 313** | 1.00x |
 | **3** | **1 122 B** | **1 380 B** | **14 269** | **69 300** | **2.45x** |
+
+The schemeId 3 row is the real fixture announcement, identified by `fixture.sha256` in
+`measured.json`. schemeId 1 has no fixture -- its payload is not derived from anything -- so
+that row is a constructed 34 B payload carrying no zero byte.
 
 #### Registration
 **Registration is priced against the canonical registry itself.**  (**deployed runtime bytecode**, 
@@ -309,7 +313,10 @@ as real first-time transactions with one fresh registrant per row:
 | schemeId | meta-address, registered once | vs schemeId 1's 66 B | registration gas |
 |---|---|---|---|
 | 1 (classical) | 66 B | 1.0x | 115 310 |
-| **3** | **1 250 B** | **18.9x** | **964 809** |
+| **3** | **1 250 B** | **18.9x** | **964 737** |
+
+As above: the schemeId 3 row registers the real fixture meta-address, the schemeId 1 row a
+constructed 66 B one.
 
 #### End to End
 **The end to end figure is 111 300 gas.** 

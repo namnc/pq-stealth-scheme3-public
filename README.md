@@ -17,7 +17,7 @@ hence, the announcement layer is post-quantum, the spending is NOT.
 
 The all-nonzero classical baselines are 28 313 gas for a 34 B announcement and 115 310 gas
 for a 66 B registration. The registry entry is **18.9x the classical one in bytes** (1 250
-against 66) and is paid once per `schemeId`. Comparing the two announcement upper bounds,
+against 66) and is paid once per `schemeId`. Against that classical baseline,
 Scheme 3 is **2.45x in gas** (69 300 against 28 313) and is paid every time.
 
 ## What is here
