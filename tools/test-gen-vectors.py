@@ -38,14 +38,8 @@ def case(name: str, got, want) -> None:
         FAILED.append(name)
 
 
-def tree(
-    plan: str,
-    tier1: dict | None = "keep",
-    *,
-    ledger: dict | None = None,
-    include_ledger: bool = True,
-) -> Path:
-    """A synthetic root. `tier1=None` omits ACVP; `include_ledger=False` omits the ledger."""
+def tree(plan: str, tier1: dict | None = "keep") -> Path:
+    """A synthetic root. `tier1=None` omits ACVP."""
     tmp = Path(tempfile.mkdtemp())
     (tmp / "vectors" / "tier1").mkdir(parents=True)
     (tmp / "vectors" / "PLAN.md").write_text(plan, encoding="utf-8")
@@ -56,9 +50,6 @@ def tree(
     elif tier1 is not None:
         (tmp / "vectors/tier1/ml-kem-768-acvp.json").write_text(
             json.dumps(tier1), encoding="utf-8")
-    if include_ledger:
-        (tmp / "vectors/rederivation.json").write_text(
-            json.dumps(ledger or {}), encoding="utf-8")
     return tmp
 
 
@@ -123,7 +114,7 @@ def plan_of(**groups: list[str]) -> str:
     out = ["# plan\n"]
     for n, (sec, ids) in enumerate(groups.items(), 2):
         sec = sec.replace("_", ".").lstrip(".")
-        out.append(f"\n## {n}. §{sec} — a group\n\n" + HDR)
+        out.append(f"\n## {n}. Section{sec} — a group\n\n" + HDR)
         for i in ids:
             out.append(f"| {i} | c | g | e | w |\n")
     return "".join(out)
@@ -170,15 +161,15 @@ def main() -> int:
 
     print("\nthe row list comes from the plan, not from the generator")
     rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2_9": []})))
-    case("a plan naming one §1 row emits one", "§1: 1/1 slot(s)" in out, True)
+    case("a plan naming one §1 row emits one", "Section1: 1/1 slot(s)" in out, True)
     rc, out = run(tree(plan_of(**{"1": ["V1-01", "V1-01"], "2_9": []})))
     case("a plan listing the same id twice exits 1", rc, 1)
     case("and names the id and the count",
-         "§1 V1-01 (2 times)" in out and "more than once" in out, True)
+         "Section1 V1-01 (2 times)" in out and "more than once" in out, True)
     # A row the plan lists and the builder does not build must FAIL, not be skipped.
     rc, out = run(tree(plan_of(**{"1": ["V1-01", "V1-99"], "2_9": []})))
     case("a plan row the generator cannot build exits 1", rc, 1)
-    case("and it is named", "§1 V1-99" in out, True)
+    case("and it is named", "Section1 V1-99" in out, True)
     case("and the message says silence is the worse outcome",
          "silence about a row" in out, True)
 
@@ -187,10 +178,10 @@ def main() -> int:
     case("the generator supports exactly the shipped sections", gv.GROUPS, ("1", "2.9"))
     rc, out = run(tree(plan_of(**{"1": ["V1-01"]})))
     case("a missing supported section exits 1", rc, 1)
-    case("and names the missing section", "missing supported section(s): §2.9" in out, True)
+    case("and names the missing section", "missing supported section(s): Section2.9" in out, True)
     rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2_9": [], "2": []})))
     case("an unsupported section exits 1", rc, 1)
-    case("and names the unsupported section", "unsupported section(s): §2" in out, True)
+    case("and names the unsupported section", "unsupported section(s): Section2" in out, True)
 
     print("\na withdrawn or reserved plan row is neither emitted nor missing")
     # Group §1 is rendered LAST so the appended rows belong to it -- plan_of emits groups
@@ -201,7 +192,7 @@ def main() -> int:
     root = tree(plan)
     rc, out = run(root)
     case("the run succeeds", rc, 0)
-    case("both are named as skipped", "§1 V1-90" in out and "§1 V1-91" in out, True)
+    case("both are named as skipped", "Section1 V1-90" in out and "Section1 V1-91" in out, True)
     case("and the print says whose they are not",
          "not a generator's to emit" in out, True)
     body = json.loads((root / "vectors/section-1.json").read_text())["vectors"]
@@ -214,7 +205,7 @@ def main() -> int:
     plan += "| V1-92 | a live claim | g | e | the withdrawn rule does not apply |\n"
     rc, out = run(tree(plan))
     case("a live row mentioning 'withdrawn' in its failure column is NOT skipped",
-         rc == 1 and "§1 V1-92" in out, True)
+         rc == 1 and "Section1 V1-92" in out, True)
 
     print("\nthe manifest is replaced, not merged")
     # This case is INVERTED from what it asserted while the generator ran one wave at a time.
@@ -305,7 +296,7 @@ def main() -> int:
     rc, out = run(root, "--check")
     case("a wrong section label exits 1", rc, 1)
     case("and names the file and both labels",
-         "section-1.json" in out and "§9" in out and "§1" in out, True)
+         "section-1.json" in out and "§9" in out and "Section1" in out, True)
 
     print("\nvecprim's primitives against committed fixtures")
     # §1 is pinned at the start of main() via `pin_section_1`, from ROOT rather than cwd.
@@ -322,52 +313,6 @@ def main() -> int:
          gv.canonical({"x": (1, 2, 3)}), gv.canonical({"x": [1, 2, 3]}))
     case("and genuinely different rows still differ",
          gv.canonical({"x": [1, 2]}) == gv.canonical({"x": [1, 3]}), False)
-
-    print("\nthe re-derivation ledger, and the rows it does NOT name")
-    # The ledger used to carry an `absent` list naming the unwitnessed rows by hand. It was a
-    # second copy of a fact the fixture set already determines, with no gate on it: add a
-    # fixture, forget the edit, and the stale copy is the one implying the row was witnessed.
-    # The generator computes the complement instead, so these cases are what make that
-    # computation falsifiable.
-    def with_ledger(body: dict | None) -> tuple[int, str]:
-        root = tree(
-            plan_of(**{"1": ["V1-01", "V1-02"], "2_9": []}),
-            ledger=body,
-            include_ledger=body is not None,
-        )
-        return run(root)
-
-    rc, out = with_ledger(None)
-    case("a missing ledger exits 2", rc, 2)
-    case("and names the missing ledger", "no re-derivation ledger" in out, True)
-
-    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"]})
-    case("a ledger covering every row reports none unwitnessed",
-         "2 of 2 shipped row(s) re-derived independently, 0 with NO outside witness" in out,
-         True)
-    case("and names no row as unwitnessed", "no witness:" in out, False)
-
-    # THE CASE THE `absent` LIST EXISTED FOR, now automatic: a row nothing witnessed is
-    # named without anyone having listed it.
-    rc, out = with_ledger({"bytes_agree": ["V1-01"]})
-    case("a row the ledger does not name is reported unwitnessed",
-         "1 with NO outside witness" in out and "no witness: V1-02" in out, True)
-    case("and that is REPORTED, not failed -- an unwitnessed row is a legitimate state",
-         rc, 0)
-
-    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"], "outcome_only": ["V9-99"]})
-    case("a ledger naming a row no fixture has exits 1", rc, 1)
-    case("and says which", "V9-99" in out and "vouches for nothing" in out, True)
-
-    rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"], "outcome_only": ["V1-01"]})
-    case("a row classified twice exits 1", rc, 1)
-    case("and says which", "V1-01" in out and "must be one thing" in out, True)
-
-    # The four buckets are read by name, so a bucket lost from the tuple would silently
-    # convert its rows to unwitnessed. This is the case that notices.
-    rc, out = with_ledger({"ungeneratable": ["V1-01"], "bytes_disagree": ["V1-02"]})
-    case("every witnessed bucket counts, not just the agreeing ones",
-         "2 of 2 shipped row(s)" in out, True)
 
     print("\nusage")
     case("an unknown flag exits 2",

@@ -367,13 +367,6 @@ Registration under 1 and under 3 coexists with no migration.
 | `vectors/section-1.json` | 7 | Section 1 -- the derivations every schemeId shares |
 | `vectors/section-2_9.json` | 19 | Section 2 -- keys and seeds, the meta-address, the combiner and its bindings, the wire mapping, and what counts as a skip |
 
-**Independent rederivation further ensure correctness in `per_payment/spec_vectors.rs** 
-19 of the 26 were re-derived by a second implementer 
-from this document alone, 
-with every expected value stripped, 
-and that file's `bytes_disagree` list being empty *is* the claim. 
-`vectors/PLAN.md` maps each row to the sentence it pins.
-
 ## Reference implementation
 
 **schemeId 3 is implemented alongside this document**, in `crates/per-payment` over
