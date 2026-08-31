@@ -12,27 +12,17 @@
   },
   "results": [
     {
-      "name": "classical_upper_bound",
+      "name": "classical_reference",
       "scheme_id": 1,
-      "kind": "dynamic_fields_upper_bound",
+      "kind": "constructed_reference",
       "epk_bytes": 33,
       "metadata_bytes": 1,
+      "payload_zero_bytes": 0,
+      "upper_bound_gas": 28313,
       "transaction": {
         "calldata_bytes": 292,
         "zero_bytes": 229,
         "gas_used": 28313
-      }
-    },
-    {
-      "name": "scheme3_upper_bound",
-      "scheme_id": 3,
-      "kind": "dynamic_fields_upper_bound",
-      "epk_bytes": 33,
-      "metadata_bytes": 1089,
-      "transaction": {
-        "calldata_bytes": 1380,
-        "zero_bytes": 228,
-        "gas_used": 69360
       }
     },
     {
@@ -41,6 +31,8 @@
       "kind": "real_sample",
       "epk_bytes": 33,
       "metadata_bytes": 1089,
+      "payload_zero_bytes": 2,
+      "upper_bound_gas": 69360,
       "transaction": {
         "calldata_bytes": 1380,
         "zero_bytes": 230,
@@ -50,23 +42,13 @@
   ],
   "diagnostics": [
     {
-      "name": "classical_upper_bound_execution_probe",
-      "for_case": "classical_upper_bound",
+      "name": "classical_reference_execution_probe",
+      "for_case": "classical_reference",
       "kind": "zero_dynamic_fields_probe",
       "transaction": {
         "calldata_bytes": 292,
         "zero_bytes": 263,
         "gas_used": 27905
-      }
-    },
-    {
-      "name": "scheme3_upper_bound_execution_probe",
-      "for_case": "scheme3_upper_bound",
-      "kind": "zero_dynamic_fields_probe",
-      "transaction": {
-        "calldata_bytes": 1380,
-        "zero_bytes": 1350,
-        "gas_used": 43979
       }
     },
     {

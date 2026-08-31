@@ -23,6 +23,7 @@ from harness.evm import (  # noqa: E402
     send,
     set_code_checked,
 )
+from harness.eip7623 import INTRINSIC, all_nonzero_payload_bound  # noqa: E402
 from harness.runner import Benchmark, Context, main_one  # noqa: E402
 from tools import derive_sizes  # noqa: E402
 
@@ -34,7 +35,6 @@ REGISTRY_SHA256 = "aacd1016938b107361de63f20c358350de9f78fa6033b7727853f0229c94b
 BYTECODE = HERE / "deployed_bytecode.hex"
 REGISTER_SIG = "registerKeys(uint256,bytes)"
 GET_SIG = "stealthMetaAddressOf(address,uint256)(bytes)"
-INTRINSIC = 21_000
 
 
 @dataclass(frozen=True)
@@ -51,21 +51,23 @@ def _nonzero(length: int) -> bytes:
 
 
 def _cases(context: Context) -> list[Case]:
+    """One measured row per schemeId, each with its own fresh registrant.
+
+    schemeId 3 registers the real fixture meta-address. schemeId 1 has no fixture, so its
+    row is CONSTRUCTED at the right width with no zero byte -- a reference point, not a
+    sample. The all-nonzero cost of both is derived in `harness/eip7623.py` rather than
+    registered a second time.
+    """
     fixture = context.fixture
+    if len(fixture.meta_address) != derive_sizes.META["schemeId 3"][0]:
+        raise RuntimeError("fixture meta-address does not match Section 6's width")
     return [
         Case(
-            "classical_upper_bound",
+            "classical_reference",
             1,
-            "dynamic_field_upper_bound",
+            "constructed_reference",
             _nonzero(derive_sizes.META_CLASSICAL),
             "0x" + f"{1:064x}",
-        ),
-        Case(
-            "scheme3_upper_bound",
-            3,
-            "dynamic_field_upper_bound",
-            _nonzero(derive_sizes.META["schemeId 3"][0]),
-            "0x" + f"{2:064x}",
         ),
         Case(
             "scheme3_real_sample",
@@ -140,16 +142,25 @@ def collect(context: Context) -> dict:
     code = load_runtime(BYTECODE, REGISTRY_SHA256)
     with Anvil() as node:
         set_code_checked(node.url, REGISTRY, code, REGISTRY_SHA256)
-        results = [
-            {
-                "name": case.name,
-                "scheme_id": case.scheme_id,
-                "kind": case.kind,
-                "meta_address_bytes": len(case.meta_address),
-                "transaction": _execute(node.url, case),
-            }
-            for case in cases
-        ]
+        results = []
+        for case in cases:
+            transaction = _execute(node.url, case)
+            payload_zero_bytes = case.meta_address.count(0)
+            results.append(
+                {
+                    "name": case.name,
+                    "scheme_id": case.scheme_id,
+                    "kind": case.kind,
+                    "meta_address_bytes": len(case.meta_address),
+                    "payload_zero_bytes": payload_zero_bytes,
+                    # Derived from the row beside it, never registered. See
+                    # `harness/eip7623.py` for why a second transaction is not needed.
+                    "upper_bound_gas": all_nonzero_payload_bound(
+                        transaction, payload_zero_bytes
+                    ),
+                    "transaction": transaction,
+                }
+            )
     return {
         "schema_version": 1,
         "benchmark": "registration",
@@ -174,16 +185,19 @@ def render(artifact: dict) -> str:
     lines = [
         "ERC-6538 first-registration gas, canonical runtime, Prague",
         "",
-        f"{'case':<28}{'kind':<28}{'meta':>8}{'calldata':>10}{'gasUsed':>11}",
-        "-" * 85,
+        f"{'case':<22}{'kind':<22}{'meta':>8}{'calldata':>10}{'gasUsed':>11}"
+        f"{'all-nonzero':>13}",
+        "-" * 86,
     ]
     for result in artifact["results"]:
         transaction = result["transaction"]
         lines.append(
-            f"{result['name']:<28}{result['kind']:<28}"
+            f"{result['name']:<22}{result['kind']:<22}"
             f"{result['meta_address_bytes']:>8}{transaction['calldata_bytes']:>10}"
-            f"{transaction['gas_used']:>11}"
+            f"{transaction['gas_used']:>11}{result['upper_bound_gas']:>13}"
         )
+    lines += ["-" * 86,
+              "all-nonzero is DERIVED from the row beside it, not a second registration."]
     return "\n".join(lines)
 
 

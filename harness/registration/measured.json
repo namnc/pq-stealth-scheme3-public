@@ -12,10 +12,12 @@
   },
   "results": [
     {
-      "name": "classical_upper_bound",
+      "name": "classical_reference",
       "scheme_id": 1,
-      "kind": "dynamic_field_upper_bound",
+      "kind": "constructed_reference",
       "meta_address_bytes": 66,
+      "payload_zero_bytes": 0,
+      "upper_bound_gas": 115310,
       "transaction": {
         "calldata_bytes": 196,
         "zero_bytes": 123,
@@ -23,21 +25,12 @@
       }
     },
     {
-      "name": "scheme3_upper_bound",
-      "scheme_id": 3,
-      "kind": "dynamic_field_upper_bound",
-      "meta_address_bytes": 1250,
-      "transaction": {
-        "calldata_bytes": 1380,
-        "zero_bytes": 122,
-        "gas_used": 964809
-      }
-    },
-    {
       "name": "scheme3_real_sample",
       "scheme_id": 3,
       "kind": "real_sample",
       "meta_address_bytes": 1250,
+      "payload_zero_bytes": 6,
+      "upper_bound_gas": 964809,
       "transaction": {
         "calldata_bytes": 1380,
         "zero_bytes": 128,
