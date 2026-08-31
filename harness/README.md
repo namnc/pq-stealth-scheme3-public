@@ -17,10 +17,4 @@ python3 harness/bench.py all --update
 `--update` rewrites those files. 
 Pass `announcement`, `registration`, or `payment` instead of `all` for one benchmark.
 
-We employ one deterministic fixture from `crates/per-payment` that we make the `real_sample` rows,
-whereas Upper-bound rows fill dynamic ABI fields with all-nonzero bytes. 
-Announcement also records same-shape all-zero sends under `diagnostics`, 
-used to recover execution under EIP-7623.
-
 `measured.json` stores hardfork, contract identity, fixture identity, calldata length, zero-byte count, and `gasUsed`. 
-Printed totals and EIP-7623 labels are computed at display time.
