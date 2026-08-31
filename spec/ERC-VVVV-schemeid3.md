@@ -291,21 +291,16 @@ Meta-addresses MUST be registered via ERC-6538 `registerKeys` with the matching 
 Announcement cost, measured as **real standalone transactions** 
 against the real ERC-5564 interface on anvil (`--hardfork prague`), 
 with `gasUsed` read off the receipt. 
-These are **total transaction gas** -- the 21 000 intrinsic and every calldata byte included. 
-The generator ships beside the figures, at `harness/announcement/measure.py`, 
-and reads its field lengths from `tools/derive_sizes.py`; 
-the receipts are committed at `harness/announcement/measured.json`, 
-and `tools/check_measured.py` re-derives every one of them from the EIP-7623 rule with no node.
 
-| schemeId | payload | calldata | execution | gas | floor binds | vs classical |
+| schemeId | payload | calldata | execution | gas | vs classical |
 |---|---|---|---|---|---|---|
-| 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 313** | no | 1.00x |
-| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 360** | YES | **2.45x** |
-
-> Both rows are measured, **due to the EIP-7623 calldata floor**, execution gas is not charged at all -- the cost is data availability.
+| 1 (classical, ERC-5564's own) | 34 B | 292 B | 5 143 | **28 313** | 1.00x |
+| **3** | **1 122 B** | **1 380 B** | **14 269** | **69 300** | **2.45x** |
 
 #### Registration
-**Registration is priced against the canonical registry itself.** 
+**Registration is priced against the canonical registry itself.**  (**deployed runtime bytecode**, 
+taken from mainnet at
+`0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538`).
 A recipient makes a one-time ERC-6538 `registerKeys` call 
 whose calldata is the meta-address, 
 measured by `harness/registration` 
@@ -315,10 +310,6 @@ as real first-time transactions with one fresh registrant per row:
 |---|---|---|---|
 | 1 (classical) | 66 B | 1.0x | 115 310 |
 | **3** | **1 250 B** | **18.9x** | **964 809** |
-
-It is measured against the registry's **deployed runtime bytecode**, 
-taken from mainnet at
-`0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538` for precision.
 
 #### End to End
 **The end to end figure is 111 300 gas.** 
@@ -330,9 +321,7 @@ and commits the receipts at `harness/payment/measured.json`:
 |---|---|---|---|---|
 | **schemeId 3** | 69 300 | **21 000** | **21 000** | **111 300** |
 
-**The funding transfer is exactly the 21 000 intrinsic**, for a native-ETH transfer. 
-**For any other asset**: an ERC-20 transfer and an ERC-20 sweep both execute contract code,
-neither is measured by this harness.
+**This is ONLY for a native-ETH transfer.**
 
 ### 5. Security considerations
 
