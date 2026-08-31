@@ -313,8 +313,8 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                   "expect": {"ss": hx(ss)},
                   "wrong": {
                       "three_field_form": hx(hashlib.sha3_256(DS_HYBRID + three).digest()),
-                      "note": "any other order, and any omission -> a different ss. The "
-                              "historical three-field form is the likeliest omission",
+                      "note": "any other order, and any omission -> a different ss. "
+                              "The three-field form is what both implementations produce today and is the likeliest wrong answer",
                   }}
     ct2 = bytes.fromhex(t1["encapsulation"][1]["c"])
     v["V3-06a"] = {"claim": "ct is bound in",
