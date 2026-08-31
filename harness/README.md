@@ -17,4 +17,7 @@ python3 harness/bench.py all --update
 `--update` rewrites those files. 
 Pass `announcement`, `registration`, or `payment` instead of `all` for one benchmark.
 
-`measured.json` stores hardfork, contract identity, fixture identity, calldata length, zero-byte count, and `gasUsed`. 
+`measured.json` stores hardfork, contract identity, fixture identity, calldata length, zero-byte count, and `gasUsed`.
+Each row also carries `payload_zero_bytes` and `upper_bound_gas` -- what the same transaction would cost with no zero byte in its payload.
+That one is DERIVED from the row beside it by `harness/eip7623.py`, not measured, and it is the only published number that is not a receipt.
+
