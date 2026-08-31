@@ -2,7 +2,7 @@
 //!
 //! The scheme is specified in §2; §1 gives the offset and view-tag derivation it shares with
 //! anything else built on ERC-5564. Spending is secp256k1 ECDSA. What the hybrid does and
-//! does not give is in §7.
+//! does not give is in §5.
 //!
 use pqsa_core::{
     Bytes32, Error, ExportableSpendKey, StealthScheme, VIEW_TAG_BYTES,
@@ -21,7 +21,7 @@ const DS_VIEWTAG: &[u8] = b"pq-stealth/view-tag/v1";
 /// schemeId 3: payment secret combines ECDH and KEM secrets. §2.
 pub struct SchemeId3;
 
-/// Registry blob: spending point, optional viewing point (schemeId 3), ML-KEM `ek`. §6 order.
+/// Registry blob: spending point, optional viewing point (schemeId 3), ML-KEM `ek`. §2.2 order.
 #[derive(Debug, Clone)]
 pub struct MetaAddress {
     /// Payments are derived against this point. Not used to scan.
@@ -89,7 +89,7 @@ pub fn verified_ek(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error>
     Ok(ek)
 }
 
-/// ERC-5564 payload. §5: `epk` in `ephemeralPubKey`, `view_tag ‖ ct` in `metadata`.
+/// ERC-5564 payload. §3: `epk` in `ephemeralPubKey`, `view_tag ‖ ct` in `metadata`.
 #[derive(Debug, Clone)]
 pub struct Announcement {
     /// schemeId 3: sender ephemeral point.

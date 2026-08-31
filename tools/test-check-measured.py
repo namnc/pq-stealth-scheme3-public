@@ -232,7 +232,7 @@ def run(
     """Run the tool against a tree holding `data` as the measurements.
 
     The real `tools/` is symlinked in, because the tool imports `derive_sizes` from beside
-    itself -- so a temp tree needs the real one to compare §6's lengths against.
+    itself -- so a temp tree needs the real one to compare the specification's lengths against.
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -555,7 +555,7 @@ def main() -> int:
     if committed.is_file():
         rc, out = run(json.loads(committed.read_text(encoding="utf-8")))
         case("the committed announcement snapshot lints in isolation", rc, 0)
-        case("and every row of §6's table is among them", "nothing measured it" in out, False)
+        case("and every row of §4's table is among them", "nothing measured it" in out, False)
 
     # The claim the name used to make: glob README, spec, and the other harness
     # receipts. That is `check_measured.py` on the real repository root.

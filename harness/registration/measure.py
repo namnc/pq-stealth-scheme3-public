@@ -60,7 +60,7 @@ def _cases(context: Context) -> list[Case]:
     """
     fixture = context.fixture
     if len(fixture.meta_address) != derive_sizes.META["schemeId 3"][0]:
-        raise RuntimeError("fixture meta-address does not match Section 6's width")
+        raise RuntimeError("fixture meta-address does not match Section 2.2's width")
     return [
         Case(
             "classical_reference",

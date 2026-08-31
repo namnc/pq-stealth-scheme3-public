@@ -73,7 +73,7 @@ def main() -> int:
     case("and it is the ANNOUNCE_ERC loop that says so", "derived 1122 != quoted 1121" in out,
          True)
     case("and the SHAPES loop says so too, in its own words",
-         "totals 1122 != §5's 1121" in out, True)
+         "totals 1122 != §2.4's 1121" in out, True)
 
     print("\nthe view-tag width is load-bearing, and reaches EVERY payload")
     # The failure this case exists for actually happened: the width moved in one file and
@@ -84,7 +84,7 @@ def main() -> int:
     case("the ANNOUNCE_ERC loop names the new total",
          "schemeId 3 announcement: derived 1129 != quoted 1122" in out, True)
     case("the SHAPES loop names the new field pair",
-         "shape (33, 1096) totals 1129 != §5's 1122" in out, True)
+         "shape (33, 1096) totals 1129 != §2.4's 1122" in out, True)
 
     print("\nthe shape table -- (ephemeralPubKey, metadata), not the total")
     rc, out = run(('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),',
@@ -93,7 +93,7 @@ def main() -> int:
     case("and names the shape", "shape (33, 1090) totals 1123" in out, True)
 
     # Two rows sharing a shape is legal ONLY if declared; one appearing quietly is what this
-    # catches. §5's recognition rule would go stale and nothing else would say so. One scheme
+    # catches. §2.4's recognition rule would go stale and nothing else would say so. One scheme
     # ships, so the mutation adds the second -- the detector is what a future scheme walks into.
     ADD = ('    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n',
            '    "schemeId 3 announcement":  (SEC1_COMPRESSED,  VIEW_TAG + CT),\n'

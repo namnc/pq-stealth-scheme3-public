@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-derive this document's byte figures from FIPS 203 and from §5's wire rules.
+"""Re-derive this document's byte figures from FIPS 203 and from §3's wire rules.
 
 **What it covers, and what it does not.** It checks the figures listed in its own tables:
 the announcement payloads and their field splits, the meta-addresses, the registration
@@ -41,9 +41,9 @@ CT_MLKEM768 = CT
 FIPS_203_EK = 1_184
 FIPS_203_CT = 1_088
 
-# ---- §5's wire rules -----------------------------------------------------------------
+# ---- §3's wire rules -----------------------------------------------------------------
 SEC1_COMPRESSED = 33      # secp256k1 point, SEC1 compressed, per §1
-VIEW_TAG = 1              # §5 rule 1: the FIRST BYTE of `metadata`, in EVERY announcement.
+VIEW_TAG = 1              # §3 rule 1: the FIRST BYTE of `metadata`, in EVERY announcement.
                           # One, everywhere; there is no confirm tag. It was eight until the
                           # announced `stealthAddress` was made the authoritative check
                           # (§2.4 MUST) and the tag was narrowed to a prefilter.
@@ -57,7 +57,7 @@ ANNOUNCE_ERC = {
     "schemeId 3 announcement":  (SEC1_COMPRESSED + VIEW_TAG + CT,     1_122),
 }
 
-# §5's shape is the PAIR of field lengths, not the total, and the distinction is
+# §2.4's shape is the PAIR of field lengths, not the total, and the distinction is
 # load-bearing: two schemes can share a total and still be distinguishable, because one puts
 # `ct` in `ephemeralPubKey` and the other in `metadata`. Modelling the total alone would
 # call that a collision.
@@ -78,7 +78,7 @@ SHAPE_SCHEME_ID = {
 # Pairs this tree declares indistinguishable by length. Asserted rather than left as a
 # coincidence, and any UNDECLARED pair sharing a shape is a failure -- recognition is by
 # `schemeId` plus the field lengths, so a collision is not a conformance defect, but one
-# that appeared without anyone writing it down would mean §5's recognition rule had gone
+# that appeared without anyone writing it down would mean §2.4's recognition rule had gone
 # stale. Empty here, and the detector below is what keeps it honest.
 DECLARED_SHAPE_COLLISIONS: list[tuple[str, str]] = []
 
@@ -92,7 +92,7 @@ META = {
     "schemeId 3": (SPENDING_PK + VIEWING_PK_EC + EK,   1_250),
 }
 
-# §6's registration table. `schemeId 1`'s 66 B is ERC-5564's own meta-address -- two
+# §4's registration table. `schemeId 1`'s 66 B is ERC-5564's own meta-address -- two
 # SEC1-compressed points -- and is the baseline every ratio in that column is against. The
 # ratios are checked here rather than trusted because they are the only figures in that
 # table nobody measured OR quoted from elsewhere: they were computed while writing it, which
@@ -154,7 +154,7 @@ def main() -> int:
         if derived != quoted:
             bad.append(f"{name}: derived {derived} != quoted {quoted}")
 
-    print("\nshapes are (ephemeralPubKey, metadata) -- the pair, which is what §5 "
+    print("\nshapes are (ephemeralPubKey, metadata) -- the pair, which is what §2.4 "
           "recognises on")
     for name, (epk_len, md_len) in SHAPES.items():
         total = epk_len + md_len
@@ -163,7 +163,7 @@ def main() -> int:
         print(f"  {name:<38}({epk_len:>4}, {md_len:>5})  = {total:>5} B   "
               f"spec {quoted:>5}   {mark}")
         if total != quoted:
-            bad.append(f"{name}: shape ({epk_len}, {md_len}) totals {total} != §5's {quoted}")
+            bad.append(f"{name}: shape ({epk_len}, {md_len}) totals {total} != §2.4's {quoted}")
 
     by_shape: dict[tuple[int, int], list[str]] = {}
     for name, shape in SHAPES.items():
@@ -176,10 +176,10 @@ def main() -> int:
             print(f"  declared collision at {shape}: {' == '.join(sorted(names))}   ok")
         else:
             bad.append(f"UNDECLARED shape collision at {shape}: {', '.join(sorted(names))} -- "
-                       f"record it in §5 and in DECLARED_SHAPE_COLLISIONS, or separate them")
+                       f"record it in §2.4 and in DECLARED_SHAPE_COLLISIONS, or separate them")
     for pair in DECLARED_SHAPE_COLLISIONS:
         if SHAPES[pair[0]] != SHAPES[pair[1]]:
-            bad.append(f"§5 declares {pair[0]} and {pair[1]} the same shape and they are "
+            bad.append(f"§2.4 declares {pair[0]} and {pair[1]} the same shape and they are "
                        f"{SHAPES[pair[0]]} and {SHAPES[pair[1]]}")
 
     print("\ndelegation window counts -- (len - 32 + 1), not (len / 32)")
@@ -189,14 +189,14 @@ def main() -> int:
         if derived != quoted:
             bad.append(f"{name}: derived {derived} windows != quoted {quoted}")
 
-    print("\nmeta-addresses, from §5's registry column")
+    print("\nmeta-addresses, from §2.2's registry column")
     for name, (derived, quoted) in META.items():
         mark = "ok" if derived == quoted else "MISMATCH"
         print(f"  {name:<28}{derived:>6} B   spec {quoted:>6}   {mark}")
         if derived != quoted:
             bad.append(f"{name} meta-address: derived {derived} != quoted {quoted}")
 
-    print(f"\nregistration calldata, per §6's table, against schemeId 1's "
+    print(f"\nregistration calldata, per §4's table, against schemeId 1's "
           f"{META_CLASSICAL} B")
     for name, (size, quoted) in REGISTRATION_RATIOS.items():
         derived = f"{size / META_CLASSICAL:.1f}"
@@ -230,7 +230,7 @@ def main() -> int:
         for b in bad:
             print("  " + b)
         return 1
-    print("OK: every figure listed above re-derives from FIPS 203 and from §5's wire rules.\n"
+    print("OK: every figure listed above re-derives from FIPS 203 and from §3's wire rules.\n"
           "    Coverage is what this file enumerates and no more -- it does NOT sweep the "
           "documents for\n    byte figures it has not been told about. A figure nobody adds "
           "here is a figure nobody checks.")

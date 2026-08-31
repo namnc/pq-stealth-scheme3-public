@@ -81,7 +81,7 @@ def _cases(context: Context) -> list[Case]:
     fixture = context.fixture
     epk_bytes, metadata_bytes = derive_sizes.SHAPES["schemeId 3 announcement"]
     if (len(fixture.epk), len(fixture.metadata)) != (epk_bytes, metadata_bytes):
-        raise RuntimeError("fixture announcement does not match Section 6's wire table")
+        raise RuntimeError("fixture announcement does not match Section 2.4's announcement shape")
     return [
         Case(
             "classical_reference",

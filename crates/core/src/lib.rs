@@ -73,7 +73,7 @@ pub type Keys<S> = (
     <S as StealthScheme>::Tracking,
 );
 
-/// One stealth-address scheme. Vocabulary §1; wire and registry §6.
+/// One stealth-address scheme. Vocabulary §1; wire §3, registry §2.2.
 ///
 /// Associated types vary by scheme. Keygen is deterministic in its seed; nothing here draws
 /// randomness. The `SCHEME_ID` values in this tree are proposals, not reserved with ERC-5564.
@@ -163,10 +163,10 @@ pub trait StealthScheme {
     fn spend_key(master: &Self::Master, m: &Self::Match) -> Result<Self::SpendKey, Error>;
 
     /// Stealth address of this match. For generic code that cannot read [`Self::Match`]
-    /// fields; §2.8 compares it to the announced address.
+    /// fields; §2.5 compares it to the announced address.
     fn match_address(m: &Self::Match) -> [u8; 20];
 
-    /// Serialise a meta-address for ERC-6538 `registerKeys`. §6.
+    /// Serialise a meta-address for ERC-6538 `registerKeys`. §2.2.
     fn meta_to_bytes(meta: &Self::Meta) -> Vec<u8>;
 
     /// Parse a registry blob. [`None`] if it is not this scheme's.
@@ -181,7 +181,7 @@ pub trait StealthScheme {
     /// Parse an ERC-5564 event. [`None`] if it is not this scheme's.
     ///
     /// `stealth_address` is required. `[0u8; 20]` is a valid Ethereum address, so it cannot
-    /// stand in for "missing"; a parser that filled zeros would make §2.8 reject every payment.
+    /// stand in for "missing"; a parser that filled zeros would make §2.5 reject every payment.
     fn announcement_from_bytes(
         stealth_address: &[u8; 20],
         epk: &[u8],
