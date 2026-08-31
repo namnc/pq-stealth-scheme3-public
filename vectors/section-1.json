@@ -1,5 +1,5 @@
 {
-  "section": "\u00a71",
+  "section": "Section1",
   "vectors": {
     "V1-01": {
       "claim": "H(ss) = SHA256(DS_offset || ss), reduced",

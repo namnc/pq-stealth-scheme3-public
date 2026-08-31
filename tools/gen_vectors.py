@@ -53,7 +53,7 @@ GROUPS = ("1", "2.9")
 # copy is the one implying the row was witnessed. The complement's default is the safe one.
 WITNESSED = ("bytes_agree", "bytes_disagree", "outcome_only", "ungeneratable")
 
-GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*§([\d.]+)")
+GROUP = re.compile(r"^## (?:\d+[a-z]?)\.\s*Section([\d.]+)")
 ROW = re.compile(r"^\|\s*(V\d+-\d+[a-z]?)\s*\|")
 
 # THE WITHDRAWN-ROW RULE: a row whose CLAIM cell is struck through or says "no vector --
@@ -78,7 +78,7 @@ def claim_cell(line: str) -> str:
     cells = CODE_SPAN.sub("", line).split("|")
     return cells[2].strip() if len(cells) > 2 else ""
 
-# Read off §2.9 rather than remembered: a remembered `pq-stealth/hybrid/v1` — a string
+# Read off Section2.9 rather than remembered: a remembered `pq-stealth/hybrid/v1` — a string
 # that appears nowhere in the specification — would derive every V3 row under the wrong
 # constant.
 DS_HYBRID = b"pq-stealth/hybrid-payment/v1"
@@ -122,7 +122,7 @@ def repeated_ids(rows: dict[str, list[tuple[str, str]]]) -> list[str]:
             counts[rid] = counts.get(rid, 0) + 1
         for rid, n in sorted(counts.items()):
             if n > 1:
-                out.append(f"§{group} {rid} ({n} times)")
+                out.append(f"Section{group} {rid} ({n} times)")
     return out
 
 
@@ -140,7 +140,7 @@ def hx(b: bytes) -> str:
 
 
 # --------------------------------------------------------------------------------------
-# §1 -- common to every schemeId. No KEM, no curve beyond the group order.
+# Section1 -- common to every schemeId. No KEM, no curve beyond the group order.
 # --------------------------------------------------------------------------------------
 
 def group_1() -> dict[str, dict]:
@@ -280,7 +280,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                       "viewing_pk_ec_compact_0x05": hx(b"\x05" + viewing_pk_ec[1:])},
                   "expect": {"outcome": "error at decode"},
                   "wrong": {"note": "validating only spending_pk, which is the natural port "
-                                    "of §2's decoder"}}
+                                    "of Section2's decoder"}}
     v["V3-04"] = {"claim": "ss_ec is the x-coordinate alone",
                   "given": {"esk": f"{esk:064x}", "viewing_pk_ec": hx(viewing_pk_ec)},
                   "expect": {"ss_ec": hx(ss_ec), "length": 32},
@@ -325,7 +325,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                   DS_HYBRID + ss_ec + ss_pq + epk + ct2
                                   + viewing_pk_ec + ek).digest()),
                               "assertion": "different"},
-                   "wrong": {"note": "the same ss -- the case SP 800-227 §4.6.3's argument "
+                   "wrong": {"note": "the same ss -- the case SP 800-227 Section4.6.3's argument "
                                      "turns on"}}
     vpk2 = vp.encode_compressed(vp.mul(int.from_bytes(bytes([0x55]) * 32, "big")))
     v["V3-06b"] = {"claim": "viewing_pk_ec is bound in",
@@ -357,7 +357,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                              "metadata_bytes": len(tag) + len(ct),
                              "payload_bytes": len(epk) + len(tag) + len(ct)},
                   "wrong": {"ct_then_view_tag": hx(ct) + hx(tag),
-                            "note": "§2's field convention, which this variant does not use; "
+                            "note": "Section2's field convention, which this variant does not use; "
                                     "or ct || view_tag, which puts the view tag at "
                                     "metadata[1088] -- the same length as the right answer, "
                                     "so no length check distinguishes it"}}
@@ -374,8 +374,8 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     # ----------------------------------------------------------------------------------
     # V3-09..V3-15 -- RE-HOMED from the schemeId 2 set, which this tree no longer ships.
     #
-    # Eight rules §2 states for THIS scheme had their only fixture in that set and lost it
-    # with it; `vectors/PLAN.md` names each and where §2 states it. These rows put them
+    # Eight rules Section2 states for THIS scheme had their only fixture in that set and lost it
+    # with it; `vectors/PLAN.md` names each and where Section2 states it. These rows put them
     # back. They are NEW VALUES: the blinded re-derivation predates them and witnessed none
     # of them, which is exactly why they are fenced off here rather than filed in among the
     # witnessed rows above. `vectors/rederivation.json` does not name them -- `witness()`
@@ -392,7 +392,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
     assert vp.encode_compressed(vp.mul(int.from_bytes(v_ec_seed, "big"))) == viewing_pk_ec
     delegated = v_ec_seed + kem_seed
     assert not any(delegated[i:i + 32] == spending_seed for i in range(65)), \
-        "§2.1's window scan would reject this fixture's own keygen seed"
+        "Section2.1's window scan would reject this fixture's own keygen seed"
     keygen_seed = spending_seed + delegated
     spending_pk = vp.encode_compressed(vp.mul(int.from_bytes(spending_seed, "big")))
     meta = spending_pk + viewing_pk_ec + bytes.fromhex(kg["ek"])
@@ -417,14 +417,14 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "ek. Undetectable at keygen and total afterwards"}}
 
     v["V3-10"] = {"claim": "spending_seed and viewing_ec_seed MUST each be a valid secp256k1 "
-                           "scalar -- error at keygen, per §2.7",
+                           "scalar -- error at keygen, per Section2.7",
                   "given": {"seeds_128_B_differing_only_in_the_first_or_second_32": {
                       "spending_seed_0": hx(bytes(32)),
                       "spending_seed_n": f"{vp.N:064x}",
                       "spending_seed_n_minus_1": f"{vp.N - 1:064x}",
                       "viewing_ec_seed_0": hx(bytes(32))}},
                   "expect": {"outcome": "error, error, accepted, error"},
-                  "wrong": {"note": "reducing the seed mod n instead of rejecting it. §1's "
+                  "wrong": {"note": "reducing the seed mod n instead of rejecting it. Section1's "
                                     "counter-reduction is for the offset BASE, not for a "
                                     "seed: a library that reduces silently turns "
                                     "spending_seed = n into spending_seed = 0, and every "
@@ -511,7 +511,7 @@ def group_2_9(t1: dict) -> dict[str, dict]:
                                     "every announcement ever published. Raising on the tag "
                                     "mismatch is the other error: announce() is "
                                     "permissionless, so an error path there is a scanner "
-                                    "denial of service (§2.4)"}}
+                                    "denial of service (Section2.4)"}}
 
     v["V3-15"] = {"claim": "a malformed ct is a skip at the entry point, not an error",
                   "given": {"metadata_lengths": [1088, 1089, 1090],
@@ -624,11 +624,11 @@ def main(argv: list[str]) -> int:
         unsupported_groups = sorted(plan_groups - supported_groups)
         if missing_groups:
             print(f"FAIL: plan is missing supported section(s): "
-                  f"{', '.join('§' + group for group in missing_groups)}",
+                  f"{', '.join("Section" + group for group in missing_groups)}",
                   file=sys.stderr)
         if unsupported_groups:
             print(f"FAIL: plan contains unsupported section(s): "
-                  f"{', '.join('§' + group for group in unsupported_groups)}",
+                  f"{', '.join("Section" + group for group in unsupported_groups)}",
                   file=sys.stderr)
         return 1
     repeated = repeated_ids(rows)
@@ -659,7 +659,7 @@ def main(argv: list[str]) -> int:
         # path V3-14 is emitted through.
         if rejections == 0:
             print("\nFAIL: the vendored ACVP file carries no `modified ciphertext` "
-                  "decapsulation case, so implicit rejection -- the property §2.4's "
+                  "decapsulation case, so implicit rejection -- the property Section2.4's "
                   "required address comparison rests on -- has no external witness.",
                   file=sys.stderr)
             return 1
@@ -682,45 +682,45 @@ def main(argv: list[str]) -> int:
     missing: list[str] = []
     skipped_rows: list[str] = []
     stale: list[str] = []
-    print(f"groups: {', '.join('§' + g for g in GROUPS)}")
+    print(f"groups: {', '.join("Section" + g for g in GROUPS)}")
     for g in GROUPS:
         want = rows.get(g)
         if want is None:
-            print(f"  §{g}: the plan has no group for it", file=sys.stderr)
+            print(f"  Section{g}: the plan has no group for it", file=sys.stderr)
             return 1
         built = BUILDERS[g](t1) if g in BUILDERS else {}
         # `slots` are the rows that are fixtures. Reporting a withdrawn or reserved row as
         # missing would demand a fixture for a requirement that no longer exists; emitting
         # one would resurrect it.
         slots = [rid for rid, cell in want if not not_a_fixture(cell)]
-        skipped_rows.extend(f"§{g} {rid}" for rid, cell in want if not_a_fixture(cell))
+        skipped_rows.extend(f"Section{g} {rid}" for rid, cell in want if not_a_fixture(cell))
         body: dict[str, dict] = {}
         for rid in slots:
             if rid in built:
                 body[rid] = built[rid]
                 emitted += 1
             else:
-                missing.append(f"§{g} {rid}")
+                missing.append(f"Section{g} {rid}")
         # The plan is the authority on the row set, so a slot the plan lists and this file does
         # not build is a FINDING rather than a silent omission -- which is the whole reason the
         # ids are read off the plan instead of written here.
         f = dest / f"section-{g.replace('.', '_')}.json"
-        blob = (json.dumps({"section": f"§{g}", "vectors": body},
+        blob = (json.dumps({"section": f"Section{g}", "vectors": body},
                            indent=2) + "\n").encode("utf-8")
         if check_only:
             if not f.is_file():
                 stale.append(f"{f.name}: absent")
-                print(f"  §{g}: {f.name} ABSENT")
+                print(f"  Section{g}: {f.name} ABSENT")
                 continue
             try:
                 committed_file = json.loads(f.read_text(encoding="utf-8"))
             except json.JSONDecodeError as e:
                 stale.append(f"{f.name}: not valid JSON ({e})")
-                print(f"  §{g}: {f.name} UNREADABLE")
+                print(f"  Section{g}: {f.name} UNREADABLE")
                 continue
             if not isinstance(committed_file, dict):
                 stale.append(f"{f.name}: top level is not an object")
-                print(f"  §{g}: {f.name} UNREADABLE")
+                print(f"  Section{g}: {f.name} UNREADABLE")
                 continue
             committed = committed_file.get("vectors", {})
             if not isinstance(committed, dict):
@@ -734,7 +734,7 @@ def main(argv: list[str]) -> int:
             norm = canonical
 
             diff = 0
-            want_section = f"§{g}"
+            want_section = f"Section{g}"
             got_section = committed_file.get("section")
             if got_section != want_section:
                 stale.append(
@@ -755,10 +755,10 @@ def main(argv: list[str]) -> int:
                                  f"reserved")
                     diff += 1
             state = "STALE" if diff else "current"
-            print(f"  §{g}: {len(body)}/{len(slots)} slot(s), {f.name} {state}")
+            print(f"  Section{g}: {len(body)}/{len(slots)} slot(s), {f.name} {state}")
         else:
             f.write_bytes(blob)
-            print(f"  §{g}: {len(body)}/{len(slots)} slot(s) written to {f.name}")
+            print(f"  Section{g}: {len(body)}/{len(slots)} slot(s) written to {f.name}")
         shipped.extend(body)
         entry = {"sha256": hashlib.sha256(blob).hexdigest(),
                  "rows_in_plan": len(want), "rows_present": len(body)}
