@@ -455,34 +455,35 @@ redacted_debug!(Scanner, secrets: [kem_seed, viewing_ec_seed], shown: [ek, viewi
 redacted_debug!(Match, secrets: [shared_secret], shown: [stealth_address]);
 
 #[cfg(test)]
+mod spec_vectors;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    /// V2-01 keygen seed.
-    const SEED96: &str = "1111111111111111111111111111111111111111111111111111111111111111\
-                          e582b7d75e6c80b05ae392a1fc9f7153b12390fd99930368cc67a768baebc8a0\
-                          1cdacb8740c0b87c4a379575f187b367cbfa3b300bf591b109f79816e9cbe8f0";
+    /// Spending scalar followed by the ACVP `(d, z)` KEM seed.
+    const SPENDING_AND_KEM_SEED: &str = "1111111111111111111111111111111111111111111111111111111111111111\
+         e582b7d75e6c80b05ae392a1fc9f7153b12390fd99930368cc67a768baebc8a0\
+         1cdacb8740c0b87c4a379575f187b367cbfa3b300bf591b109f79816e9cbe8f0";
 
     fn unhex(s: &str) -> Vec<u8> {
         let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-        (0..s.len() / 2)
-            .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap())
-            .collect()
+        hex::decode(s).expect("test fixture is hex")
     }
 
-    /// schemeId 3 seed: viewing scalar spliced into SEED96. Bytes are 3, 10, 17, ... so they
-    /// do not collide with the spending seed under the delegation-window scan.
+    /// SchemeId 3 seed with a viewing scalar inserted between spending and KEM material.
     fn seed128() -> Vec<u8> {
-        let s = unhex(SEED96);
+        let s = unhex(SPENDING_AND_KEM_SEED);
         let mut out = s[..32].to_vec();
         out.extend((0u8..32).map(|i| i.wrapping_mul(7).wrapping_add(3)));
         out.extend_from_slice(&s[32..]);
         assert_eq!(out.len(), 128);
         out
     }
-    /// Same `d`-flip on schemeId 3.
+
+    /// Flip in the `d` half of `(d, z)` must fail `bind`.
     #[test]
-    fn schemeid3_bind_catches_a_corrupt_kem_seed_too() {
+    fn schemeid3_bind_catches_a_corrupt_kem_seed() {
         let (meta, _master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
         assert!(SchemeId3::bind(&tracking, &meta).is_ok());
 
@@ -514,9 +515,10 @@ mod tests {
         ));
     }
 
-    /// `ek` depends on `d` only. A corrupt `z` still binds and still opens a genuine ct.
+    /// `z` is not committed by `ek`: it does not affect valid decapsulation, but it does
+    /// select the implicit-rejection secret for a foreign ciphertext.
     #[test]
-    fn the_ek_check_is_blind_to_the_z_half_and_that_is_harmless() {
+    fn z_is_not_publicly_bindable_but_is_used_for_implicit_rejection() {
         let (meta, master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
 
         let mut z_corrupt = tracking.clone();
@@ -540,6 +542,15 @@ mod tests {
         assert_eq!(m_z.stealth_address, m_ok.stealth_address);
         assert_eq!(m_z.shared_secret, m_ok.shared_secret);
         assert!(SchemeId3::spend_key(&master, &m_z).is_ok());
+
+        let (foreign_ek, _) = MlKem768::keygen(&[0x5a; 64]).unwrap();
+        let (foreign_ct, _) = MlKem768::encapsulate(&foreign_ek, &[0x6b; 32]).unwrap();
+        let rejected_ok = MlKem768::decapsulate(&tracking.kem_seed, &foreign_ct).unwrap();
+        let rejected_z = MlKem768::decapsulate(&z_corrupt.kem_seed, &foreign_ct).unwrap();
+        assert_ne!(
+            rejected_ok, rejected_z,
+            "different z values must produce different implicit-rejection secrets"
+        );
     }
 
     /// Tracking from account A does not bind to meta of account B.
@@ -559,18 +570,54 @@ mod tests {
             ));
         }
     }
-    /// Same address round-trip for schemeId 3.
+    /// The schemeId 3 wire representation round-trips and remains scannable.
     #[test]
-    fn schemeid3_parses_the_address_too() {
+    fn schemeid3_wire_round_trip_scans() {
         let (meta, _master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
         let built = SchemeId3::announce(&meta, &[0x44u8; 64]).unwrap();
         let (addr, epk, md) = SchemeId3::announcement_to_bytes(&built);
         let parsed = SchemeId3::announcement_from_bytes(&addr, &epk, &md).unwrap();
 
+        assert_eq!(parsed.stealth_address, built.stealth_address);
+        assert_eq!(parsed.epk, built.epk);
+        assert_eq!(parsed.ct, built.ct);
+        assert_eq!(parsed.view_tag, built.view_tag);
+
         let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
         let m = SchemeId3::scan(&scanner, &parsed).expect("our own payment");
-        assert_eq!(m.stealth_address, parsed.stealth_address);
-        assert_ne!(parsed.stealth_address, [0u8; 20]);
+        assert_eq!(m.stealth_address, addr);
+    }
+
+    #[test]
+    fn schemeid3_announce_rejects_bad_seed_lengths_and_invalid_ephemeral_scalars() {
+        let (meta, _, _) = SchemeId3::keygen(&seed128()).unwrap();
+        assert!(matches!(
+            SchemeId3::announce(&meta, &[0u8; 63]),
+            Err(Error::Malformed)
+        ));
+        assert!(matches!(
+            SchemeId3::announce(&meta, &[0u8; 65]),
+            Err(Error::Malformed)
+        ));
+
+        let mut seed = [0x44; 64];
+        seed[..32].fill(0);
+        assert!(matches!(
+            SchemeId3::announce(&meta, &seed),
+            Err(Error::SeedRejected)
+        ));
+
+        let order = unhex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+        seed[..32].copy_from_slice(&order);
+        assert!(matches!(
+            SchemeId3::announce(&meta, &seed),
+            Err(Error::SeedRejected)
+        ));
+
+        let order_minus_one =
+            unhex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140");
+        seed[..32].copy_from_slice(&order_minus_one);
+        SchemeId3::announce(&meta, &seed).expect("n - 1 is a valid ephemeral scalar");
     }
 
     /// Lying announced address is a skip, not an error. §2.4 MUST, §2.7 skip (DoS).
@@ -629,8 +676,8 @@ mod tests {
         let m = SchemeId3::scan(&scanner, &built).expect("our payment");
         let sk = SchemeId3::spend_key(&master_a, &m).unwrap();
 
-        // Pinned, not merely self-consistent: a derivation can agree with itself and be
-        // wrong, so the key and the address are fixed to bytes rather than recomputed.
+        // Regression pins for the full call path. The primitive-level conformance oracles
+        // live in `spec_vectors`.
         let hex = |b: &[u8]| -> String { b.iter().map(|x| format!("{x:02x}")).collect() };
         assert_eq!(
             hex(&sk),
@@ -664,6 +711,53 @@ mod tests {
         built.view_tag[0] ^= 0xff;
         let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
         assert!(SchemeId3::scan(&scanner, &built).is_none());
+    }
+
+    /// A modified, correctly-sized ciphertext takes ML-KEM's implicit-rejection path and
+    /// remains a scan miss rather than an error.
+    #[test]
+    fn a_modified_ciphertext_is_a_skip_end_to_end() {
+        let (meta, _master, tracking) = SchemeId3::keygen(&seed128()).unwrap();
+        let scanner = SchemeId3::bind(&tracking, &meta).unwrap();
+        let original = SchemeId3::announce(&meta, &[0x33u8; 64]).unwrap();
+        let mut modified = original.clone();
+        modified.ct[0] ^= 1;
+
+        let epk = modified.epk.expect("announcement has an ephemeral point");
+        let viewing_seed = tracking.viewing_ec_seed.expect("schemeId 3 tracking key");
+        let viewing_pk = meta.viewing_ec.expect("schemeId 3 meta-address");
+        let ss_ec = pqsa_ec::ecdh(&viewing_seed, &epk).unwrap();
+        let ss_pq = MlKem768::decapsulate(&tracking.kem_seed, &modified.ct)
+            .expect("implicit rejection returns a pseudorandom secret");
+        let rejected_ss = combine_secrets(
+            DS_HYBRID,
+            &ss_ec,
+            &ss_pq,
+            &epk,
+            &modified.ct,
+            &viewing_pk,
+            &meta.ek,
+        )
+        .unwrap();
+        let rejected_tag = view_tag_of(&rejected_ss);
+        assert_ne!(
+            rejected_tag, original.view_tag,
+            "fixed fixture must exercise tag rejection"
+        );
+
+        let (offset, _) = derive_from_shared_secret(&rejected_ss).unwrap();
+        let stealth = add_points(&meta.spending, &offset).unwrap();
+        modified.stealth_address = pqsa_ec::address_of(&stealth);
+
+        assert!(
+            SchemeId3::scan(&scanner, &modified).is_none(),
+            "the original tag must reject the modified ciphertext"
+        );
+
+        modified.view_tag = rejected_tag;
+        let matched = SchemeId3::scan(&scanner, &modified)
+            .expect("positive control: the rejection secret, tag and address agree");
+        assert_eq!(matched.shared_secret, rejected_ss);
     }
 
     /// Secret fields do not appear in `Debug` as hex or decimal; public fields still print.
@@ -711,53 +805,27 @@ mod tests {
         );
     }
 
-    /// Demonstration seed → measured payload digest and zero-count (EIP-7623).
+    /// Demonstration seed still produces the same announcement payload.
     #[test]
-    fn the_documented_demonstration_seed_reproduces_the_measured_payload() {
-        fn walk<S: StealthScheme>(keygen_len: usize) -> ([u8; 20], Vec<u8>, Vec<u8>) {
-            // seed[i] = (i * 7 + 3 + salt) mod 256, salt = 0.
-            let keygen_seed: Vec<u8> = (0..keygen_len as u32)
-                .map(|i| (i as u8).wrapping_mul(7).wrapping_add(3))
-                .collect();
-            let (meta, _master, _tracking) = S::keygen(&keygen_seed).unwrap();
-            // Sender master [0x5a; 32], counter 0 -- the first draw.
-            let mut sender = pqsa_core::SenderState::resume([0x5a; 32], 0);
-            let ann = S::announce(&meta, &sender.draw_seed::<S>().unwrap()).unwrap();
-            S::announcement_to_bytes(&ann)
-        }
+    fn demonstration_seed_reproduces_the_announcement_payload() {
+        let keygen_seed: Vec<u8> = (0..SchemeId3::KEYGEN_SEED_BYTES as u32)
+            .map(|i| (i as u8).wrapping_mul(7).wrapping_add(3))
+            .collect();
+        let (meta, _, _) = SchemeId3::keygen(&keygen_seed).unwrap();
+        let mut sender = pqsa_core::SenderState::resume([0x5a; 32], 0);
+        let ann = SchemeId3::announce(&meta, &sender.draw_seed::<SchemeId3>().unwrap()).unwrap();
+        let (addr, epk, metadata) = SchemeId3::announcement_to_bytes(&ann);
+        assert_eq!(epk.len(), 33);
+        assert_eq!(metadata.len(), VIEW_TAG_BYTES + MlKem768::CT_BYTES);
 
-        // §5's wire table for the scheme, then the two properties the receipt rests on.
-        let (keygen_len, epk_w, meta_w, zeros) = (128usize, 33usize, 1089usize, 2usize);
-        let want = "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca";
-
-        let (addr, epk_field, metadata) = walk::<SchemeId3>(keygen_len);
-        assert_eq!(epk_field.len(), epk_w, "§5: `ephemeralPubKey` width");
-        assert_eq!(metadata.len(), meta_w, "§5: `metadata` width");
-
-        let blob: Vec<u8> = addr
+        let blob: Vec<u8> = addr.iter().chain(&epk).chain(&metadata).copied().collect();
+        let digest: String = Sha256::digest(&blob)
             .iter()
-            .chain(epk_field.iter())
-            .chain(metadata.iter())
-            .copied()
+            .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(
-            blob.iter().filter(|b| **b == 0).count(),
-            zeros,
-            "the measured calldata carries exactly {zeros} zero byte(s), and EIP-7623 prices a \
-             zero at 1 token against a nonzero at 4 -- this count is what the committed receipt \
-             rests on"
-        );
-
-        let digest = Sha256::digest(&blob);
-        assert_eq!(
-            digest
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>(),
-            want,
-            "`stealthAddress ‖ ephemeralPubKey ‖ metadata` is not the measured one. Every byte \
-             the receipt was taken over is in this digest, so a mismatch means the stated seed \
-             no longer reproduces the measurement"
+            digest,
+            "466f7268c590a20ac3771e416034fbc8d7e13b2af953ea9672466d61ceb89eca"
         );
     }
 }

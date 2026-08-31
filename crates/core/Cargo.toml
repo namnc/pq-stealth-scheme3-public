@@ -12,6 +12,9 @@ hkdf.workspace = true
 sha2.workspace = true
 sha3.workspace = true
 
+[dev-dependencies]
+hex.workspace = true
+
 # Restate the workspace table: crates cannot add to workspace.lints.
 [lints.rust]
 missing_docs = "deny"

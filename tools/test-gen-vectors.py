@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
+ROOT = TOOLS.parent
 TOOL = TOOLS / "gen_vectors.py"
 sys.path.insert(0, str(TOOLS))
 
@@ -38,33 +38,85 @@ def case(name: str, got, want) -> None:
         FAILED.append(name)
 
 
-def tree(plan: str, tier1: dict | None = "keep") -> Path:
-    """A synthetic root. `tier1=None` omits the vendored file."""
+def tree(
+    plan: str,
+    tier1: dict | None = "keep",
+    *,
+    ledger: dict | None = None,
+    include_ledger: bool = True,
+) -> Path:
+    """A synthetic root. `tier1=None` omits ACVP; `include_ledger=False` omits the ledger."""
     tmp = Path(tempfile.mkdtemp())
     (tmp / "vectors" / "tier1").mkdir(parents=True)
     (tmp / "vectors" / "PLAN.md").write_text(plan, encoding="utf-8")
     if tier1 == "keep":
-        real = Path("vectors/tier1/ml-kem-768-acvp.json")
+        real = ROOT / "vectors/tier1/ml-kem-768-acvp.json"
         (tmp / "vectors/tier1/ml-kem-768-acvp.json").write_text(
             real.read_text(encoding="utf-8"), encoding="utf-8")
     elif tier1 is not None:
         (tmp / "vectors/tier1/ml-kem-768-acvp.json").write_text(
             json.dumps(tier1), encoding="utf-8")
+    if include_ledger:
+        (tmp / "vectors/rederivation.json").write_text(
+            json.dumps(ledger or {}), encoding="utf-8")
     return tmp
 
 
-def run(root: Path, *extra: str, no_kem: bool = False) -> tuple[int, str]:
-    env = dict(os.environ)
-    if no_kem:
-        env["PQSA_NO_KEM"] = "1"
-    else:
-        env.pop("PQSA_NO_KEM", None)
+def run(root: Path, *extra: str) -> tuple[int, str]:
     r = subprocess.run([sys.executable, str(TOOL), *extra, str(root)],
-                       capture_output=True, text=True, env=env)
+                       capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr
 
 
 HDR = "| id | claim | given | expect | wrong |\n|---|---|---|---|---|\n"
+
+
+def pin_section_1() -> None:
+    """§1 against `vectors/section-1.json`, including retry *outputs*, not just `counter >= 1`."""
+    v1 = json.loads((ROOT / "vectors/section-1.json").read_text(encoding="utf-8"))["vectors"]
+
+    v = v1["V1-01"]
+    base, scalar, counter = vp.h_of_ss(bytes.fromhex(v["given"]["ss"]))
+    case("V1-01 offset digest", base.hex(), v["expect"]["base"])
+    case("V1-01 counter", counter, v["expect"]["counter"])
+    case("V1-01 offset", f"{scalar:064x}", v["expect"]["offset"])
+
+    v = v1["V1-02"]
+    base = bytes.fromhex(v["given"]["base"])
+    case("V1-02 big-endian scalar",
+         f"{int.from_bytes(base, 'big') % vp.N:064x}",
+         v["expect"]["offset_big_endian"])
+    case("V1-02 is not little-endian",
+         f"{int.from_bytes(base, 'little') % vp.N:064x}" ==
+         v["expect"]["offset_big_endian"], False)
+
+    v = v1["V1-03"]
+    scalar, counter = vp.reduce_to_scalar(bytes.fromhex(v["given"]["base"]))
+    case("V1-03 counter", counter, v["expect"]["counter"])
+    case("V1-03 offset", f"{scalar:064x}", v["expect"]["offset"])
+
+    v = v1["V1-04"]
+    scalar, counter = vp.reduce_to_scalar(bytes.fromhex(v["given"]["base"]))
+    case("V1-04 counter", counter, v["expect"]["counter"])
+    case("V1-04 offset", f"{scalar:064x}", v["expect"]["offset"])
+
+    v = v1["V1-05"]
+    scalar, counter = vp.reduce_to_scalar(bytes.fromhex(v["given"]["base"]))
+    case("V1-05 counter", counter, v["expect"]["counter"])
+    case("V1-05 offset", f"{scalar:064x}", v["expect"]["offset"])
+
+    v = v1["V1-06"]
+    digest = hashlib.sha256(
+        vp.DS_OFFSET + bytes.fromhex(v["given"]["base"]) + bytes([1])
+    ).digest()
+    case("V1-06 single-byte counter", digest.hex(), v["expect"]["digest"])
+    case("V1-06 is not u32be", digest.hex() == v["wrong"]["u32be"], False)
+    case("V1-06 is not u64be", digest.hex() == v["wrong"]["u64be"], False)
+    case("V1-06 is not ascii", digest.hex() == v["wrong"]["ascii"], False)
+
+    v = v1["V1-07"]
+    tag = vp.view_tag(bytes.fromhex(v["given"]["ss"]))
+    case("V1-07 view tag", tag.hex(), v["expect"]["view_tag"])
 
 
 def plan_of(**groups: list[str]) -> str:
@@ -114,69 +166,36 @@ def main() -> int:
     # table covers for arbitrary keys.
     a, b = 7, 11
     case("ECDH commutes", vp.mul(a, vp.mul(b)), vp.mul(b, vp.mul(a)))
-    case("the reduction bound accepts n-1",
-         vp.reduce_to_scalar((vp.N - 1).to_bytes(32, "big"))[1], 0)
-    case("and rejects n", vp.reduce_to_scalar(vp.N.to_bytes(32, "big"))[1] >= 1, True)
-    case("and rejects zero", vp.reduce_to_scalar(bytes(32))[1] >= 1, True)
+    pin_section_1()
 
     print("\nthe row list comes from the plan, not from the generator")
-    rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []})))
+    rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2_9": []})))
     case("a plan naming one §1 row emits one", "§1: 1/1 slot(s)" in out, True)
+    rc, out = run(tree(plan_of(**{"1": ["V1-01", "V1-01"], "2_9": []})))
+    case("a plan listing the same id twice exits 1", rc, 1)
+    case("and names the id and the count",
+         "§1 V1-01 (2 times)" in out and "more than once" in out, True)
     # A row the plan lists and the builder does not build must FAIL, not be skipped.
-    rc, out = run(tree(plan_of(**{"1": ["V1-01", "V1-99"], "2": [], "2_9": [], "5": []})))
+    rc, out = run(tree(plan_of(**{"1": ["V1-01", "V1-99"], "2_9": []})))
     case("a plan row the generator cannot build exits 1", rc, 1)
     case("and it is named", "§1 V1-99" in out, True)
     case("and the message says silence is the worse outcome",
          "silence about a row" in out, True)
 
-    print("\nthe group list may not drift from the coverage checker's")
-    # SKIPPED, LOUDLY, when the coverage checker is absent. This suite ships in the release and
-    # that checker does not -- it pulls in two more tools that are about our own documents -- so
-    # in a release tree the cross-check has nothing to compare against.
-    #
-    # Announced rather than passed, because this repository's standing rule is that a gate which
-    # cannot run must say so: a suite that silently drops a case in one tree and keeps it in
-    # another reports the same "OK" for two different amounts of checking.
+    print("\nthe supported group set is fail-closed")
     import gen_vectors as gv  # noqa: E402  -- always present; it is the tool under test
-    try:
-        import check_vector_coverage as cvc  # noqa: E402
-    except ModuleNotFoundError as e:
-        print(f"  SKIPPED  the coverage checker is not present ({e.name}), so the group "
-              f"lists "
-              f"cannot be compared here. This is expected in a release tree and a FINDING in "
-              f"the authoring one.")
-    else:
-        case("both tools agree on the group list",
-             set(gv.GROUPS), set().union(*(set(v) for v in cvc.WAVES.values())))
-        # The withdrawn-row rule is the second deliberate copy, and it gets the same
-        # treatment: the compiled patterns must be identical, and the two claim-cell
-        # readers -- mdscan on one side, the generator's blank-the-code-spans split on the
-        # other -- must classify every row of the REAL plan the same way. The real plan,
-        # because that is where the escaped pipes and struck-through claims actually live;
-        # a synthetic agreement proves nothing about the file the tools disagree over.
-        case("both tools agree on the empty-cell pattern",
-             (gv.EMPTY_CELL.pattern, gv.EMPTY_CELL.flags),
-             (cvc.EMPTY_CELL.pattern, cvc.EMPTY_CELL.flags))
-        case("both tools agree on the withdrawn pattern",
-             (gv.WITHDRAWN_CELL.pattern, gv.WITHDRAWN_CELL.flags),
-             (cvc.WITHDRAWN_CELL.pattern, cvc.WITHDRAWN_CELL.flags))
-        real_plan = Path("vectors/PLAN.md")
-        if real_plan.is_file():
-            mine, theirs = [], []
-            for ln in real_plan.read_text(encoding="utf-8").split("\n"):
-                m = gv.ROW.match(ln)
-                if not m:
-                    continue
-                mine.append((m.group(1), gv.not_a_fixture(gv.claim_cell(ln))))
-                cell = cvc.claim_cell(ln)
-                theirs.append((m.group(1), bool(cvc.EMPTY_CELL.search(cell)
-                                                or cvc.WITHDRAWN_CELL.search(cell))))
-            case("and classify every real plan row identically", mine, theirs)
+    case("the generator supports exactly the shipped sections", gv.GROUPS, ("1", "2.9"))
+    rc, out = run(tree(plan_of(**{"1": ["V1-01"]})))
+    case("a missing supported section exits 1", rc, 1)
+    case("and names the missing section", "missing supported section(s): §2.9" in out, True)
+    rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2_9": [], "2": []})))
+    case("an unsupported section exits 1", rc, 1)
+    case("and names the unsupported section", "unsupported section(s): §2" in out, True)
 
     print("\na withdrawn or reserved plan row is neither emitted nor missing")
     # Group §1 is rendered LAST so the appended rows belong to it -- plan_of emits groups
     # in keyword order and a row line joins the group above it.
-    plan = plan_of(**{"2": [], "2_9": [], "5": [], "1": ["V1-01"]})
+    plan = plan_of(**{"2_9": [], "1": ["V1-01"]})
     plan += "| V1-90 | ~~a struck-through claim~~ | — | — | **WITHDRAWN.** |\n"
     plan += "| V1-91 | **no vector — deliberately.** a reserved slot | — | — | a vector |\n"
     root = tree(plan)
@@ -191,7 +210,7 @@ def main() -> int:
     # The rule is claim-cell-scoped and case-sensitive: a LIVE row whose failure column
     # mentions "the withdrawn rule" must still be built -- the false positive that scoping
     # exists to prevent. V1-92 is live, unbuilt, and must therefore FAIL the run as missing.
-    plan = plan_of(**{"2": [], "2_9": [], "5": [], "1": ["V1-01"]})
+    plan = plan_of(**{"2_9": [], "1": ["V1-01"]})
     plan += "| V1-92 | a live claim | g | e | the withdrawn rule does not apply |\n"
     rc, out = run(tree(plan))
     case("a live row mentioning 'withdrawn' in its failure column is NOT skipped",
@@ -217,12 +236,12 @@ def main() -> int:
     case("and the files are ordered by name", list(man["files"]), sorted(man["files"]))
 
     print("\nthe vendored NIST file is required, never substituted")
-    rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}), tier1=None))
+    rc, out = run(tree(plan_of(**{"1": ["V1-01"], "2_9": []}), tier1=None))
     case("a missing tier-1 file exits 2", rc, 2)
     case("and says tier 1 is NIST's", "does not compute it" in out, True)
 
     print("\nevery KEM value traces to the vendored file")
-    root = tree(plan_of(**{"1": [], "2_9": ["V3-06a", "V3-08"], "5": []}))
+    root = tree(plan_of(**{"1": [], "2_9": ["V3-06a", "V3-08"]}))
     run(root)
     acvp = json.loads((root / "vectors/tier1/ml-kem-768-acvp.json").read_text())
     known = {x["ek"] for x in acvp["keygen"]}
@@ -244,25 +263,8 @@ def main() -> int:
     case("and every one of them is a NIST-published value",
          [f for f in found if f not in known], [])
 
-    # COVERAGE REMOVED WITH ITS SUBJECT, NAMED RATHER THAN DROPPED QUIETLY. Two blocks
-    # stood here, exercising both sides of the `PQSA_NO_KEM` seam on the three schemeId 2
-    # rows whose generability depended on an importable ML-KEM: absent, they were recorded
-    # `not_generatable` with a reason; present, they were emitted and V2-11 asserted that
-    # decapsulation did NOT raise and returned a DIFFERENT secret -- implicit rejection,
-    # demonstrated rather than asserted.
-    #
-    # No surviving row calls the KEM. Every surviving group builds from the vendored ACVP file
-    # directly, so `--check` now passes byte-identically with kyber-py absent and neither
-    # branch can be staged from a real row. The seam and the stub path are still in the
-    # tool, and the guards below exercise them through V6-03, whose stub comes from the
-    # conformance hook rather than from the environment. What is NOT exercised any more is
-    # a row moving between the two states because a library came or went.
-    print("\n--check: stale, unverifiable and absent are THREE outcomes")
-    # The distinction this suite exists to pin: a row that DIFFERS is stale and must fail; a row
-    # this process cannot rebuild is unverifiable and must NOT; and an absent file is stale.
-    # Conflating the second with the first is what a whole-file byte comparison did, and it
-    # reported a byte-identical tree as stale the moment the ML-KEM library was absent.
-    root = tree(plan_of(**{"1": ["V1-01"], "2": [], "2_9": [], "5": []}))
+    print("\n--check rejects edited, missing-row and absent-file states")
+    root = tree(plan_of(**{"1": ["V1-01"], "2_9": []}))
     run(root)
     rc, out = run(root, "--check")
     case("--check on a freshly generated tree passes", rc, 0)
@@ -294,54 +296,19 @@ def main() -> int:
     case("an absent file exits 1", rc, 1)
     case("and says absent, not differs", "section-1.json: absent" in out, True)
 
-    # COVERAGE REMOVED WITH ITS SUBJECT. Two cases stood here -- a row this process cannot
-    # rebuild does NOT fail `--check`, and a partial run concludes "OK, PARTLY" rather than
-    # claiming every file matches. Both were staged on V6-03, the tree's only row emitted as
-    # a `not_generatable` stub. The seed-derivation group left and V6-03 with it, so nothing
-    # in this tree produces a stub and neither case can be staged from a real row. The paths are still in the tool.
-    # AND THE SAME FOR THE DOWNGRADE GUARD. `refuse_to_downgrade` refuses to replace a
-    # committed row that carries a value with a stub; three cases exercised it, and the
-    # `--out` scratch-tree false-positive case with them. All four needed a row the generator
-    # would emit as a stub, and there is none. The guard is kept: it is cheap, it is correct,
-    # and the day a row becomes ungeneratable again is the day it matters. It is UNTESTED
-    # here, which is the honest word for it.
-    #
-    # The scheme-name and `keygen_seed`-salt cases went the same way -- their subject was
-    # `section-5.json`, the seed-derivation group.
-    print("\nvecprim's primitives, against the COMMITTED fixtures")
-    # A mutation report rather than a hunch: eight mutations to `vecprim.py` -- among them a
-    # changed view-tag width and `kem_encaps` returning the library's field order -- all
-    # SURVIVED this suite. Every case above builds a SYNTHETIC tree and compares the generator
-    # against itself, so a primitive can move and every synthetic expectation moves with it.
-    # These cases compare against the committed bytes in `vectors/`, which do not.
-    real = Path(".")
-    if not (real / "vectors/section-1.json").is_file():
-        print("  SKIPPED  no committed vectors in this tree, so nothing to compare against.")
-    else:
-        def committed(section, vid, key):
-            body = json.loads((real / f"vectors/section-{section}.json").read_text())
-            return body["vectors"][vid]["expect"][key]
+    root = tree(plan_of(**{"1": ["V1-01"], "2_9": []}))
+    run(root)
+    f = root / "vectors/section-1.json"
+    body = json.loads(f.read_text())
+    body["section"] = "§9"
+    f.write_text(json.dumps(body, indent=2) + "\n")
+    rc, out = run(root, "--check")
+    case("a wrong section label exits 1", rc, 1)
+    case("and names the file and both labels",
+         "section-1.json" in out and "§9" in out and "§1" in out, True)
 
-        # §1's view tag, at its full width. The mutation that shortened it to one byte survived.
-        v1 = json.loads((real / "vectors/section-1.json").read_text())["vectors"]
-        tag_ss = bytes.fromhex(v1["V1-07"]["given"]["ss"])
-        case("the view tag matches V1-07 exactly, at its full width",
-             vp.view_tag(tag_ss).hex(), v1["V1-07"]["expect"]["view_tag"])
-        case("and it is VIEW_TAG_BYTES long, not one", len(vp.view_tag(tag_ss)),
-             vp.VIEW_TAG_BYTES)
-
-        # §1's offset digest, which every derived address depends on.
-        base, scalar, counter = vp.h_of_ss(bytes.fromhex(v1["V1-01"]["given"]["ss"]))
-        case("the offset digest matches V1-01", base.hex(), v1["V1-01"]["expect"]["base"])
-        case("and its reduction needs no retry, as the row states",
-             counter, v1["V1-01"]["expect"]["counter"])
-        case("and the offset equals the base when no retry was needed",
-             f"{scalar:064x}", v1["V1-01"]["expect"]["offset"])
-
-        # The announce-seed cases stood here, pinning `vp.announce_seed`'s field order and
-        # the length-prefixed `kem_id` against the committed V6-05. Three mutations lived
-        # there. `section-5.json` is gone, so there is no committed row to pin them against
-        # and `vecprim` no longer exposes the derivations they covered.
+    print("\nvecprim's primitives against committed fixtures")
+    # §1 is pinned at the start of main() via `pin_section_1`, from ROOT rather than cwd.
 
     print("\nthe row comparison is representation-insensitive")
     # Directly, on the hoisted `canonical`. Through the CLI this was unreachable: nothing in the
@@ -362,16 +329,17 @@ def main() -> int:
     # fixture, forget the edit, and the stale copy is the one implying the row was witnessed.
     # The generator computes the complement instead, so these cases are what make that
     # computation falsifiable.
-    def with_ledger(body):
-        root = tree(plan_of(**{"1": ["V1-01", "V1-02"], "2_9": []}))
-        if body is not None:
-            (root / "vectors/rederivation.json").write_text(json.dumps(body),
-                                                            encoding="utf-8")
+    def with_ledger(body: dict | None) -> tuple[int, str]:
+        root = tree(
+            plan_of(**{"1": ["V1-01", "V1-02"], "2_9": []}),
+            ledger=body,
+            include_ledger=body is not None,
+        )
         return run(root)
 
     rc, out = with_ledger(None)
-    case("no ledger is announced as SKIPPED, not passed over", "witness: SKIPPED" in out, True)
-    case("and the run still succeeds", rc, 0)
+    case("a missing ledger exits 2", rc, 2)
+    case("and names the missing ledger", "no re-derivation ledger" in out, True)
 
     rc, out = with_ledger({"bytes_agree": ["V1-01", "V1-02"]})
     case("a ledger covering every row reports none unwitnessed",
@@ -402,9 +370,10 @@ def main() -> int:
          "2 of 2 shipped row(s)" in out, True)
 
     print("\nusage")
-    case("an unknown flag exits 2", run(tree(plan_of(**{"1": []})), "--bogus")[0], 2)
+    case("an unknown flag exits 2",
+         run(tree(plan_of(**{"1": [], "2_9": []})), "--bogus")[0], 2)
     case("the withdrawn --wave flag is now just an unknown flag",
-         run(tree(plan_of(**{"1": []})), "--wave", "1")[0], 2)
+         run(tree(plan_of(**{"1": [], "2_9": []})), "--wave", "1")[0], 2)
     with tempfile.TemporaryDirectory() as t:
         case("a tree with no plan exits 2",
              subprocess.run([sys.executable, str(TOOL), t],
@@ -414,7 +383,7 @@ def main() -> int:
     if FAILED:
         print(f"FAIL: {len(FAILED)} case(s): {', '.join(FAILED)}")
         return 1
-    print("OK: gen_vectors and vecprim behave as specified.")
+    print("OK: gen_vectors and vecprim match the committed fixtures.")
     return 0
 
 

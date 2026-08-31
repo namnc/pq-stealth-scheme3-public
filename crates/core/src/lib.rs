@@ -104,7 +104,7 @@ pub trait StealthScheme {
     /// Output of [`Self::bind`]: tracking checked against a meta-address, plus values
     /// [`Self::scan`] reuses (so `scan` does not rerun ML-KEM keygen per event).
     type Scanner;
-    /// One-time spending key. secp256k1 scalar on schemeIds 2 and 3.
+    /// One-time spending key. A secp256k1 scalar for schemeId 3.
     type SpendKey;
 
     /// Derive `(meta, master, tracking)` from `seed` of length [`Self::KEYGEN_SEED_BYTES`].
@@ -201,7 +201,6 @@ const DS_KEYGEN: &[u8] = b"pq-stealth/keygen/v1";
 
 /// Keygen-seed derivation from a 32-byte master. NOT SPECIFIED BY THE ERC; §2.1 states only
 /// that the seed it produces is 128 bytes.
-///
 ///
 /// ```text
 /// HKDF-SHA256(
@@ -375,16 +374,22 @@ pub fn reject_if_spending_key_is_delegated(
 }
 
 /// Announce seed. Integers are u64be; `i` sits immediately after `master`. Not from the ERC.
-/// The fixture that pinned this field order left with the seed-derivation vector group.
 ///
 /// ```text
 /// SHAKE256(DS || master(32) || u64be(i)
 ///          || u64be(schemeId) || u64be(|scheme_name|) || scheme_name
 ///          || u64be(|kem_id|) || kem_id, n)
 /// ```
-fn announce_seed(master: &Bytes32, scheme_id: u64, scheme_name: &[u8], i: u64, n: usize) -> Vec<u8> {
+fn announce_seed(
+    master: &Bytes32,
+    scheme_id: u64,
+    scheme_name: &[u8],
+    i: u64,
+    n: usize,
+) -> Vec<u8> {
     let kem_id = kem_id(KEM_NAME);
-    let mut input = Vec::with_capacity(DS_SENDER.len() + 32 + 8 * 4 + scheme_name.len() + kem_id.len());
+    let mut input =
+        Vec::with_capacity(DS_SENDER.len() + 32 + 8 * 4 + scheme_name.len() + kem_id.len());
     input.extend_from_slice(DS_SENDER);
     input.extend_from_slice(master);
     input.extend_from_slice(&i.to_be_bytes());
@@ -421,17 +426,14 @@ mod tests {
 
     /// Stand-in so the derivation can be tested without a scheme crate. `NAME` is bound in.
     ///
-    /// **The `schemeId 2` and `schemeId 6` names in this module are ARBITRARY KDF INPUTS, not
-    /// schemes this tree carries.** They exercise the generic derivation -- that the id, the
-    /// name and the index each change the output -- and their bytes are pinned by the golden
-    /// answers below, so renaming them to something this export does ship would move every
-    /// pinned seed. Left as they are for that reason, and said here so a reader does not go
-    /// looking for a specification that is not in this repository.
-    struct Scheme2;
+    /// **`keygen_seed` / `announce_seed` are not in the ERC.** §2.4 leaves seed production to
+    /// the wallet. The golden bytes below are regression pins for this crate's KDF (used by
+    /// the harness), not rows from `vectors/`.
+    struct SeedFixture;
 
-    impl Scheme2 {
-        const SCHEME_ID: u64 = 2;
-        const NAME: &'static str = "schemeId 2 (direct KEM)";
+    impl SeedFixture {
+        const SCHEME_ID: u64 = 42;
+        const NAME: &'static str = "test fixture alpha";
         const ANNOUNCE_SEED_BYTES: usize = 32;
     }
 
@@ -440,46 +442,36 @@ mod tests {
         announce_seed(&master, scheme_id, scheme_name.as_bytes(), i, n)
     }
 
-    /// V6-05 known answers (transcribed; this crate has no JSON dependency).
+    /// Regression pin for [`announce_seed`]. Not an ERC vector.
     #[test]
-    fn announce_seed_matches_v6_05() {
+    fn announce_seed_golden() {
         assert_eq!(
             hexlify(&seed(
-                Scheme2::SCHEME_ID,
-                Scheme2::NAME,
+                SeedFixture::SCHEME_ID,
+                SeedFixture::NAME,
                 0,
-                Scheme2::ANNOUNCE_SEED_BYTES
+                SeedFixture::ANNOUNCE_SEED_BYTES
             )),
-            "e5764131fba56a8f9c468cb223447a3a82aa712d6307ec1bdc43ec8d521e8d83",
-            "schemeId 2, index 0"
+            "988f67aacf3885bee30f27d88cf55fb4ee7107ceda821ae7b435c0d06193300f",
+            "fixture stream, index 0"
         );
         assert_eq!(
             hexlify(&seed(
-                Scheme2::SCHEME_ID,
-                Scheme2::NAME,
+                SeedFixture::SCHEME_ID,
+                SeedFixture::NAME,
                 1,
-                Scheme2::ANNOUNCE_SEED_BYTES
+                SeedFixture::ANNOUNCE_SEED_BYTES
             )),
-            "41dc0bdd28960bc71f01faf1fce12cb3299f01dbb3be8f5da2d99bdcfc79a3df",
-            "schemeId 2, index 1 -- a different index MUST give a different seed"
+            "3fc29d89d42ee447d9688e062d4315bfa1beac99ab28ea9773cfb4276f7bdd10",
+            "fixture stream, index 1"
         );
         assert_eq!(
             hexlify(&seed(3, "schemeId 3 (direct KEM, hybrid)", 0, 64)),
-            "69749ba9431b43fb3b501df75a572033fe667334d99507e15bdd410da704a83219c89823544fb1e7\
-             f7896471dde6ba00dd508f8dfe22d79be7559b95d05c6a61"
-                .replace(' ', ""),
+            concat!(
+                "69749ba9431b43fb3b501df75a572033fe667334d99507e15bdd410da704a832",
+                "19c89823544fb1e7f7896471dde6ba00dd508f8dfe22d79be7559b95d05c6a61"
+            ),
             "schemeId 3 draws 64 bytes: ephemeral_seed(32) || encap_seed(32)"
-        );
-    }
-
-    /// V6-05: `i` after `master`, not appended last.
-    #[test]
-    fn the_index_is_not_appended_last() {
-        let wrong = "c16df0c3b3391be833173fe20b7aab90665a5d9ba2c3f4f15b2e59b624035c1c";
-        let got = hexlify(&seed(Scheme2::SCHEME_ID, Scheme2::NAME, 0, 32));
-        assert_ne!(
-            got, wrong,
-            "the index must sit immediately after master, not at the end"
         );
     }
 
@@ -534,27 +526,47 @@ mod tests {
     fn the_counter_is_next_unused() {
         let mut st = SenderState::resume([0xA5; 32], 0);
         assert_eq!(st.counter(), 0);
-        let first = st.draw_seed_for(2, "schemeId 2 (direct KEM)", 32);
+        let first = st.draw_seed_for(SeedFixture::SCHEME_ID, SeedFixture::NAME, 32);
         assert_eq!(st.counter(), 1, "drawing consumes the index it was given");
-        let second = st.draw_seed_for(2, "schemeId 2 (direct KEM)", 32);
+        let second = st.draw_seed_for(SeedFixture::SCHEME_ID, SeedFixture::NAME, 32);
         assert_ne!(first, second, "two draws must not give one seed");
         assert_eq!(
             hexlify(&first),
-            "e5764131fba56a8f9c468cb223447a3a82aa712d6307ec1bdc43ec8d521e8d83",
-            "the first draw is index 0, matching V6-05"
+            "988f67aacf3885bee30f27d88cf55fb4ee7107ceda821ae7b435c0d06193300f",
+            "the first draw is index 0, matching announce_seed_golden"
+        );
+    }
+
+    /// Wrapping the counter would reuse index 0. [`Error::CounterExhausted`] is the stop.
+    #[test]
+    fn draw_at_u64_max_is_counter_exhausted() {
+        let mut st = SenderState::resume([0xA5; 32], u64::MAX);
+        assert_eq!(st.counter(), u64::MAX);
+        assert!(matches!(
+            st.draw_seed_untyped(
+                SeedFixture::SCHEME_ID,
+                SeedFixture::NAME,
+                SeedFixture::ANNOUNCE_SEED_BYTES
+            ),
+            Err(Error::CounterExhausted)
+        ));
+        assert_eq!(
+            st.counter(),
+            u64::MAX,
+            "a failed draw must not consume or wrap the index"
         );
     }
 
     /// `NAME` is bound in: two schemes with the same id must not share a seed stream.
     #[test]
     fn the_scheme_name_is_bound_not_only_the_id() {
-        let a = seed(6, "schemeId 6 (Spirit, level 2)", 0, 32);
-        let b = seed(6, "schemeId 6 (Spirit, level 3)", 0, 32);
+        let a = seed(SeedFixture::SCHEME_ID, "test fixture alpha", 0, 32);
+        let b = seed(SeedFixture::SCHEME_ID, "test fixture beta", 0, 32);
         assert_ne!(a, b);
     }
 
     fn hexlify(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
+        hex::encode(b)
     }
 
     /// Rejection advances the index; a non-rejection error stops; exhausting `tries` reports SeedRejected.
@@ -562,9 +574,9 @@ mod tests {
     fn a_rejected_seed_advances_the_index_and_is_never_reused() {
         struct Fake;
         impl StealthScheme for Fake {
-            const SCHEME_ID: u64 = 2;
-            const NAME: &'static str = "fake";
-            const KEYGEN_SEED_BYTES: usize = 96;
+            const SCHEME_ID: u64 = 42;
+            const NAME: &'static str = "test fixture rejector";
+            const KEYGEN_SEED_BYTES: usize = 128;
             const ANNOUNCE_SEED_BYTES: usize = 32;
             type Meta = ();
             type Master = ();
@@ -643,33 +655,41 @@ mod tests {
     }
 
     const MASTER: [u8; 32] = [0xa5; 32];
-    const SCHEME_2: &[u8] = b"schemeId 2 (direct KEM)";
+    const FIXTURE_SCHEME_ID: u64 = 42;
+    const FIXTURE_SCHEME_NAME: &[u8] = b"test fixture alpha";
     const SCHEME_3: &[u8] = b"schemeId 3 (direct KEM, hybrid)";
 
-    /// V6-01 known answers (RustCrypto HKDF vs the Python generator).
+    /// Regression pin for [`keygen_seed`]. Not an ERC vector.
     #[test]
-    fn v6_01_the_keygen_seed_derivation() {
-        let s2 = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
+    fn keygen_seed_golden() {
+        let fixture = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96).unwrap();
         assert_eq!(
-            hexlify(&s2),
-            "0b696cffccb35f947f0a245c65c563ceeefc415406534ca37da186bcca9ea1fb             fd491387b7599e89f6d34cda416fc5378734521ced761fecea8e44b0bd7f5857             66ce9eaf5eb476f87034f1edc214b73578dde25b26457ebc3308adddabf9c23d"
-                .replace(' ', "")
+            hexlify(&fixture),
+            concat!(
+                "1941630080a71bb7c09dfe4650744dae8559f0575157b231f299447b5c6b5a0e",
+                "b97aa68ce3627fa5a37d558589bb5bce06b2a19fe50406a0e2ac900221769c23",
+                "66d5d279a64c4c7a0ab0b2f5d6eb1fc63c7b5d33bdba8d4fdc21607eec2c3100"
+            )
         );
         let s3 = keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap();
         assert_eq!(
             hexlify(&s3),
-            "42bd3c7fd29ccc42e9f8a655995fbfd4699b7f53daf62c9142f591908ccbb03d             a9c53cfc18d95955ed3222013bce036a8e6d2fe790d614f3ab86b8cb187c4b89             447412f0c3d2978d6b1c1b1830907c82c214f889af40478f2b84efe79e9d15e1             a4cb056acf428e47138a6520c4494ec7b3c244082e7d31f44ad1f24327a2fd6c"
-                .replace(' ', "")
+            concat!(
+                "42bd3c7fd29ccc42e9f8a655995fbfd4699b7f53daf62c9142f591908ccbb03d",
+                "a9c53cfc18d95955ed3222013bce036a8e6d2fe790d614f3ab86b8cb187c4b89",
+                "447412f0c3d2978d6b1c1b1830907c82c214f889af40478f2b84efe79e9d15e1",
+                "a4cb056acf428e47138a6520c4494ec7b3c244082e7d31f44ad1f24327a2fd6c"
+            )
         );
     }
 
-    /// V6-01: short L is a prefix; a shortened or omitted scheme name is a different seed.
+    /// Short `L` is a prefix of long `L`; the scheme name is bound into `info`.
     #[test]
-    fn v6_01_the_named_wrong_answers_are_wrong() {
-        let right = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
+    fn keygen_seed_info_binds() {
+        let right = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96).unwrap();
 
         // HKDF-Expand: shorter L is a prefix of longer L for the same info.
-        let fixed_l = keygen_seed(&MASTER, 2, SCHEME_2, 0, 32).unwrap();
+        let fixed_l = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 32).unwrap();
         assert_eq!(
             fixed_l[..],
             right[..32],
@@ -677,36 +697,43 @@ mod tests {
         );
         assert_ne!(fixed_l.len(), right.len(), "so LENGTH is the entire signal");
 
-        let short_name = keygen_seed(&MASTER, 2, b"schemeId 2", 0, 96).unwrap();
+        let short_name = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, b"test fixture", 0, 96).unwrap();
         assert_eq!(
             hexlify(&short_name),
-            "6ad22ee3213dcb10b39c779fa24b046ff5f75e8692602bae70013ff7b89476c2\
-             752640137807c875979462359873439a0863828b60f234328f404f02cbc3ccfa\
-             f2ad9f4525957399272dc0e9908ab189b375edac21b4055d4165e99492a83d50"
-                .replace(' ', "")
+            concat!(
+                "15a110fc06e7df246fef74d361b7418e43bd358edbfd29d38538756b5f070749",
+                "9a9b2812dac3a86a42a289ebc1df9ac9d632842ce3e5e8edd20870d5a81c37c6",
+                "beb2ad3423d5b4912a332a4128677ff9ce118ca7594af5c721a469dd8fc77684"
+            )
         );
         assert_ne!(right, short_name);
 
-        let no_scheme = keygen_seed(&MASTER, 2, b"", 0, 96).unwrap();
+        let no_scheme = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, b"", 0, 96).unwrap();
         assert_eq!(
             hexlify(&no_scheme),
-            "005e8c19ecb81e79d6ec2aa462411502f50ddd67f6f6959052e3ac3401e3d8f3             0152d1f09f669a92d07494269843c1359d70ad9ca32a85c0bfb2cf1c9602f926             53deac9a25b9c639a8ab5bf00918c8e824a14b2462525cf0c130ba7bb0aa140a"
-                .replace(' ', "")
+            concat!(
+                "c470ba1e827aff7b14b3b2f098efe28c726d3c8b3e12fc89f0d80a42b25a4b73",
+                "a5c6f31af116ba5b0e35b96411582af7179a7ea3fb82ea289d4fed8d6e0708c8",
+                "c4f9c4f511eeb3080b98aeb78327a2d8e5be958c931e9d2921018a0b05bc2912"
+            )
         );
         assert_ne!(right, no_scheme);
     }
 
-    /// V6-04: advancing `j` for one (schemeId, scheme_name) pair leaves the others alone.
+    /// Advancing `j` for one (schemeId, scheme_name) pair leaves the others alone.
     #[test]
-    fn v6_04_a_rejection_advances_one_index_and_leaves_the_others() {
-        let a0 = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
-        let a1 = keygen_seed(&MASTER, 2, SCHEME_2, 1, 96).unwrap();
+    fn keygen_seed_index_moves_one_scheme() {
+        let a0 = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96).unwrap();
+        let a1 = keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 1, 96).unwrap();
         let b0 = keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap();
 
         assert_eq!(
             hexlify(&a1),
-            "3f0a4062a1e8ccf1fa6350cacf744d3e64f788b596b6c9dd427011778bfa2333             687f0894a55bd6f7a3740e0a44cb25689c1911beba5bc1ee705b0ee578435e2d             c30dc71a4af4635316177d648cc5d8d2bd29206645d2aca2ca668b3469baea06"
-                .replace(' ', "")
+            concat!(
+                "87a7948c815cf0861ef150fd89739068dec0ac8e566a10b72e6f2a5368858894",
+                "e771feea8129b5c672f88a4fe991ba0931e6d8f2b88b1f0ba54b5a763907ffc6",
+                "abea2dcddde792dcaa13455df155869f9f9a4b00757caea07bec7af72d6ac931"
+            )
         );
         assert_ne!(a0, a1, "the index moved the seed");
         assert_eq!(b0, keygen_seed(&MASTER, 3, SCHEME_3, 0, 128).unwrap());
@@ -716,14 +743,15 @@ mod tests {
     /// `Hkdf::new(None, …)` equals `Some(&[0u8; 32])`.
     #[test]
     fn keygen_seed_matches_an_explicit_zero_salt() {
-        let info_free = keygen_seed(&MASTER, 2, SCHEME_2, 0, 96).unwrap();
+        let info_free =
+            keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96).unwrap();
         let explicit = {
             let hk = hkdf::Hkdf::<sha2::Sha256>::new(Some(&[0u8; 32]), &MASTER);
             let mut info = Vec::new();
             info.extend_from_slice(DS_KEYGEN);
-            info.extend_from_slice(&2u64.to_be_bytes());
-            info.extend_from_slice(&(SCHEME_2.len() as u64).to_be_bytes());
-            info.extend_from_slice(SCHEME_2);
+            info.extend_from_slice(&FIXTURE_SCHEME_ID.to_be_bytes());
+            info.extend_from_slice(&(FIXTURE_SCHEME_NAME.len() as u64).to_be_bytes());
+            info.extend_from_slice(FIXTURE_SCHEME_NAME);
             info.extend_from_slice(&0u64.to_be_bytes());
             let mut out = vec![0u8; 96];
             hk.expand(&info, &mut out).unwrap();
@@ -736,20 +764,26 @@ mod tests {
     #[test]
     fn keygen_seed_rejects_out_of_range_inputs() {
         assert!(matches!(
-            keygen_seed(&MASTER, 2, SCHEME_2, 0, 0),
+            keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 0),
             Err(Error::Malformed)
         ));
         assert!(matches!(
-            keygen_seed(&MASTER, 2, SCHEME_2, 0, 255 * 32 + 1),
+            keygen_seed(
+                &MASTER,
+                FIXTURE_SCHEME_ID,
+                FIXTURE_SCHEME_NAME,
+                0,
+                255 * 32 + 1
+            ),
             Err(Error::Malformed)
         ));
-        assert!(keygen_seed(&MASTER, 2, SCHEME_2, 0, 255 * 32).is_ok());
+        assert!(keygen_seed(&MASTER, FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 255 * 32).is_ok());
         assert!(matches!(
-            keygen_seed(&[0xa5; 31], 2, SCHEME_2, 0, 96),
+            keygen_seed(&[0xa5; 31], FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96),
             Err(Error::Malformed)
         ));
         assert!(matches!(
-            keygen_seed(&[0xa5; 33], 2, SCHEME_2, 0, 96),
+            keygen_seed(&[0xa5; 33], FIXTURE_SCHEME_ID, FIXTURE_SCHEME_NAME, 0, 96),
             Err(Error::Malformed)
         ));
     }

@@ -12,15 +12,13 @@ hence, the announcement layer is post-quantum, the spending is NOT.
 | meta-address, registered once via ERC-6538 | `spending_pk(33) ‖ viewing_pk_ec(33) ‖ ek(1184)` = **1 250 B** |
 | announcement, per payment | `epk` 33 B in `ephemeralPubKey`, `view_tag ‖ ct` 1 089 B in `metadata` = **1 122 B** |
 | announcement gas, Prague | **69 360** upper bound; 69 300 for the one measured instance |
-| first-time registration gas | **964 809** |
-| a whole payment — announce, fund, spend | **111 300** |
+| first-time registration gas | **964 809** upper bound; 964 737 for the measured instance |
+| a whole payment (announce, fund, spend) | **111 300** |
 
-Classical ERC-5564 announces 34 B for 28 067 gas 
-and registers 66 B for 115 310. 
-The registry entry is **18.9x the classical one in bytes** — 1 250 against 66 — 
-and is paid once per `schemeId`. 
-The announcement is **2.47x in gas** — 69 360 against 28 067 — 
-and is paid every time per payment.
+The all-nonzero classical baselines are 28 313 gas for a 34 B announcement and 115 310 gas
+for a 66 B registration. The registry entry is **18.9x the classical one in bytes** (1 250
+against 66) and is paid once per `schemeId`. Comparing the two announcement upper bounds,
+Scheme 3 is **2.45x in gas** (69 360 against 28 313) and is paid every time.
 
 ## What is here
 
@@ -33,34 +31,33 @@ and is paid every time per payment.
 | `crates/per-payment` | the scheme itself |
 | `vectors/` | the fixtures saying what each row pins and which wrong output it distinguishes |
 | `harness/` | the gas harnesses: real transactions against a real node, with their receipts |
-| `tools/` | the fixture generator, the size derivation and the gas verifier, each with its self-test |
-| `contracts/` | the ERC-5564 announcer the gas harnesses measure against |
+| `tools/` | fixture generation, size derivation, and offline snapshot/document checks |
+| `contracts/` | a readable ERC-5564 announcer source counterpart; the harness pins deployed runtime bytes |
+
+## Tests
 
 Test with
 ```bash
 cargo test --workspace
+python3 tools/run_selftests.py
+python3 tools/gen_vectors.py --check
 ```
 
-Independent test vector generation with
+`run_selftests.py` runs the three `tools/test-*.py` scripts (sizes, vector generator, snapshot and docs). `gen_vectors.py --check` regenerates `vectors/` and compares it to what is committed. `check_measured.py` is included in `run_selftests.py`.
+
+Gas, against a local Anvil node:
+
 ```bash
-python3 tools/gen_vectors.py --check
+python3 harness/bench.py all --check
 ```
 
 The fixtures are generated from `tools/vecprim.py`, 
 which is **independent** from the reference implementation that they test. 
 For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vectors/tier1/`.
 
-(In `vectors/rederivation.json` 19 the 26 were re-derived 
-by a second implementer from the specification alone, 
-and its `bytes_disagree` list being **empty** *is* what we want.)
-
-Gas cost measurement
-```bash
-python3 tools/check_measured.py
-```
-
-Re-derives every announcement figure from the EIP-7623 calldata rule and binds the rest to the
-committed receipts, with no node needed.
+In `vectors/rederivation.json`, 19 of the 26 rows were re-derived by a second
+implementer from the specification alone, and its `bytes_disagree` list
+being empty *is* what we want.
 
 ## Licence
 

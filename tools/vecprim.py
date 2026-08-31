@@ -179,7 +179,7 @@ def address_of(pt: Point) -> bytes:
     """The Ethereum address: `keccak256(uncompressed(pk)[1..])[12..32]`.
 
     The `[1..]` drops the `0x04` tag; including it is the likely error, and `[12..32]` rather
-    than `[0..20]` is the other. The fixture that named both went with schemeId 2 -- see the
+    than `[0..20]` is the other. A former fixture named both alternatives; see the
     record in `vectors/PLAN.md` -- so `tools/test-gen-vectors.py` is what holds this to a
     published answer now.
     """

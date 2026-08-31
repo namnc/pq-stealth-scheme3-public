@@ -352,6 +352,7 @@ dependencies = [
 name = "pqsa-core"
 version = "0.0.0"
 dependencies = [
+ "hex",
  "hkdf",
  "sha2",
  "sha3 0.10.9",
@@ -361,6 +362,7 @@ dependencies = [
 name = "pqsa-ec"
 version = "0.0.0"
 dependencies = [
+ "hex",
  "k256",
  "pqsa-core",
  "sha3 0.10.9",
@@ -370,8 +372,10 @@ dependencies = [
 name = "pqsa-kem"
 version = "0.0.0"
 dependencies = [
+ "hex",
  "ml-kem",
  "pqsa-core",
+ "serde_json",
 ]
 
 [[package]]

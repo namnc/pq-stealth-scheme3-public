@@ -146,14 +146,11 @@ mod tests {
     use super::*;
 
     fn unhex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
+        hex::decode(s).expect("test fixture is hex")
     }
 
     fn hexlify(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
+        hex::encode(b)
     }
 
     fn b32(s: &str) -> Bytes32 {
@@ -186,6 +183,8 @@ mod tests {
             vec![0x02; 34],
             [vec![0x04u8], vec![0x11; 64]].concat(),
             [vec![0x02u8], vec![0xff; 32]].concat(),
+            // V3-12: x = 5 is on no secp256k1 point.
+            unhex("020000000000000000000000000000000000000000000000000000000000000005"),
         ] {
             assert!(
                 matches!(decode_point(&bad), Err(Error::Malformed)),
@@ -196,7 +195,7 @@ mod tests {
         }
     }
 
-    /// V3-04: ECDH secret is 32-byte x, not the 33- or 65-byte encodings that contain it.
+    /// ECDH returns the 32-byte x-coordinate. SchemeId 3 pins the same operation to V3-04.
     #[test]
     fn v3_04_ecdh_is_the_x_coordinate_alone() {
         let esk = b32("2222222222222222222222222222222222222222222222222222222222222222");
@@ -210,23 +209,6 @@ mod tests {
             "9110f8760a37d96052e3dcaf14862a147654f49f722cf213568ccef1eca2ec71"
         );
         assert_eq!(ss_ec.len(), 32);
-        for wrong in [
-            "049110f8760a37d96052e3dcaf14862a147654f49f722cf213568ccef1eca2ec7134ebc7978f9147\
-             0a8abcdd13332db0de3261055c06ac8ff92b75b272463c6adc",
-            "029110f8760a37d96052e3dcaf14862a147654f49f722cf213568ccef1eca2ec71",
-        ] {
-            let w = wrong.replace(['\n', ' '], "");
-            assert_ne!(
-                hexlify(&ss_ec),
-                w,
-                "ss_ec is 32 bytes, not {} ",
-                w.len() / 2
-            );
-            assert!(
-                w.ends_with(&hexlify(&ss_ec)[..8]) || w.contains(&hexlify(&ss_ec)),
-                "the wrong answers contain this x, which is what makes them plausible"
-            );
-        }
     }
 
     /// ECDH commutes.
@@ -279,7 +261,7 @@ mod tests {
         assert_eq!(add_scalars(&n_minus_1, &two).unwrap(), one);
     }
 
-    /// `(s + h)·G == s·G + h·G`, checked against an independent `k256` computation.
+    /// `(s + h)·G == s·G + h·G`, checked directly through `k256` without this crate's wrappers.
     #[test]
     fn the_sender_and_recipient_derive_one_point() {
         let spending = b32("1111111111111111111111111111111111111111111111111111111111111111");
@@ -293,7 +275,7 @@ mod tests {
         )
         .unwrap();
 
-        // Independent oracle: do not derive the expected point through this crate's wrappers.
+        // Bypass this crate's wrappers so both public paths are checked against the library.
         let s = Option::<Scalar>::from(Scalar::from_repr(spending.into())).unwrap();
         let h = Option::<Scalar>::from(Scalar::from_repr(offset.into())).unwrap();
         let expected = ((ProjectivePoint::GENERATOR * s) + (ProjectivePoint::GENERATOR * h))

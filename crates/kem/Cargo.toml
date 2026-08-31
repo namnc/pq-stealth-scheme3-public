@@ -11,6 +11,10 @@ publish.workspace = true
 pqsa-core.workspace = true
 ml-kem.workspace = true
 
+[dev-dependencies]
+hex.workspace = true
+serde_json.workspace = true
+
 # Restate the workspace table: crates cannot add to workspace.lints.
 [lints.rust]
 missing_docs = "deny"
