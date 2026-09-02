@@ -62,7 +62,8 @@ For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vector
 
 ## Demo
 
-[PQ SAP scheme 3 demo](https://github.com/0xakk0r0kamui/pq-stealth-scheme3-demo)
+[Code](https://github.com/0xakk0r0kamui/pq-stealth-scheme3-demo)
+[Demo](https://0xakk0r0kamui.github.io/pq-stealth-scheme3-demo/)
 
 ## Licence
 
