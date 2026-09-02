@@ -56,6 +56,14 @@ which is **independent** from the reference implementation that they test.
 spec_vector.rs (implementing the test vectors) in per_payment matches the two implementation outputs for additional correctness check.
 For ML-KEM: the ciphertexts are of **NIST's own ACVP file**, vendored at `vectors/tier1/`.
 
+## Kohaku Integration PoC
+
+[Kohaku Plugin](https://github.com/0xakk0r0kamui/kohaku-sapq/tree/pqsa-scheme3/crates/pq-stealth-ts)
+
+## Demo
+
+[PQ SAP scheme 3 demo](https://github.com/0xakk0r0kamui/pq-stealth-scheme3-demo)
+
 ## Licence
 
 Apache-2.0 for the code (`LICENSE`), CC0 for the specification text (`LICENSE-CC0`) per EIP-1.
