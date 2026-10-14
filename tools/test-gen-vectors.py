@@ -232,6 +232,18 @@ def main() -> int:
     known |= {x["dk"][2 * 1152:2 * 2336] for x in acvp["decapsulation"]}
     known |= {x["ek"] for x in acvp["encapsulation_key_check"]}
     body = json.loads((root / "vectors/section-2.json").read_text())["vectors"]
+    # V3-14 must reach the tag check rather than skip on the old 33-byte wire shape.
+    v14 = body["V3-14"]
+    ann14 = v14["given"]["announcement"]
+    field14 = bytes.fromhex(ann14["ephemeralPubKey"])
+    case("V3-14 uses Section 3's 1121-byte ephemeralPubKey", len(field14), 1121)
+    dc14 = next(x for x in acvp["decapsulation"]
+                if x["tcId"] == v14["given"]["acvp_decapsulation_tcId"])
+    case("V3-14 carries its ACVP ciphertext after epk", field14[33:].hex(), dc14["c"])
+    case("V3-14 carries a one-byte metadata tag",
+         len(bytes.fromhex(ann14["metadata"])), 1)
+    case("V3-14 supplies the announced address",
+         len(bytes.fromhex(ann14["stealthAddress"])), 20)
     # Any 1088- or 1184-byte hex string in the output must be one NIST published, and so must
     # the ct in a 1121-byte ephemeralPubKey and the ek in a 1250-byte meta-address. A
     # synthesised ciphertext is the one artifact this generator must never produce. Each

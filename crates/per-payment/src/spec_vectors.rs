@@ -756,40 +756,62 @@ fn v3_14_tag_mismatch_is_a_skip() {
     assert_eq!(s(acvp_case, "reason"), s(given, "acvp_reason"));
 
     let ann_g = obj(given, "announcement");
-    let ct = hx(ann_g, "ct");
+    let announced_address = address(ann_g, "stealthAddress");
+    let epk_field = hx(ann_g, "ephemeralPubKey");
+    let metadata = hx(ann_g, "metadata");
+    assert_eq!(epk_field.len(), EPHEMERAL_PUB_KEY_BYTES);
+    assert_eq!(metadata.len(), VIEW_TAG_BYTES);
+    let ann = SchemeId3::announcement_from_bytes(&announced_address, &epk_field, &metadata)
+        .expect("V3-14 has a valid wire shape; only its view tag is wrong");
+    let ct = ann.ct();
     assert_eq!(ct, hx(acvp_case, "c"), "ciphertext comes from tcId {tc_id}");
+    // This ACVP case has no (d, z) seed; use its published ss_pq.
     let ss_pq = b32(expect, "ss_pq");
     assert_eq!(ss_pq.as_slice(), hx(acvp_case, "k"));
     let ek = acvp_ek_of_expanded_dk(acvp_case);
     assert_eq!(ek, hx(given, "ek"));
 
-    let epk = point(&hx(ann_g, "ephemeralPubKey"));
+    let epk = ann.epk;
     let viewing_ec = b32(given, "viewing_ec");
     let viewing = point(&hx(given, "viewing_pk_ec"));
     assert_eq!(pqsa_ec::public_point(&viewing_ec), Ok(viewing));
     assert_eq!(viewing, v3_09_point("viewing_pk_ec"));
     let ss_ec = pqsa_ec::ecdh(&viewing_ec, &epk).expect("valid scalar and point");
     assert_eq!(encode(&ss_ec), s(expect, "ss_ec"));
-    let ss = combine_secrets(DS_HYBRID, &ss_ec, &ss_pq, &epk, &ct, &viewing, &ek).unwrap();
+    let ss = combine_secrets(DS_HYBRID, &ss_ec, &ss_pq, &epk, ct, &viewing, &ek).unwrap();
     assert_eq!(encode(&ss), s(expect, "ss"));
 
     let derived_tag = view_tag_of(&ss);
     assert_eq!(encode(&derived_tag), s(expect, "derived_view_tag"));
-    let announced_tag: [u8; VIEW_TAG_BYTES] = hx(ann_g, "view_tag").try_into().unwrap();
-    assert_ne!(announced_tag, derived_tag);
+    assert_ne!(ann.view_tag, derived_tag);
 
-    let spending = v3_09_point("spending_pk");
+    let spending = point(&hx(given, "spending_pk"));
+    assert_eq!(spending, v3_09_point("spending_pk"));
     let (offset, _) = derive_from_shared_secret(&ss).unwrap();
     let stealth = add_points(&spending, &offset).unwrap();
-    let address = pqsa_ec::address_of(&stealth);
+    assert_eq!(pqsa_ec::address_of(&stealth), ann.stealth_address);
+    assert_eq!(s(expect, "outcome"), "skip");
     assert!(
-        match_from_secret(&ss, &spending, &derived_tag, &address).is_some(),
-        "positive control: the secret, tag and address match"
-    );
-    assert!(
-        match_from_secret(&ss, &spending, &announced_tag, &address).is_none(),
+        match_from_secret(&ss, &spending, &ann.view_tag, &ann.stealth_address).is_none(),
         "changing only the announced tag must turn the match into a skip"
     );
+
+    let corrected =
+        SchemeId3::announcement_from_bytes(&announced_address, &epk_field, &derived_tag)
+            .expect("correcting the tag must preserve the valid wire shape");
+    assert_eq!(corrected.epk, ann.epk);
+    assert_eq!(corrected.ct(), ann.ct());
+    assert_eq!(corrected.stealth_address, ann.stealth_address);
+    assert_eq!(s(expect, "outcome_with_derived_view_tag"), "match");
+    let found = match_from_secret(
+        &ss,
+        &spending,
+        &corrected.view_tag,
+        &corrected.stealth_address,
+    )
+    .expect("positive control: the secret, tag and announced address match");
+    assert_eq!(found.stealth_address, announced_address);
+    assert_eq!(found.shared_secret, ss);
 }
 
 #[test]

@@ -539,6 +539,10 @@ def group_2(t1: dict) -> dict[str, dict]:
         DS_HYBRID + ss_ec + ss_pq_88 + epk + ct_foreign + viewing_pk_ec + ek_88).digest()
     derived_tag = vp.view_tag(ss_foreign)
     announced_tag = bytes([derived_tag[0] ^ 0x01])
+    # Use the correct address so only the wrong tag causes rejection.
+    stealth_foreign = vp.add(vp.decode_compressed(spending_pk),
+                             vp.mul(vp.h_of_ss(ss_foreign)[1]))
+    address_foreign = vp.address_of(stealth_foreign)
     v["V3-14"] = {"claim": "a view-tag mismatch is a skip -- and decapsulation does not fail",
                   "given": {"acvp_decapsulation_tcId": dc["tcId"],
                             "acvp_reason": dc["reason"],
@@ -548,16 +552,18 @@ def group_2(t1: dict) -> dict[str, dict]:
                                          "checked against the H(ek) at dk[2336:2368]",
                             "viewing_ec": hx(v_ec_seed),
                             "viewing_pk_ec": hx(viewing_pk_ec),
+                            "spending_pk": hx(spending_pk),
                             "recipient_is": RECIPIENT_EXPANDED.format(tc=dc["tcId"]),
-                            "announcement": {"ephemeralPubKey": hx(epk),
-                                             "view_tag": hx(announced_tag),
-                                             "ct": hx(ct_foreign)}},
+                            "announcement": {"stealthAddress": hx(address_foreign),
+                                             "ephemeralPubKey": hx(epk + ct_foreign),
+                                             "metadata": hx(announced_tag)}},
                   "expect": {"decapsulation": "returns 32 bytes and does NOT fail",
                              "ss_ec": hx(ss_ec),
                              "ss_pq": hx(ss_pq_88),
                              "ss": hx(ss_foreign),
                              "derived_view_tag": hx(derived_tag),
-                             "outcome": "skip"},
+                             "outcome": "skip",
+                             "outcome_with_derived_view_tag": "match"},
                   "wrong": {"note": "scanning on whether Decaps errored. It never does -- "
                                     "ML-KEM rejects implicitly, which is what this NIST case "
                                     "shows: a ciphertext not produced for this key returns a "
