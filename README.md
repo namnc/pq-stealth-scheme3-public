@@ -31,8 +31,8 @@ The specification is [ERC-8441](https://github.com/ethereum/ERCs/pull/2059), in 
 | `spec/ERC-8441-schemeid3.md` | the specification, a copy of `ERCS/erc-8441.md` in ethereum/ERCs, where its links resolve |
 | `crates/core` | the `StealthScheme` trait |
 | `crates/ec` | secp256k1: SEC1 decoding, ECDH, scalar and point addition, the address |
-| `crates/kem` | ML-KEM-768, over `ml-kem`, checked against NIST's own ACVP cases |
-| `crates/per-payment` | the scheme itself, and ERC-5564's three methods for it (`erc5564`) |
+| `crates/kem` | the `Kem` trait; ML-KEM-768, over `ml-kem`, checked against NIST's own ACVP cases; `Pair`, two KEMs side by side |
+| `crates/per-payment` | the construction, generic over a KEM `Suite`; `SchemeId3` is its ML-KEM-768 suite; ERC-5564's three methods for it (`erc5564`) |
 | `vectors/` | the fixtures saying what each row pins and which wrong output it distinguishes |
 | `harness/` | the gas harnesses: real transactions against a real node, with their receipts |
 | `tools/` | fixture generation, size derivation, and offline snapshot/document checks |
@@ -74,6 +74,32 @@ Construct `MetaAddress` and `Announcement` with `new(...)` or the byte parsers. 
 viewing/ephemeral points are required `CompressedPoint` values; private `ek`/`ct` buffers
 have checked lengths and read-only `ek()`/`ct()` getters. Constructors check wire shape;
 ML-KEM key validation and implicit rejection remain in the KEM engine.
+
+## Other KEM suites
+
+`schemeId` 3 is one suite of the construction: the spec's Section 4 says what another ERC fixes
+to reuse it with a different KEM under its own `schemeId`, and Section 2.3 how senders choose
+between the suites a recipient registered. In code a suite is four items:
+
+```rust
+#[derive(Clone, Copy, Debug)]
+struct MySuite;
+
+impl pqsa_per_payment::Suite for MySuite {
+    const SCHEME_ID: u64 = /* its own schemeId */ 0xffff_0001;
+    const NAME: &'static str = "my suite";
+    const DOMAIN_SEPARATOR: &'static [u8] = b"my-suite/hybrid-payment/v1";
+    type Kem = pqsa_kem::Pair<pqsa_kem::MlKem768, OtherKem>;
+}
+
+type MyScheme = pqsa_per_payment::Hybrid<MySuite>;
+```
+
+`MyScheme` then has the whole `StealthScheme` interface, with its lengths taken from the KEM.
+`crates/per-payment/tests/second_suite.rs` defines two such suites and checks that they round-trip
+payments and that schemeId 3 and they skip each other's announcements. `SchemeId3`, `MetaAddress`,
+`Announcement` and `Scanner` are the ML-KEM-768 suite's, as before; the scanner now keeps the
+expanded decapsulation key from `bind` instead of rebuilding it for every announcement.
 
 ## Randomness and key seeds
 

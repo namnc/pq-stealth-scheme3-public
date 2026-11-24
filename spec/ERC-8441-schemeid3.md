@@ -22,6 +22,8 @@ Each stealth address is still an ordinary externally owned account (EOA) control
 and a quantum adversary can break those keys as it can break any EOA's.
 It uses the deployed ERC-5564 announcer and [ERC-6538](./eip-6538.md) registry as is,
 with no protocol change and no new contract.
+Section 4 lets another ERC reuse the construction with a different KEM under its own `schemeId`,
+so recipients and senders can move off ML-KEM-768 the same way if they need to.
 
 | | schemeId 3 |
 |---|---|
@@ -246,11 +248,17 @@ A scanner MUST process each announcement only under the rules of the `schemeId` 
 with the recipient's keys for that `schemeId`.
 A recipient who clears a `schemeId` (below) SHOULD keep scanning it for payments made before the change.
 
-A sender that implements `schemeId` 3 and finds the recipient registered under it
-MUST use `schemeId` 3, even if the recipient is also registered under another scheme such as `schemeId` 1.
+A sender MUST use the highest-ranked `schemeId` that it implements and the recipient has registered.
+`schemeId` 3 ranks above `schemeId` 1,
+so a sender that implements `schemeId` 3 and finds the recipient registered under it
+MUST use `schemeId` 3, even if the recipient is also registered under `schemeId` 1.
+An ERC that defines a suite states which `schemeId`s it ranks above (Section 4).
+Where no order is stated between two `schemeId`s, a sender MAY use either.
+
 A recipient who wants post-quantum announcement privacy SHOULD register only `schemeId` 3.
 They SHOULD clear an existing `schemeId` 1 entry by registering an empty value under it,
 and a sender MUST treat an empty entry as unregistered.
+A recipient clears any other `schemeId` the same way.
 
 #### 2.4 Sender
 
@@ -419,6 +427,43 @@ A scanner MUST skip a `schemeId` 3 announcement whose `ephemeralPubKey` is not 1
 or whose `metadata` is empty (Section 2.7).
 Meta-addresses are registered with ERC-6538 `registerKeys(3, meta)` (Section 2.3).
 
+### 4. Other suites
+
+Sections 1 to 3 depend on ML-KEM-768 only through its three operations
+and the lengths of `ek`, `ct`, `ss_pq` and the KEM seed.
+A suite is this construction with a given KEM under a given `schemeId`.
+`schemeId` 3 is the suite in this table:
+
+| `schemeId` | KEM | `ek` | `ct` | `ss_pq` | KEM seed | `DS` |
+|---|---|---|---|---|---|---|
+| 3 | ML-KEM-768 | 1184 B | 1088 B | 32 B | 64 B, `d || z` | `"pq-stealth/hybrid-payment/v1"` |
+
+Another ERC MAY define a suite.
+Its sender, scanner and recipient are those of Sections 2.4 to 2.8,
+with its KEM in place of ML-KEM-768 and its lengths in place of `schemeId` 3's,
+and its meta-addresses and announcements have the layout of Sections 2.2 and 3.
+That ERC MUST specify:
+
+1. A `schemeId` that no other scheme uses.
+2. The KEM, which MUST be IND-CCA.
+   The anonymity that Security Considerations assumes of ML-KEM-768 is assumed of it too.
+   The KEM MAY be two KEMs side by side, for instance from different families.
+   Then `ek`, `ct`, `ss_pq` and the KEM seed are each the first KEM's followed by the second's,
+   and Section 1.1 binds both ciphertexts and both keys.
+3. Fixed lengths for `ek`, `ct`, `ss_pq` and the KEM seed,
+   so that its meta-address and its `ephemeralPubKey` each have exactly one length.
+4. A `DS` for Section 1.1 that no other suite uses.
+5. Deterministic key generation from the KEM seed, as in Section 2.1,
+   and which components of the tracking key Section 2.1's check compares with `spending_seed`.
+6. Which `schemeId`s it ranks above in Section 2.3.
+7. Test vectors, in the form of this ERC's Test Cases.
+
+Its meta-address MUST fit in one ERC-6538 `registerKeys` call
+within the per-transaction gas limit of [EIP-7825](./eip-7825.md).
+
+Two suites with equal lengths, such as two that both use ML-KEM-768, are told apart by `schemeId` alone.
+Their different `DS` values keep a scanner for one from matching the other's announcements.
+
 ## Rationale
 
 ### Why a hybrid
@@ -437,6 +482,18 @@ and one ECDH on each side.
 ML-KEM is NIST's standardised KEM (FIPS 203).
 ML-KEM-768 is its security category 3 parameter set,
 and it is also used by the hybrid key exchange deployed in Transport Layer Security (TLS).
+
+### Why another KEM is another `schemeId`
+
+ERC-5564's `schemeId` already lets recipients and senders agree on a scheme:
+ERC-6538 stores one meta-address per `schemeId`,
+a recipient registers under each scheme they accept,
+and a sender picks one (Section 2.3).
+A KEM identifier inside `schemeId` 3 would add a second mechanism on top of that one.
+A recipient could still register only one meta-address under `schemeId` 3,
+and the meta-address and `ephemeralPubKey` would no longer have one length each.
+A new KEM therefore takes a new `schemeId`,
+and Section 4 states what its ERC has to fix so that the rest of this ERC applies unchanged.
 
 ### Why these hash functions
 
@@ -703,6 +760,25 @@ so a downgraded payment loses its post-quantum privacy
 but not its funds.
 A wallet can show which payments were announced under `schemeId` 1,
 since those are the ones a future quantum adversary can link to the recipient.
+
+The same applies between any two suites (Section 4):
+a sender that does not implement a recipient's highest-ranked suite can pay under a lower one the recipient still has registered.
+A recipient prevents that by clearing the suites they no longer accept.
+
+### Moving to another suite
+
+If ML-KEM-768 is broken, or looks likely to be, recipients can move to another suite (Section 4) without a protocol change.
+They register under the new suite,
+clear `schemeId` 3 with an empty value,
+and keep scanning `schemeId` 3 for earlier payments (Section 2.3).
+Senders follow as soon as they implement the new suite,
+since Section 2.3 has them use the highest-ranked one the recipient registered.
+
+Funds are not at risk from a broken KEM, because spending does not use it.
+The privacy of announcements already published under `schemeId` 3 cannot be restored by moving:
+against a quantum adversary it rests on ML-KEM-768 alone.
+Only announcements made under the new suite are protected by it,
+so a recipient who wants a hedge has to register the other suite before it is needed.
 
 ### Scanner cost and denial of service
 
