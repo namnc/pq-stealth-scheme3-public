@@ -1,8 +1,14 @@
-//! schemeId 3 (ECDH + ML-KEM), one announcement per payment.
+//! The hybrid construction, ECDH plus a KEM, one announcement per payment, for any [`Suite`].
+//! schemeId 3 is the ML-KEM-768 suite.
 //!
 //! The scheme is specified in §2; §1 gives the offset and view-tag derivation it shares with
 //! anything else built on ERC-5564. Spending is secp256k1 ECDSA. What the hybrid does and
 //! does not give is under Security Considerations.
+//!
+//! A [`Suite`] is what a `schemeId` fixes on top of the construction: its id and name, the
+//! KEM, and the combiner's domain separator. [`Hybrid`] implements the construction for any
+//! suite; [`SchemeId3`] is [`Hybrid`] over [`MlKem768Suite`], and the unprefixed types
+//! ([`MetaAddress`], [`Announcement`], [`Scanner`]) are schemeId 3's.
 //!
 //! Secret structs and spending keys redact `Debug`; individual [`Zeroizing`] fields do not.
 //!
@@ -27,6 +33,8 @@
 //! # }
 //! ```
 //!
+use core::marker::PhantomData;
+
 use pqsa_core::{
     Bytes32, Error, ExportableSpendKey, StealthScheme, VIEW_TAG_BYTES,
     reject_if_spending_key_is_delegated,
@@ -47,48 +55,89 @@ const DS_OFFSET: &[u8] = b"pq-stealth/offset/v1";
 /// View-tag domain separator. Separate digest from the offset (V1-07).
 const DS_VIEWTAG: &[u8] = b"pq-stealth/view-tag/v1";
 
-/// `ephemeralPubKey` length: `epk` (33) then `ct` (1 088). §3.
+/// What a `schemeId` fixes on top of the hybrid construction. Everything else -- the
+/// secp256k1 half, §1's offset and view tag, the wire layout of §3 -- is shared by every
+/// suite.
+pub trait Suite: Clone + core::fmt::Debug {
+    /// ERC-5564 `schemeId`. Distinct for every suite.
+    const SCHEME_ID: u64;
+    /// [`StealthScheme::NAME`].
+    const NAME: &'static str;
+    /// The combiner's domain separator. Distinct for every suite, so no two suites derive
+    /// `ss` from the same input.
+    const DOMAIN_SEPARATOR: &'static [u8];
+    /// The KEM, or a [`pqsa_kem::Pair`] of KEMs from different families.
+    type Kem: Kem;
+}
+
+/// schemeId 3: ML-KEM-768. §2.
+#[derive(Clone, Copy, Debug)]
+pub struct MlKem768Suite;
+
+impl Suite for MlKem768Suite {
+    const SCHEME_ID: u64 = 3;
+    const NAME: &'static str = "schemeId 3 (direct KEM, hybrid)";
+    const DOMAIN_SEPARATOR: &'static [u8] = DS_HYBRID;
+    type Kem = MlKem768;
+}
+
+/// The hybrid construction for suite `S`: payment secret combines ECDH and KEM secrets. §2.
+pub struct Hybrid<S>(PhantomData<S>);
+
+/// schemeId 3.
+pub type SchemeId3 = Hybrid<MlKem768Suite>;
+
+impl<S: Suite> Hybrid<S> {
+    /// `ephemeralPubKey` length: `epk` (33) then `ct`. §3.
+    pub const EPHEMERAL_PUB_KEY_BYTES: usize = 33 + <S::Kem as Kem>::CT_BYTES;
+    /// Meta-address length: spending point, viewing point, `ek`. §2.2.
+    pub const META_ADDRESS_BYTES: usize = 66 + <S::Kem as Kem>::EK_BYTES;
+}
+
+/// schemeId 3's `ephemeralPubKey` length: `epk` (33) then `ct` (1 088). §3.
 pub const EPHEMERAL_PUB_KEY_BYTES: usize = 33 + MlKem768::CT_BYTES;
 
-/// schemeId 3: payment secret combines ECDH and KEM secrets. §2.
-pub struct SchemeId3;
-
-/// Registry blob: spending point, viewing point, ML-KEM `ek`. §2.2 order.
+/// Registry blob: spending point, viewing point, the suite's `ek`. §2.2 order.
 /// Construct through [`Self::new`] or [`StealthScheme::meta_from_bytes`].
 #[derive(Debug, Clone)]
-pub struct MetaAddress {
+pub struct HybridMetaAddress<S> {
     /// Spending public key used to derive and check payment addresses.
     pub spending: CompressedPoint,
     /// ECDH viewing point. Always `Some` here; the `Option` is vestigial (see the note
     /// on `Tracking::viewing_ec_seed`).
     pub viewing_ec: CompressedPoint,
-    /// ML-KEM-768 encapsulation key, 1 184 bytes.
+    /// Encapsulation key: 1 184 bytes of ML-KEM-768 on schemeId 3.
     ek: Vec<u8>,
+    suite: PhantomData<S>,
 }
 
-impl MetaAddress {
+/// schemeId 3's meta-address.
+pub type MetaAddress = HybridMetaAddress<MlKem768Suite>;
+
+impl<S: Suite> HybridMetaAddress<S> {
     /// Construct a meta-address, checking the encapsulation-key length.
-    /// ML-KEM key validation is deferred to encapsulation.
+    /// KEM key validation is deferred to encapsulation.
     ///
     /// # Errors
     ///
-    /// [`Error::Malformed`] if `ek` is not [`MlKem768::EK_BYTES`] bytes.
+    /// [`Error::Malformed`] if `ek` is not the suite KEM's `EK_BYTES`.
     pub fn new(
         spending: CompressedPoint,
         viewing_ec: CompressedPoint,
         ek: Vec<u8>,
     ) -> Result<Self, Error> {
-        if ek.len() != MlKem768::EK_BYTES {
+        if ek.len() != <S::Kem as Kem>::EK_BYTES {
             return Err(Error::Malformed);
         }
         Ok(Self {
             spending,
             viewing_ec,
             ek,
+            suite: PhantomData,
         })
     }
 
-    /// ML-KEM-768 encapsulation-key bytes.
+    /// Encapsulation-key bytes.
     ///
     /// ```compile_fail
     /// # use pqsa_per_payment::MetaAddress;
@@ -111,7 +160,8 @@ pub struct Master {
     /// does not ship in this tree; collapsing it removes a `Malformed` path that nothing
     /// can now reach, and is a change to the public type rather than a trim.
     pub viewing_ec_seed: Option<Zeroizing<Bytes32>>,
-    /// ML-KEM `(d, z)` seed (64 bytes). Not the 2400-byte expanded key.
+    /// The suite KEM's keygen seed: ML-KEM's `(d, z)` (64 bytes) on schemeId 3, not the
+    /// 2400-byte expanded key.
     pub kem_seed: Zeroizing<Vec<u8>>,
 }
 
@@ -121,18 +171,19 @@ pub struct Master {
 pub struct Tracking {
     /// Viewing scalar. [`StealthScheme::bind`] rejects [`None`].
     pub viewing_ec_seed: Option<Zeroizing<Bytes32>>,
-    /// ML-KEM `(d, z)` seed.
+    /// The suite KEM's keygen seed: ML-KEM's `(d, z)` on schemeId 3.
     pub kem_seed: Zeroizing<Vec<u8>>,
 }
 
 /// Tracking bound to a meta-address, plus values [`StealthScheme::scan`] reuses.
 ///
 /// Only [`StealthScheme::bind`] constructs this. `ek` is recomputed from `kem_seed` and
-/// checked against the registry.
+/// checked against the registry, and the decapsulation key is expanded once here rather
+/// than for every announcement.
 #[derive(Clone)]
-pub struct Scanner {
-    /// The delegated `(d, z)` pair. Decapsulation's input.
-    kem_seed: Zeroizing<Vec<u8>>,
+pub struct HybridScanner<S: Suite> {
+    /// The expanded decapsulation key. Decapsulation's input.
+    dk: <S::Kem as Kem>::DecapsulationKey,
     /// Viewing scalar.
     viewing_ec_seed: Zeroizing<Bytes32>,
     /// The encapsulation key **recomputed from `kem_seed` and verified** against the registry.
@@ -143,7 +194,22 @@ pub struct Scanner {
     spending: CompressedPoint,
 }
 
-/// Recompute `ek` from `(d, z)` and require it equal `registered`. §1.
+/// schemeId 3's scanner.
+pub type Scanner = HybridScanner<MlKem768Suite>;
+
+impl<S: Suite> core::fmt::Debug for HybridScanner<S> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Scanner")
+            .field("ek", &self.ek)
+            .field("viewing_pk_ec", &self.viewing_pk_ec)
+            .field("spending", &self.spending)
+            .field("dk", &"[REDACTED]")
+            .field("viewing_ec_seed", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Recompute schemeId 3's `ek` from `(d, z)` and require it equal `registered`. §1.
 ///
 /// Both sides are public (registry vs derived).
 ///
@@ -152,7 +218,12 @@ pub struct Scanner {
 /// [`Error::Malformed`] if `kem_seed` has the wrong length;
 /// [`Error::TrackingKeyMismatch`] if the recomputed key differs from `registered`.
 pub fn verified_ek(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error> {
-    let (ek, _) = MlKem768::keygen(kem_seed)?;
+    verified_ek_for::<MlKem768>(kem_seed, registered)
+}
+
+/// [`verified_ek`] for any KEM.
+fn verified_ek_for<K: Kem>(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error> {
+    let (ek, _) = K::keygen(kem_seed)?;
     if ek.as_slice() != registered {
         return Err(Error::TrackingKeyMismatch);
     }
@@ -161,31 +232,35 @@ pub fn verified_ek(kem_seed: &[u8], registered: &[u8]) -> Result<Vec<u8>, Error>
 
 /// ERC-5564 payload. §3: `epk ‖ ct` in `ephemeralPubKey`, `view_tag` at `metadata[0]`.
 #[derive(Debug, Clone)]
-pub struct Announcement {
+pub struct HybridAnnouncement<S> {
     /// Required sender ephemeral point.
     pub epk: CompressedPoint,
-    /// ML-KEM ciphertext, 1 088 bytes.
+    /// KEM ciphertext: 1 088 bytes of ML-KEM-768 on schemeId 3.
     ct: Vec<u8>,
     /// `metadata[0]`. Compared in full.
     pub view_tag: [u8; VIEW_TAG_BYTES],
     /// ERC-5564 `stealthAddress` for this payment. `[0u8; 20]` is a valid Ethereum address,
     /// so it cannot stand in for "missing".
     pub stealth_address: [u8; 20],
+    suite: PhantomData<S>,
 }
 
-impl Announcement {
+/// schemeId 3's announcement.
+pub type Announcement = HybridAnnouncement<MlKem768Suite>;
+
+impl<S: Suite> HybridAnnouncement<S> {
     /// Construct an announcement, checking the ciphertext length.
     ///
     /// # Errors
     ///
-    /// [`Error::Malformed`] if `ct` is not [`MlKem768::CT_BYTES`] bytes.
+    /// [`Error::Malformed`] if `ct` is not the suite KEM's `CT_BYTES`.
     pub fn new(
         epk: CompressedPoint,
         ct: Vec<u8>,
         view_tag: [u8; VIEW_TAG_BYTES],
         stealth_address: [u8; 20],
     ) -> Result<Self, Error> {
-        if ct.len() != MlKem768::CT_BYTES {
+        if ct.len() != <S::Kem as Kem>::CT_BYTES {
             return Err(Error::Malformed);
         }
         Ok(Self {
@@ -193,10 +268,11 @@ impl Announcement {
             ct,
             view_tag,
             stealth_address,
+            suite: PhantomData,
         })
     }
 
-    /// ML-KEM-768 ciphertext bytes.
+    /// Ciphertext bytes.
     ///
     /// ```compile_fail
     /// # use pqsa_per_payment::Announcement;
@@ -264,23 +340,37 @@ fn check_offset(base: Zeroizing<Bytes32>) -> Result<Zeroizing<Bytes32>, Error> {
     Ok(base)
 }
 
-/// SHA3-256(DS ‖ ss_ec ‖ ss_pq ‖ epk ‖ ct ‖ viewing_pk_ec ‖ ek). Direct hash, not HKDF. §1.1.
+/// SHA3-256(DS ‖ ss_ec ‖ ss_pq ‖ epk ‖ ct ‖ viewing_pk_ec ‖ ek) at schemeId 3's lengths.
+/// Direct hash, not HKDF. §1.1.
 ///
 /// `ss_ec` is the 32-byte x-coordinate; other fields are wire/registry encodings.
 ///
 /// # Errors
 ///
-/// [`Error::Malformed`] if `ct` or `ek` has the wrong length.
+/// [`Error::Malformed`] if `ss_pq`, `ct` or `ek` has the wrong length.
 pub fn combine_secrets(
     domain_separator: &[u8],
     ss_ec: &Bytes32,
-    ss_pq: &Bytes32,
+    ss_pq: &[u8],
     epk: &CompressedPoint,
     ct: &[u8],
     viewing_pk_ec: &CompressedPoint,
     ek: &[u8],
 ) -> Result<Zeroizing<Bytes32>, Error> {
-    if ct.len() != MlKem768::CT_BYTES || ek.len() != MlKem768::EK_BYTES {
+    combine_for::<MlKem768>(domain_separator, ss_ec, ss_pq, epk, ct, viewing_pk_ec, ek)
+}
+
+/// [`combine_secrets`] at KEM `K`'s lengths.
+fn combine_for<K: Kem>(
+    domain_separator: &[u8],
+    ss_ec: &Bytes32,
+    ss_pq: &[u8],
+    epk: &CompressedPoint,
+    ct: &[u8],
+    viewing_pk_ec: &CompressedPoint,
+    ek: &[u8],
+) -> Result<Zeroizing<Bytes32>, Error> {
+    if ss_pq.len() != K::SS_BYTES || ct.len() != K::CT_BYTES || ek.len() != K::EK_BYTES {
         return Err(Error::Malformed);
     }
     let mut h = Sha3_256::new();
@@ -332,25 +422,27 @@ fn add_points(spending: &CompressedPoint, offset: &Bytes32) -> Option<Compressed
 }
 
 /// `epk` and `ct` from an `ephemeralPubKey`, or `None` for any shape §2.7 makes a skip:
-/// a length other than 1 121, or an `epk` that is not a valid compressed point.
-fn parse_ephemeral_pub_key(field: &[u8]) -> Option<(CompressedPoint, &[u8])> {
-    if field.len() != EPHEMERAL_PUB_KEY_BYTES {
+/// a length other than the suite's (1 121 on schemeId 3), or an `epk` that is not a valid
+/// compressed point.
+fn parse_ephemeral_pub_key<S: Suite>(field: &[u8]) -> Option<(CompressedPoint, &[u8])> {
+    if field.len() != Hybrid::<S>::EPHEMERAL_PUB_KEY_BYTES {
         return None;
     }
     let (epk, ct) = field.split_at(33);
     Some((pqsa_ec::decode_point(epk).ok()?, ct))
 }
 
-/// §2.5 up to `ss`: ECDH, decapsulation and the combiner, with the scanner's verified `ek`.
-fn payment_secret(
-    scanner: &Scanner,
+/// §2.5 up to `ss`: ECDH, decapsulation with the held key, and the combiner, with the
+/// scanner's verified `ek`.
+fn payment_secret<S: Suite>(
+    scanner: &HybridScanner<S>,
     epk: &CompressedPoint,
     ct: &[u8],
 ) -> Option<Zeroizing<Bytes32>> {
     let ss_ec = pqsa_ec::ecdh(&scanner.viewing_ec_seed, epk).ok()?;
-    let ss_pq = MlKem768::decapsulate(&scanner.kem_seed, ct).ok()?;
-    combine_secrets(
-        DS_HYBRID,
+    let ss_pq = <S::Kem as Kem>::decapsulate_with(&scanner.dk, ct).ok()?;
+    combine_for::<S::Kem>(
+        S::DOMAIN_SEPARATOR,
         &ss_ec,
         &ss_pq,
         epk,
@@ -363,24 +455,24 @@ fn payment_secret(
 /// schemeId 3 combiner domain separator. §2.4.
 const DS_HYBRID: &[u8] = b"pq-stealth/hybrid-payment/v1";
 
-/// Draws before [`SchemeId3::announce_random`] gives up. A draw is unusable when `esk` or the
-/// offset is out of range, each with probability about 2⁻¹²⁸, so running out means the RNG is
-/// broken.
+/// Draws before [`StealthScheme::announce_random`] gives up. A draw is unusable when `esk` or
+/// the offset is out of range, each with probability about 2⁻¹²⁸, so running out means the
+/// RNG is broken.
 const RANDOM_DRAWS: usize = 64;
 
 /// The rest of §2.4 once `esk` is chosen: ECDH, `encapsulate`, the §1.1 combiner, the address.
 /// [`Error::SeedRejected`] if the offset is out of range, so the caller draws again.
-fn finish_announcement(
-    meta: &MetaAddress,
+fn finish_announcement<S: Suite>(
+    meta: &HybridMetaAddress<S>,
     esk: &Bytes32,
     epk: CompressedPoint,
-    encapsulate: impl FnOnce(&[u8]) -> Result<(Vec<u8>, Zeroizing<Bytes32>), Error>,
-) -> Result<Announcement, Error> {
+    encapsulate: impl FnOnce(&[u8]) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>), Error>,
+) -> Result<HybridAnnouncement<S>, Error> {
     let viewing_pk_ec = meta.viewing_ec;
     let ss_ec = pqsa_ec::ecdh(esk, &viewing_pk_ec)?;
     let (ct, ss_pq) = encapsulate(&meta.ek)?;
-    let ss = combine_secrets(
-        DS_HYBRID,
+    let ss = combine_for::<S::Kem>(
+        S::DOMAIN_SEPARATOR,
         &ss_ec,
         &ss_pq,
         &epk,
@@ -394,26 +486,31 @@ fn finish_announcement(
         other => other,
     })?;
     let stealth = add_points(&meta.spending, &offset).ok_or(Error::Malformed)?;
-    Announcement::new(epk, ct, view_tag, pqsa_ec::address_of(&stealth))
+    HybridAnnouncement::new(epk, ct, view_tag, pqsa_ec::address_of(&stealth))
 }
 
-impl StealthScheme for SchemeId3 {
-    const SCHEME_ID: u64 = 3;
-    const NAME: &'static str = "schemeId 3 (direct KEM, hybrid)";
-    const KEYGEN_SEED_BYTES: usize = 128;
-    const ANNOUNCE_SEED_BYTES: usize = 64;
+impl<S: Suite> StealthScheme for Hybrid<S> {
+    const SCHEME_ID: u64 = S::SCHEME_ID;
+    const NAME: &'static str = S::NAME;
+    const KEYGEN_SEED_BYTES: usize = 64 + <S::Kem as Kem>::KEYGEN_SEED_BYTES;
+    const ANNOUNCE_SEED_BYTES: usize = 32 + <S::Kem as Kem>::ENCAP_SEED_BYTES;
 
-    type Meta = MetaAddress;
+    type Meta = HybridMetaAddress<S>;
     type Master = Master;
     type Tracking = Tracking;
-    type Announcement = Announcement;
+    type Announcement = HybridAnnouncement<S>;
     type Match = Match;
-    type Scanner = Scanner;
+    type Scanner = HybridScanner<S>;
     type SpendKey = SpendKey;
 
-    /// `spending_seed(32) ‖ viewing_ec_seed(32) ‖ kem_seed(64)`. Guard compares the spending
-    /// seed with `viewing_ec_seed`, `d` and `z`.
-    fn keygen(seed: &[u8]) -> Result<(MetaAddress, Master, Tracking), Error> {
+    fn kem_id() -> Vec<u8> {
+        <S::Kem as Kem>::id()
+    }
+
+    /// `spending_seed(32) ‖ viewing_ec_seed(32) ‖ kem_seed`, `kem_seed` 64 bytes on schemeId 3.
+    /// Guard compares the spending seed with each 32-byte component after it: `viewing_ec_seed`,
+    /// `d` and `z` on schemeId 3.
+    fn keygen(seed: &[u8]) -> Result<(HybridMetaAddress<S>, Master, Tracking), Error> {
         if seed.len() != Self::KEYGEN_SEED_BYTES {
             return Err(Error::Malformed);
         }
@@ -422,9 +519,9 @@ impl StealthScheme for SchemeId3 {
         reject_if_spending_key_is_delegated(spending_seed, &seed[32..])?;
         let spending = pqsa_ec::public_point(spending_seed)?;
         let viewing_ec = pqsa_ec::public_point(viewing_ec_seed)?;
-        let (ek, dk_seed) = MlKem768::keygen(&seed[64..])?;
+        let (ek, dk_seed) = <S::Kem as Kem>::keygen(&seed[64..])?;
         Ok((
-            MetaAddress::new(spending, viewing_ec, ek)?,
+            HybridMetaAddress::new(spending, viewing_ec, ek)?,
             Master {
                 spending_seed: Zeroizing::new(*spending_seed),
                 viewing_ec_seed: Some(Zeroizing::new(*viewing_ec_seed)),
@@ -437,9 +534,10 @@ impl StealthScheme for SchemeId3 {
         ))
     }
 
-    /// §2.4: `esk` from the operating system's CSPRNG and `ML-KEM.Encaps(ek)`, both drawn
-    /// again if `esk` or the offset is out of range.
-    fn announce_random(meta: &MetaAddress) -> Result<Announcement, Error> {
+    /// §2.4: `esk` and the KEM's encapsulation randomness (`ML-KEM.Encaps(ek)` on schemeId 3)
+    /// from the operating system's CSPRNG, both drawn again if `esk` or the offset is out of
+    /// range.
+    fn announce_random(meta: &HybridMetaAddress<S>) -> Result<HybridAnnouncement<S>, Error> {
         let mut esk = Zeroizing::new([0u8; 32]);
         for _ in 0..RANDOM_DRAWS {
             pqsa_core::os_random(esk.as_mut())?;
@@ -448,7 +546,7 @@ impl StealthScheme for SchemeId3 {
                 Err(Error::NoValidScalar) => continue,
                 Err(other) => return Err(other),
             };
-            match finish_announcement(meta, &esk, epk, MlKem768::encapsulate_random) {
+            match finish_announcement(meta, &esk, epk, <S::Kem as Kem>::encapsulate_random) {
                 Err(Error::SeedRejected) => continue,
                 other => return other,
             }
@@ -456,9 +554,9 @@ impl StealthScheme for SchemeId3 {
         Err(Error::Rng)
     }
 
-    /// `ephemeral_seed(32) ‖ encap_seed(32)`, then the §1.1 combiner. `encap_seed` is ML-KEM's
-    /// `m`, through `Encaps_internal`.
-    fn announce(meta: &MetaAddress, seed: &[u8]) -> Result<Announcement, Error> {
+    /// `ephemeral_seed(32) ‖ encap_seed`, then the §1.1 combiner. On schemeId 3 `encap_seed`
+    /// is ML-KEM's 32-byte `m`, through `Encaps_internal`.
+    fn announce(meta: &HybridMetaAddress<S>, seed: &[u8]) -> Result<HybridAnnouncement<S>, Error> {
         if seed.len() != Self::ANNOUNCE_SEED_BYTES {
             return Err(Error::Malformed);
         }
@@ -468,28 +566,31 @@ impl StealthScheme for SchemeId3 {
             Error::NoValidScalar => Error::SeedRejected,
             other => other,
         })?;
-        finish_announcement(meta, esk, epk, |ek| MlKem768::encapsulate(ek, &seed[32..]))
+        finish_announcement(meta, esk, epk, |ek| {
+            <S::Kem as Kem>::encapsulate(ek, &seed[32..])
+        })
     }
 
     /// ECDH + decaps + combiner. `epk` and `ct` are fresh per announcement. The long-term
     /// tracking key still decapsulates every past `ct`.
-    fn scan(scanner: &Scanner, ann: &Announcement) -> Option<Match> {
+    fn scan(scanner: &HybridScanner<S>, ann: &HybridAnnouncement<S>) -> Option<Match> {
         let ss = payment_secret(scanner, &ann.epk, &ann.ct)?;
         match_from_secret(&ss, &scanner.spending, &ann.view_tag, &ann.stealth_address)
     }
 
-    /// Checks `ek` and the viewing point against the registry. Either mismatch is
-    /// [`Error::TrackingKeyMismatch`]; a missing tracking viewing seed is [`Error::Malformed`].
-    fn bind(tracking: &Tracking, meta: &MetaAddress) -> Result<Scanner, Error> {
+    /// Checks `ek` and the viewing point against the registry, and expands the decapsulation
+    /// key once. Either mismatch is [`Error::TrackingKeyMismatch`]; a missing tracking viewing
+    /// seed is [`Error::Malformed`].
+    fn bind(tracking: &Tracking, meta: &HybridMetaAddress<S>) -> Result<HybridScanner<S>, Error> {
         let viewing_ec_seed = tracking.viewing_ec_seed.as_ref().ok_or(Error::Malformed)?;
         let registered_viewing = meta.viewing_ec;
         let viewing_pk_ec = pqsa_ec::public_point(viewing_ec_seed)?;
         if viewing_pk_ec != registered_viewing {
             return Err(Error::TrackingKeyMismatch);
         }
-        Ok(Scanner {
-            ek: verified_ek(&tracking.kem_seed, &meta.ek)?,
-            kem_seed: tracking.kem_seed.clone(),
+        Ok(HybridScanner {
+            ek: verified_ek_for::<S::Kem>(&tracking.kem_seed, &meta.ek)?,
+            dk: <S::Kem as Kem>::decapsulation_key(&tracking.kem_seed)?,
             viewing_pk_ec,
             viewing_ec_seed: viewing_ec_seed.clone(),
             spending: meta.spending,
@@ -504,7 +605,7 @@ impl StealthScheme for SchemeId3 {
         m.stealth_address
     }
 
-    fn meta_to_bytes(meta: &MetaAddress) -> Vec<u8> {
+    fn meta_to_bytes(meta: &HybridMetaAddress<S>) -> Vec<u8> {
         [
             meta.spending.as_bytes().as_slice(),
             meta.viewing_ec.as_bytes(),
@@ -513,11 +614,11 @@ impl StealthScheme for SchemeId3 {
         .concat()
     }
 
-    fn meta_from_bytes(bytes: &[u8]) -> Option<MetaAddress> {
-        if bytes.len() != 66 + MlKem768::EK_BYTES {
+    fn meta_from_bytes(bytes: &[u8]) -> Option<HybridMetaAddress<S>> {
+        if bytes.len() != Self::META_ADDRESS_BYTES {
             return None;
         }
-        MetaAddress::new(
+        HybridMetaAddress::new(
             pqsa_ec::decode_point(&bytes[..33]).ok()?,
             pqsa_ec::decode_point(&bytes[33..66]).ok()?,
             bytes[66..].to_vec(),
@@ -529,7 +630,7 @@ impl StealthScheme for SchemeId3 {
     ///
     /// `metadata` is the view tag alone. ERC-5564 lets the bytes after it carry token data;
     /// that is the caller's to append, since this scheme does not know the token or amount.
-    fn announcement_to_bytes(ann: &Announcement) -> ([u8; 20], Vec<u8>, Vec<u8>) {
+    fn announcement_to_bytes(ann: &HybridAnnouncement<S>) -> ([u8; 20], Vec<u8>, Vec<u8>) {
         (
             ann.stealth_address,
             [ann.epk.as_bytes().as_slice(), &ann.ct].concat(),
@@ -543,12 +644,12 @@ impl StealthScheme for SchemeId3 {
         stealth_address: &[u8; 20],
         ephemeral_pub_key: &[u8],
         metadata: &[u8],
-    ) -> Option<Announcement> {
+    ) -> Option<HybridAnnouncement<S>> {
         if metadata.len() < VIEW_TAG_BYTES {
             return None;
         }
-        let (epk, ct) = parse_ephemeral_pub_key(ephemeral_pub_key)?;
-        Announcement::new(
+        let (epk, ct) = parse_ephemeral_pub_key::<S>(ephemeral_pub_key)?;
+        HybridAnnouncement::new(
             epk,
             ct.to_vec(),
             metadata[..VIEW_TAG_BYTES].try_into().ok()?,
@@ -558,7 +659,7 @@ impl StealthScheme for SchemeId3 {
     }
 }
 
-impl ExportableSpendKey for SchemeId3 {
+impl<S: Suite> ExportableSpendKey for Hybrid<S> {
     fn spend_key_bytes(k: &SpendKey) -> &[u8] {
         k.expose_secret()
     }
@@ -600,7 +701,6 @@ macro_rules! redacted_debug {
 
 redacted_debug!(Master, secrets: [spending_seed, viewing_ec_seed, kem_seed], shown: []);
 redacted_debug!(Tracking, secrets: [viewing_ec_seed, kem_seed], shown: []);
-redacted_debug!(Scanner, secrets: [kem_seed, viewing_ec_seed], shown: [ek, viewing_pk_ec, spending]);
 redacted_debug!(Match, secrets: [shared_secret], shown: [stealth_address]);
 
 pub mod erc5564;
@@ -645,7 +745,7 @@ mod tests {
         assert_zeroize_on_drop(&tracking.viewing_ec_seed);
         assert_zeroize_on_drop(&tracking.kem_seed);
         assert_zeroize_on_drop(&scanner.viewing_ec_seed);
-        assert_zeroize_on_drop(&scanner.kem_seed);
+        assert_zeroize_on_drop(&scanner.dk);
         assert_zeroize_on_drop(&matched.shared_secret);
         assert_zeroize_on_drop(&derive_from_shared_secret(&matched.shared_secret).unwrap().0);
         assert_zeroize_on_drop(&payment_secret(&scanner, &ann.epk, &ann.ct).unwrap());

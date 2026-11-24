@@ -11,8 +11,8 @@
 //! `Ok(false)` in [`check_stealth_address`].
 
 use crate::{
-    Scanner, SchemeId3, SpendKey, match_from_secret, parse_ephemeral_pub_key, payment_secret,
-    spend_key_from, view_tag_of,
+    MlKem768Suite, Scanner, SchemeId3, SpendKey, match_from_secret, parse_ephemeral_pub_key,
+    payment_secret, spend_key_from, view_tag_of,
 };
 use pqsa_core::{Bytes32, Error, StealthScheme, VIEW_TAG_BYTES};
 use pqsa_ec::CompressedPoint;
@@ -56,7 +56,7 @@ pub fn check_stealth_address(
     spending_pub_key: &[u8],
 ) -> Result<bool, Error> {
     let scanner = scanner_from(viewing_key, pqsa_ec::decode_point(spending_pub_key)?)?;
-    let Some((epk, ct)) = parse_ephemeral_pub_key(ephemeral_pub_key) else {
+    let Some((epk, ct)) = parse_ephemeral_pub_key::<MlKem768Suite>(ephemeral_pub_key) else {
         return Ok(false);
     };
     let Some(ss) = payment_secret(&scanner, &epk, ct) else {
@@ -84,7 +84,8 @@ pub fn compute_stealth_key(
 ) -> Result<SpendKey, Error> {
     let spending_seed: &Bytes32 = spending_key.try_into().map_err(|_| Error::Malformed)?;
     let scanner = scanner_from(viewing_key, pqsa_ec::public_point(spending_seed)?)?;
-    let (epk, ct) = parse_ephemeral_pub_key(ephemeral_pub_key).ok_or(Error::Malformed)?;
+    let (epk, ct) =
+        parse_ephemeral_pub_key::<MlKem768Suite>(ephemeral_pub_key).ok_or(Error::Malformed)?;
     let shared_secret = payment_secret(&scanner, &epk, ct).ok_or(Error::Malformed)?;
     spend_key_from(spending_seed, &shared_secret, stealth_address)
 }
@@ -100,7 +101,7 @@ fn scanner_from(viewing_key: &[u8], spending: CompressedPoint) -> Result<Scanner
     let viewing_pk_ec = pqsa_ec::public_point(viewing_ec_seed)?;
     let (ek, kem_seed) = MlKem768::keygen(kem_seed)?;
     Ok(Scanner {
-        kem_seed,
+        dk: MlKem768::decapsulation_key(&kem_seed)?,
         viewing_ec_seed: (*viewing_ec_seed).into(),
         ek,
         viewing_pk_ec,

@@ -5,7 +5,7 @@
 //!
 //! **THE SEED DERIVATION IN THIS MODULE IS NOT SPECIFIED BY THE ERC**, and every item below
 //! that derives a seed from a master key -- [`keygen_seed`], [`SenderState`], `announce_seed`,
-//! `kem_id`, and their three domain separators -- is this implementation's choice rather than
+//! [`bare_kem_id`], and their three domain separators -- is this implementation's choice rather than
 //! a normative requirement. What the ERC states is the keygen seed's SHAPE and the
 //! REQUIREMENTS its derivation must meet (§2.1), and that each announcement's randomness is
 //! drawn from a CSPRNG (§2.4).
@@ -26,9 +26,6 @@ pub type Bytes32 = [u8; 32];
 
 /// Domain separator for the sender-entropy derivation. Not from the ERC -- see the module note.
 const DS_SENDER: &[u8] = b"pq-stealth/sender-seed/v1";
-
-/// KEM name for the deployed path. `kem_id` length-prefixes it. Not from the ERC.
-const KEM_NAME: &[u8] = b"ML-KEM-768";
 
 /// View-tag width in bytes. §1.
 pub const VIEW_TAG_BYTES: usize = 1;
@@ -114,6 +111,10 @@ pub trait StealthScheme {
     /// Announce seed length for [`Self::announce`]. Not from the ERC; schemeId 3 uses 64
     /// bytes, `esk ‖ m`.
     const ANNOUNCE_SEED_BYTES: usize;
+
+    /// The scheme's KEM, as [`SenderState`] binds it into announce seeds: [`bare_kem_id`] of
+    /// its name, or the components' in order for a composite. Not from the ERC.
+    fn kem_id() -> Vec<u8>;
 
     /// Published via ERC-6538.
     type Meta;
@@ -314,13 +315,14 @@ impl SenderState {
 
     /// Draw the next announce seed for scheme `S` and advance the counter.
     ///
-    /// The seed binds both [`StealthScheme::SCHEME_ID`] and [`StealthScheme::NAME`].
+    /// The seed binds [`StealthScheme::SCHEME_ID`], [`StealthScheme::NAME`] and
+    /// [`StealthScheme::kem_id`].
     ///
     /// # Errors
     ///
     /// [`Error::CounterExhausted`] if the index would wrap.
     pub fn draw_seed<S: StealthScheme>(&mut self) -> Result<Zeroizing<Vec<u8>>, Error> {
-        self.draw(S::SCHEME_ID, S::NAME, S::ANNOUNCE_SEED_BYTES)
+        self.draw(S::SCHEME_ID, S::NAME, &S::kem_id(), S::ANNOUNCE_SEED_BYTES)
     }
 
     /// Draw seeds until `attempt` accepts one. The draw is inside the loop so a rejection
@@ -361,6 +363,7 @@ impl SenderState {
         &mut self,
         scheme_id: u64,
         scheme_name: &str,
+        kem_id: &[u8],
         n: usize,
     ) -> Result<Zeroizing<Vec<u8>>, Error> {
         let i = self._counter;
@@ -370,13 +373,14 @@ impl SenderState {
             &self._master,
             scheme_id,
             scheme_name.as_bytes(),
+            kem_id,
             i,
             n,
         ))
     }
 
-    /// Untyped draw. A wrong `scheme_name` string or `n` silently selects a different seed stream
-    /// and still advances the counter. Prefer [`Self::draw_seed`].
+    /// Untyped draw. A wrong `scheme_name`, `kem_id` or `n` silently selects a different seed
+    /// stream and still advances the counter. Prefer [`Self::draw_seed`].
     ///
     /// # Errors
     ///
@@ -385,14 +389,15 @@ impl SenderState {
         &mut self,
         scheme_id: u64,
         scheme_name: &str,
+        kem_id: &[u8],
         n: usize,
     ) -> Result<Zeroizing<Vec<u8>>, Error> {
-        self.draw(scheme_id, scheme_name, n)
+        self.draw(scheme_id, scheme_name, kem_id, n)
     }
 
     #[cfg(test)]
     fn draw_seed_for(&mut self, scheme_id: u64, scheme_name: &str, n: usize) -> Zeroizing<Vec<u8>> {
-        self.draw(scheme_id, scheme_name, n)
+        self.draw(scheme_id, scheme_name, &tests::ml_kem_768_id(), n)
             .expect("the counter is not exhausted")
     }
 }
@@ -442,10 +447,10 @@ fn announce_seed(
     master: &Bytes32,
     scheme_id: u64,
     scheme_name: &[u8],
+    kem_id: &[u8],
     i: u64,
     n: usize,
 ) -> Zeroizing<Vec<u8>> {
-    let kem_id = kem_id(KEM_NAME);
     let mut h = Shake256::default();
     h.update(DS_SENDER);
     h.update(master);
@@ -454,16 +459,17 @@ fn announce_seed(
     h.update(&(scheme_name.len() as u64).to_be_bytes());
     h.update(scheme_name);
     h.update(&(kem_id.len() as u64).to_be_bytes());
-    h.update(&kem_id);
+    h.update(kem_id);
     let mut out = Zeroizing::new(vec![0u8; n]);
     let mut reader = h.finalize_xof();
     reader.read(&mut out);
     out
 }
 
-/// `kem_id` for a bare KEM: `u64be(|name|) || name`. 18 bytes for `"ML-KEM-768"`. Not from
-/// the ERC.
-fn kem_id(name: &[u8]) -> Vec<u8> {
+/// `kem_id` for a bare KEM: `u64be(|name|) || name`. 18 bytes for `"ML-KEM-768"`. A composite
+/// KEM's is its components' in order. Not from the ERC.
+#[must_use]
+pub fn bare_kem_id(name: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + name.len());
     out.extend_from_slice(&(name.len() as u64).to_be_bytes());
     out.extend_from_slice(name);
@@ -479,7 +485,11 @@ mod tests {
         fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
         let mut sender = SenderState::resume(&[0x5a; 32], 0);
         assert_zeroize_on_drop(&sender._master);
-        assert_zeroize_on_drop(&sender.draw_seed_untyped(3, "test", 64).unwrap());
+        assert_zeroize_on_drop(
+            &sender
+                .draw_seed_untyped(3, "test", &ml_kem_768_id(), 64)
+                .unwrap(),
+        );
         assert_zeroize_on_drop(&keygen_seed(&[0x5a; 32], 3, b"test", 0, 128).unwrap());
     }
 
@@ -496,9 +506,21 @@ mod tests {
         const ANNOUNCE_SEED_BYTES: usize = 32;
     }
 
+    /// schemeId 3's `kem_id`, which every golden value below was drawn with.
+    pub(super) fn ml_kem_768_id() -> Vec<u8> {
+        bare_kem_id(b"ML-KEM-768")
+    }
+
     fn seed(scheme_id: u64, scheme_name: &str, i: u64, n: usize) -> Zeroizing<Vec<u8>> {
         let master: Bytes32 = [0xA5; 32];
-        announce_seed(&master, scheme_id, scheme_name.as_bytes(), i, n)
+        announce_seed(
+            &master,
+            scheme_id,
+            scheme_name.as_bytes(),
+            &ml_kem_768_id(),
+            i,
+            n,
+        )
     }
 
     /// Regression pin for [`announce_seed`]. Not an ERC vector.
@@ -537,7 +559,7 @@ mod tests {
     /// `kem_id` is `u64be(|name|) || name` (18 bytes for `"ML-KEM-768"`).
     #[test]
     fn kem_id_is_length_prefixed_and_18_bytes() {
-        let id = kem_id(KEM_NAME);
+        let id = ml_kem_768_id();
         assert_eq!(id.len(), 18);
         assert_eq!(hexlify(&id), "000000000000000a4d4c2d4b454d2d373638");
         assert_eq!(
@@ -601,6 +623,7 @@ mod tests {
             st.draw_seed_untyped(
                 SeedFixture::SCHEME_ID,
                 SeedFixture::NAME,
+                &ml_kem_768_id(),
                 SeedFixture::ANNOUNCE_SEED_BYTES
             ),
             Err(Error::CounterExhausted)
@@ -640,6 +663,9 @@ mod tests {
             type Match = ();
             type Scanner = ();
             type SpendKey = Bytes32;
+            fn kem_id() -> Vec<u8> {
+                ml_kem_768_id()
+            }
             fn keygen(_: &[u8]) -> Result<Keys<Self>, Error> {
                 Err(Error::Malformed)
             }
